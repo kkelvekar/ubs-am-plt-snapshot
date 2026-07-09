@@ -1,0 +1,19 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# Local environment
+.env.local
+CLAUDE.local.md
+
+# Test coverage
+coverage/
+*.trx
