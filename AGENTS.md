@@ -67,7 +67,6 @@ src/        UBS.AM.PLT.SnapshotWriter.{Domain|Application|Infrastructure|Worker}
 tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
-docker/     local environment (Kafka, Azurite, SQL Server)
 docs/       solution design document and diagrams
 ```
 
@@ -84,9 +83,22 @@ docs/       solution design document and diagrams
   purely via config — no code change between environments.
 - `dotnet build` and `dotnet test` must be green before any handoff or commit.
 
+### Thin Kafka consumer (lift-and-shift constraint)
+
+The Kafka consumer is a deliberately thin, disposable adapter. It deserialises the
+message envelope, calls straight into an Application-layer use case, and commits the
+offset on success — nothing else. No business logic, no branching on `payloadType`, no
+orchestration of its own. At org lift-and-shift time this consumer is replaced by an
+org-provided consumer library, and that swap must touch **only the Infrastructure layer**
+— never Application or Domain. The reviewer role checks this on every slice.
+
 ## Scope guards
 
 - The daily cleanup job and the Read API are **out of scope** for this repository — do not build them.
+- **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
+  K8s manifests, CI/CD pipeline files, or AKS deployment YAML. Deployment is handled
+  entirely at the org side after lift-and-shift. This repo's scope ends at local
+  development and local testing.
 - No speculative abstractions. Build only what the current approved slice needs.
 
 ## Development workflow — four-role pipeline
@@ -123,8 +135,13 @@ green.
 
 ## Local environment
 
-- Kafka via `docker/docker-compose.yml`
-- Azurite standing in for ADLS Gen2
-- Local SQL Server; schema applied from `db/scripts/` only
+No committed docker-compose or Dockerfile — local infrastructure is spun up **ad hoc**
+via small setup/teardown scripts under `tools/` (`docker run` on demand). These are dev
+convenience scripts, not infra artifacts.
+
+- Kafka: ad-hoc container via `tools/` setup script, started when a dev or the
+  tester-e2e role needs a broker, torn down after
+- Azurite standing in for ADLS Gen2 (same ad-hoc-on-demand principle)
+- SQL Server in an ad-hoc container; schema applied from `db/scripts/` only
 - All endpoints (Kafka bootstrap, blob connection string, SQL connection string)
   overridable via environment variables
