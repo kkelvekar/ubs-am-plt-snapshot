@@ -1,0 +1,95 @@
+{
+  "accountIds": [
+    "00675442A",
+    "03485732S",
+    "10923847P",
+    "77441290K"
+  ],
+  "stages": [
+    "PreTrade",
+    "PortfolioOptimisation",
+    "OrderGeneration"
+  ],
+  "payloads": [
+    {
+      "payloadType": "header",
+      "publishedBy": "Portal",
+      "payload": {
+        "eventType": "ModelChange",
+        "portfolioStatus": "ReadyToSend",
+        "orderStatus": "ReadyToSend",
+        "benchmark": "MCCHM2EQ",
+        "baseCcy": "CHF",
+        "orderApprovedBy": "Anna Miller",
+        "orderApprovedAt": "2026-05-15T06:10:14Z",
+        "orderSentBy": "James Smith",
+        "orderSentAt": "2026-05-15T06:14:22Z",
+        "programId": "123456",
+        "batchId": "15884",
+        "numOrders": 4,
+        "ptcAlerts": 0
+      }
+    },
+    {
+      "payloadType": "instruments",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "total": 21,
+        "equities": [
+          {
+            "assetName": "APPLE LTD",
+            "sedol": "BPBAJ01",
+            "ccy": "CHF",
+            "region": "EMEA",
+            "targetPct": 1.52,
+            "prevTargetPct": 1.52
+          },
+          {
+            "assetName": "NESTLE SA",
+            "sedol": "7123870",
+            "ccy": "CHF",
+            "region": "EMEA",
+            "targetPct": 2.10,
+            "prevTargetPct": 1.95
+          }
+        ],
+        "futures": [],
+        "cash": [
+          {
+            "ccy": "CHF",
+            "amount": 32000.00
+          }
+        ]
+      }
+    },
+    {
+      "payloadType": "calculations",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "totals": {
+          "marketValue": 1250000.50,
+          "cash": 32000.00
+        },
+        "risk": {
+          "trackingError": 0.84,
+          "activeShare": 0.21
+        },
+        "rows": []
+      }
+    },
+    {
+      "payloadType": "settings",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "tolerance": 0.25,
+        "rebalanceMode": "Full",
+        "restrictions": [
+          {
+            "type": "MaxIssuerWeight",
+            "value": 5.0
+          }
+        ]
+      }
+    }
+  ]
+}
