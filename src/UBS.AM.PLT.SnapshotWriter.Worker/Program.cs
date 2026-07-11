@@ -4,6 +4,7 @@ using UBS.AM.PLT.SnapshotWriter.Application;
 using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
 using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Configuration;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 
@@ -15,6 +16,8 @@ builder.Services.Configure<BlobStorageOptions>(
     builder.Configuration.GetSection(BlobStorageOptions.SectionName));
 builder.Services.Configure<DatabaseOptions>(
     builder.Configuration.GetSection(DatabaseOptions.SectionName));
+builder.Services.Configure<Dictionary<string, SnapshotTypeConfig>>(
+    builder.Configuration.GetSection(SnapshotConfigOptions.SectionName));
 
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -25,6 +28,8 @@ builder.Services.AddDbContextFactory<SnapshotWriterDbContext>((serviceProvider, 
 
 builder.Services.AddSingleton<ISnapshotBlobStore, AzureBlobSnapshotStore>();
 builder.Services.AddSingleton<ISnapshotTrackingStore, SqlSnapshotTrackingStore>();
+builder.Services.AddSingleton<IRequiredFilesProvider, SnapshotConfigRequiredFilesProvider>();
+builder.Services.AddSingleton<ISnapshotIndexStore, SqlSnapshotIndexStore>();
 builder.Services.AddSingleton<ISnapshotMessageHandler, SnapshotMessageHandler>();
 builder.Services.AddSingleton<IKafkaConsumerFactory, KafkaConsumerFactory>();
 builder.Services.AddHostedService<KafkaSnapshotConsumer>();

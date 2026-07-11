@@ -11,4 +11,11 @@ namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 public interface ISnapshotBlobStore
 {
     Task<string> WriteAsync(SnapshotMessage message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads back the header payload written for a snapshot — step 3 of the strict write
+    /// order, called only once the snapshot is complete. Returns the raw header.json text
+    /// (opaque string, no parsing at this layer); the caller deserialises it.
+    /// </summary>
+    Task<string> ReadHeaderAsync(string adlsRootPath, CancellationToken cancellationToken);
 }

@@ -27,12 +27,25 @@ public sealed class SnapshotWriterDbContext : DbContext
         v => ToDbStatus(v),
         v => FromDbStatus(v));
 
+    // display_data travels as a single camelCase JSON object string (design §7) so the
+    // persisted keys match the wire/header naming convention (benchmark, baseCcy, ...).
+    private static readonly JsonSerializerOptions DisplayDataJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private static readonly ValueConverter<SnapshotIndexDisplayData, string> DisplayDataConverter = new(
+        v => JsonSerializer.Serialize(v, DisplayDataJsonOptions),
+        v => JsonSerializer.Deserialize<SnapshotIndexDisplayData>(v, DisplayDataJsonOptions)!);
+
     public SnapshotWriterDbContext(DbContextOptions<SnapshotWriterDbContext> options)
         : base(options)
     {
     }
 
     public DbSet<SnapshotTrackingEntry> SnapshotTracking => Set<SnapshotTrackingEntry>();
+
+    public DbSet<SnapshotIndexEntry> SnapshotIndex => Set<SnapshotIndexEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,6 +104,44 @@ public sealed class SnapshotWriterDbContext : DbContext
         entity.Property(e => e.Alerted)
             .HasColumnName("alerted")
             .HasColumnType("bit");
+
+        var indexEntity = modelBuilder.Entity<SnapshotIndexEntry>();
+
+        indexEntity.ToTable("snapshot_index", "dbo");
+        indexEntity.HasKey(e => e.SnapshotId);
+
+        indexEntity.Property(e => e.SnapshotId)
+            .HasColumnName("snapshot_id")
+            .HasColumnType("varchar(50)");
+
+        indexEntity.Property(e => e.AccountId)
+            .HasColumnName("account_id")
+            .HasColumnType("varchar(20)");
+
+        indexEntity.Property(e => e.SnapshotDate)
+            .HasColumnName("snapshot_date")
+            .HasColumnType("datetime2");
+
+        indexEntity.Property(e => e.Stage)
+            .HasColumnName("stage")
+            .HasColumnType("varchar(50)");
+
+        indexEntity.Property(e => e.EventType)
+            .HasColumnName("event_type")
+            .HasColumnType("varchar(50)");
+
+        indexEntity.Property(e => e.AdlsPath)
+            .HasColumnName("adls_path")
+            .HasColumnType("varchar(500)");
+
+        indexEntity.Property(e => e.DisplayData)
+            .HasColumnName("display_data")
+            .HasColumnType("nvarchar(max)")
+            .HasConversion(DisplayDataConverter);
+
+        indexEntity.Property(e => e.CreatedAt)
+            .HasColumnName("created_at")
+            .HasColumnType("datetime2");
     }
 
     private static string ToDbStatus(SnapshotTrackingStatus status) => status switch

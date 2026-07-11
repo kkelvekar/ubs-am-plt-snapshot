@@ -13,4 +13,13 @@ namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 public interface ISnapshotTrackingStore
 {
     Task<SnapshotTrackingEntry> UpsertReceivedAsync(SnapshotMessage message, string adlsRootPath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Flips a tracking row to COMPLETE — the final step of the strict write order,
+    /// called only after the index UPSERT has succeeded (design §8), so a failed index
+    /// write leaves the row RECEIVING and redelivery retries the completeness check.
+    /// Touches only status and completed_at; never received_files, adls_root_path or
+    /// first_received_at.
+    /// </summary>
+    Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken);
 }
