@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using UBS.AM.PLT.SnapshotWriter.Application;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
@@ -227,7 +228,37 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
         var blobStore = new AzureBlobSnapshotStore(Options.Create(_blobOptions));
         var factory = new SingleContextFactory(_dbOptions);
         var trackingStore = new SqlSnapshotTrackingStore(factory, timeProvider);
-        return new SnapshotMessageHandler(blobStore, trackingStore, NullLogger<SnapshotMessageHandler>.Instance);
+        return new SnapshotMessageHandler(
+            blobStore,
+            trackingStore,
+            new NeverCompleteRequiredFilesProvider(),
+            new NoOpSnapshotIndexStore(),
+            NullLogger<SnapshotMessageHandler>.Instance);
+    }
+
+    /// <summary>
+    /// This suite exercises only the tracking upsert (slice 3, write-order step 2); the
+    /// real <see cref="SqlSnapshotTrackingStore"/> here does accumulate received_files
+    /// across calls, so a real required-file list could actually be satisfied by some
+    /// scenarios (e.g. the out-of-order-arrival test delivers all four portfolio files)
+    /// and would then exercise the completeness/index path added in slice 4 — out of
+    /// scope for this file. Requiring a filename no test ever sends keeps completeness
+    /// (and therefore the index write and the COMPLETE status flip) permanently
+    /// unreachable here, preserving this suite's original tracking-only assertions.
+    /// Slice 4's own completeness/index behaviour is covered by
+    /// <see cref="SnapshotMessageHandlerTests"/> (unit) — a dedicated Mode A integration
+    /// test for the full write order is tester-e2e's to add.
+    /// </summary>
+    private sealed class NeverCompleteRequiredFilesProvider : IRequiredFilesProvider
+    {
+        public IReadOnlySet<string> GetRequiredFiles(string snapshotType)
+            => new HashSet<string> { "__never_delivered_by_this_suite__.json" };
+    }
+
+    private sealed class NoOpSnapshotIndexStore : ISnapshotIndexStore
+    {
+        public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     private async Task<SnapshotTrackingEntry?> LoadTrackingEntryAsync(string snapshotId)

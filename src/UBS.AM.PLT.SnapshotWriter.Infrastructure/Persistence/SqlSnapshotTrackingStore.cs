@@ -70,4 +70,26 @@ public sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
 
         return entry;
     }
+
+    public async Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var entry = await context.SnapshotTracking
+            .SingleOrDefaultAsync(e => e.SnapshotId == snapshotId, cancellationToken);
+
+        if (entry is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot mark snapshot '{snapshotId}' complete: no tracking row exists.");
+        }
+
+        if (entry.Status != SnapshotTrackingStatus.Complete)
+        {
+            entry.Status = SnapshotTrackingStatus.Complete;
+            entry.CompletedAt = _timeProvider.GetUtcNow().UtcDateTime;
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+    }
 }

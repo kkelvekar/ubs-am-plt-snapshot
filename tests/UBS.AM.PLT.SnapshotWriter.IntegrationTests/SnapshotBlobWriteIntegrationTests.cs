@@ -39,12 +39,17 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
         _handler = new SnapshotMessageHandler(
             blobStore,
             new NoOpSnapshotTrackingStore(),
+            new PortfolioRequiredFilesProvider(),
+            new NoOpSnapshotIndexStore(),
             NullLogger<SnapshotMessageHandler>.Instance);
     }
 
     /// <summary>
     /// Keeps these slice-2 tests blob-only: tracking (step 2) is satisfied by a no-op so
     /// no SQL Server is required. SQL-asserting integration tests are a separate suite.
+    /// Each call reports only the single filename just "received" (never accumulated
+    /// across calls), so the completeness check (steps 3-4, slice 4) never sees more than
+    /// one received file and is never satisfied here regardless of the required list.
     /// </summary>
     private sealed class NoOpSnapshotTrackingStore : ISnapshotTrackingStore
     {
@@ -63,6 +68,23 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
                 FirstReceivedAt = message.PublishedAt,
                 LastUpdatedAt = message.PublishedAt,
             });
+
+        public Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+    }
+
+    /// <summary>Real portfolio required-file list (design §4) — never satisfied here, see <see cref="NoOpSnapshotTrackingStore"/>.</summary>
+    private sealed class PortfolioRequiredFilesProvider : IRequiredFilesProvider
+    {
+        public IReadOnlySet<string> GetRequiredFiles(string snapshotType)
+            => new HashSet<string> { "header.json", "instruments.json", "calculations.json", "settings.json" };
+    }
+
+    /// <summary>Never invoked in this suite (see <see cref="NoOpSnapshotTrackingStore"/>); present only to satisfy DI.</summary>
+    private sealed class NoOpSnapshotIndexStore : ISnapshotIndexStore
+    {
+        public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

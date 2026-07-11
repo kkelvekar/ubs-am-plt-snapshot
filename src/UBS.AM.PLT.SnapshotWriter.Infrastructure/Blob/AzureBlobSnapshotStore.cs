@@ -42,6 +42,14 @@ public sealed class AzureBlobSnapshotStore : ISnapshotBlobStore
         return SnapshotBlobPath.RootFolder(message);
     }
 
+    public async Task<string> ReadHeaderAsync(string adlsRootPath, CancellationToken cancellationToken)
+    {
+        var blob = _container.GetBlobClient($"{adlsRootPath}/{SnapshotBlobPath.FileName("header")}");
+        var download = await blob.DownloadContentAsync(cancellationToken);
+
+        return download.Value.Content.ToString();
+    }
+
     private async Task EnsureContainerExistsAsync(CancellationToken cancellationToken)
     {
         if (_containerEnsured)
