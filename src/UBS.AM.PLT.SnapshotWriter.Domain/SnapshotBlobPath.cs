@@ -23,8 +23,17 @@ public static class SnapshotBlobPath
     }
 
     /// <summary>
-    /// Full blob name within the container: root folder plus <c>{payloadType}.json</c>.
+    /// Leaf filename for a payload type: <c>{payloadType}.json</c>. Single source of
+    /// filename truth — the values stored in the tracking row's received_files and the
+    /// SnapshotConfig requiredFiles entries follow this same convention, so completeness
+    /// comparison is always name-to-name.
+    /// </summary>
+    public static string FileName(string payloadType)
+        => $"{payloadType}.json";
+
+    /// <summary>
+    /// Full blob name within the container: root folder plus <see cref="FileName"/>.
     /// </summary>
     public static string FullPath(SnapshotMessage message)
-        => $"{RootFolder(message)}/{message.PayloadType}.json";
+        => $"{RootFolder(message)}/{FileName(message.PayloadType)}";
 }

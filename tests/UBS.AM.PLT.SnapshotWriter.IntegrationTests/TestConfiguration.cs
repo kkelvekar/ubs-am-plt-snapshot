@@ -1,21 +1,24 @@
 using Microsoft.Extensions.Configuration;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 
 /// <summary>
-/// Loads <see cref="BlobStorageOptions"/> the same way the Worker composition root
-/// does: appsettings.json with an environment-variable override
-/// (<c>BlobStorage__ConnectionString</c> / <c>BlobStorage__ContainerName</c>). Local
-/// Azurite defaults live in appsettings.json — never hardcoded in test code, so the
-/// same test binary can point at a different local Azurite/ADLS endpoint purely via
-/// configuration.
+/// Loads <see cref="BlobStorageOptions"/> and <see cref="DatabaseOptions"/> the same way
+/// the Worker composition root does: appsettings.json with environment-variable overrides
+/// (<c>BlobStorage__ConnectionString</c> / <c>BlobStorage__ContainerName</c> /
+/// <c>Database__ConnectionString</c>). Local Azurite/SQL Server defaults live in
+/// appsettings.json — never hardcoded in test code, so the same test binary can point at
+/// a different local or org endpoint purely via configuration.
 /// </summary>
 internal static class TestConfiguration
 {
-    public static BlobStorageOptions BlobStorageOptions { get; } = Load();
+    public static BlobStorageOptions BlobStorageOptions { get; } = Load<BlobStorageOptions>(BlobStorageOptions.SectionName);
 
-    private static BlobStorageOptions Load()
+    public static DatabaseOptions DatabaseOptions { get; } = Load<DatabaseOptions>(DatabaseOptions.SectionName);
+
+    private static T Load<T>(string sectionName) where T : new()
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
@@ -23,8 +26,8 @@ internal static class TestConfiguration
             .AddEnvironmentVariables()
             .Build();
 
-        var options = new BlobStorageOptions();
-        configuration.GetSection(BlobStorageOptions.SectionName).Bind(options);
+        var options = new T();
+        configuration.GetSection(sectionName).Bind(options);
         return options;
     }
 }

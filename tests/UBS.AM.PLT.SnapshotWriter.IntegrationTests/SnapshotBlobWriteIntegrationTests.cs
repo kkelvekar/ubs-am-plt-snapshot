@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using UBS.AM.PLT.SnapshotWriter.Application;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
 using Xunit;
@@ -35,7 +36,33 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
         var options = TestConfiguration.BlobStorageOptions;
         _container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
         var blobStore = new AzureBlobSnapshotStore(Options.Create(options));
-        _handler = new SnapshotMessageHandler(blobStore, NullLogger<SnapshotMessageHandler>.Instance);
+        _handler = new SnapshotMessageHandler(
+            blobStore,
+            new NoOpSnapshotTrackingStore(),
+            NullLogger<SnapshotMessageHandler>.Instance);
+    }
+
+    /// <summary>
+    /// Keeps these slice-2 tests blob-only: tracking (step 2) is satisfied by a no-op so
+    /// no SQL Server is required. SQL-asserting integration tests are a separate suite.
+    /// </summary>
+    private sealed class NoOpSnapshotTrackingStore : ISnapshotTrackingStore
+    {
+        public Task<SnapshotTrackingEntry> UpsertReceivedAsync(
+            SnapshotMessage message,
+            string adlsRootPath,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new SnapshotTrackingEntry
+            {
+                SnapshotId = message.SnapshotId,
+                AccountId = message.AccountId,
+                SnapshotType = message.SnapshotType,
+                AdlsRootPath = adlsRootPath,
+                ReceivedFiles = [SnapshotBlobPath.FileName(message.PayloadType)],
+                Status = SnapshotTrackingStatus.Receiving,
+                FirstReceivedAt = message.PublishedAt,
+                LastUpdatedAt = message.PublishedAt,
+            });
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

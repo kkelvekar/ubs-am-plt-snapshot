@@ -43,6 +43,23 @@ public class SnapshotBlobPathTests
         Assert.Contains($"/{expectedSegment}/", SnapshotBlobPath.FullPath(message));
     }
 
+    [Theory]
+    [InlineData("header", "header.json")]
+    [InlineData("instruments", "instruments.json")]
+    [InlineData("calculations", "calculations.json")]
+    public void FileName_is_payloadType_with_json_extension(string payloadType, string expected)
+    {
+        Assert.Equal(expected, SnapshotBlobPath.FileName(payloadType));
+    }
+
+    [Fact]
+    public void FullPath_ends_with_FileName_of_the_payloadType()
+    {
+        var message = CreateMessage();
+
+        Assert.EndsWith($"/{SnapshotBlobPath.FileName(message.PayloadType)}", SnapshotBlobPath.FullPath(message));
+    }
+
     [Fact]
     public void Top_folder_is_derived_from_snapshotType()
     {
