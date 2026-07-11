@@ -10,13 +10,52 @@ namespace UBS.AM.PLT.SnapshotWriter.UnitTests;
 public class SnapshotMessageHandlerTests
 {
     [Fact]
+    public async Task HandleAsync_writes_to_blob_store_exactly_once_with_the_incoming_message()
+    {
+        var blobStore = new FakeSnapshotBlobStore();
+        var handler = new SnapshotMessageHandler(blobStore, new CapturingLogger<SnapshotMessageHandler>());
+        var message = CreateMessage();
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var written = Assert.Single(blobStore.Written);
+        Assert.Same(message, written);
+    }
+
+    [Fact]
+    public async Task HandleAsync_propagates_blob_store_exception_unchanged()
+    {
+        var thrown = new InvalidOperationException("blob endpoint unavailable");
+        var blobStore = new FakeSnapshotBlobStore { ThrowOnWrite = thrown };
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = new SnapshotMessageHandler(blobStore, logger);
+
+        var caught = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(CreateMessage(), CancellationToken.None));
+
+        Assert.Same(thrown, caught);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
     public async Task HandleAsync_logs_snapshotId_accountId_and_payloadType()
     {
         var logger = new CapturingLogger<SnapshotMessageHandler>();
-        var handler = new SnapshotMessageHandler(logger);
+        var handler = new SnapshotMessageHandler(new FakeSnapshotBlobStore(), logger);
 
+        await handler.HandleAsync(CreateMessage(), CancellationToken.None);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Equal("corr98765", entry.State["SnapshotId"]);
+        Assert.Equal("00675442A", entry.State["AccountId"]);
+        Assert.Equal("instruments", entry.State["PayloadType"]);
+    }
+
+    private static SnapshotMessage CreateMessage()
+    {
         using var payload = JsonDocument.Parse("""{"total":21}""");
-        var message = new SnapshotMessage
+        return new SnapshotMessage
         {
             SnapshotId = "corr98765",
             AccountId = "00675442A",
@@ -28,13 +67,5 @@ public class SnapshotMessageHandlerTests
             SchemaVersion = "1.0",
             Payload = payload.RootElement.Clone(),
         };
-
-        await handler.HandleAsync(message, CancellationToken.None);
-
-        var entry = Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Information, entry.Level);
-        Assert.Equal("corr98765", entry.State["SnapshotId"]);
-        Assert.Equal("00675442A", entry.State["AccountId"]);
-        Assert.Equal("instruments", entry.State["PayloadType"]);
     }
 }

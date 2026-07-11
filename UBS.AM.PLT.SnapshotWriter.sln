@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UBS.AM.PLT.SnapshotWriter.TestProducer", "tools\UBS.AM.PLT.SnapshotWriter.TestProducer\UBS.AM.PLT.SnapshotWriter.TestProducer.csproj", "{6942F29E-741B-4755-8C91-11E85AC044C6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UBS.AM.PLT.SnapshotWriter.IntegrationTests", "tests\UBS.AM.PLT.SnapshotWriter.IntegrationTests\UBS.AM.PLT.SnapshotWriter.IntegrationTests.csproj", "{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -103,6 +105,18 @@ Global
 		{6942F29E-741B-4755-8C91-11E85AC044C6}.Release|x64.Build.0 = Release|Any CPU
 		{6942F29E-741B-4755-8C91-11E85AC044C6}.Release|x86.ActiveCfg = Release|Any CPU
 		{6942F29E-741B-4755-8C91-11E85AC044C6}.Release|x86.Build.0 = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|x64.Build.0 = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Debug|x86.Build.0 = Debug|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|x64.ActiveCfg = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|x64.Build.0 = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|x86.ActiveCfg = Release|Any CPU
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -114,5 +128,6 @@ Global
 		{7AAF902A-773D-438F-A0F1-2D3D9449A539} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{BC90493A-E5EC-42B0-BBF1-B5D6817B1A45} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{6942F29E-741B-4755-8C91-11E85AC044C6} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{5B122DBF-1647-49FB-AD22-7EF3781CC0DA} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
