@@ -1,4 +1,6 @@
 using UBS.AM.PLT.SnapshotWriter.Application;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka;
 

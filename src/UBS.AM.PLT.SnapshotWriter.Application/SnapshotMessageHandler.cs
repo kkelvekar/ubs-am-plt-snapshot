@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
+using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
 namespace UBS.AM.PLT.SnapshotWriter.Application;

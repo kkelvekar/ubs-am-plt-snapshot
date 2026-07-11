@@ -1,6 +1,6 @@
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
-namespace UBS.AM.PLT.SnapshotWriter.Application;
+namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 
 /// <summary>
 /// Port for the blob write — step 1 of the strict write order. Writes the message's
