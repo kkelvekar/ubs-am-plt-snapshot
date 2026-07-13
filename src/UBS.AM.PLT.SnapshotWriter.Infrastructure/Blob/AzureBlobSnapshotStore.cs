@@ -22,14 +22,21 @@ public sealed class AzureBlobSnapshotStore : ISnapshotBlobStore
 
     public AzureBlobSnapshotStore(IOptions<BlobStorageOptions> options)
     {
-        _container = new BlobContainerClient(options.Value.ConnectionString, options.Value.ContainerName);
+        // MaxRetries = 0 disables the SDK's own internal retry policy so a failure
+        // surfaces to the consumer immediately — otherwise the SDK silently absorbs
+        // transient failures for well over a minute, distorting the consumer's
+        // configured retry/alert cadence.
+        var clientOptions = new BlobClientOptions();
+        clientOptions.Retry.MaxRetries = 0;
+
+        _container = new BlobContainerClient(options.Value.ConnectionString, options.Value.ContainerName, clientOptions);
     }
 
-    public async Task<string> WriteAsync(SnapshotMessage message, CancellationToken cancellationToken)
+    public async Task WriteAsync(SnapshotMessage message, string rootPath, CancellationToken cancellationToken)
     {
         await EnsureContainerExistsAsync(cancellationToken);
 
-        var blob = _container.GetBlobClient(SnapshotBlobPath.FullPath(message));
+        var blob = _container.GetBlobClient(SnapshotBlobPath.FullPath(rootPath, message.PayloadType));
         var content = new BinaryData(Encoding.UTF8.GetBytes(message.Payload.GetRawText()));
         var uploadOptions = new BlobUploadOptions
         {
@@ -38,8 +45,6 @@ public sealed class AzureBlobSnapshotStore : ISnapshotBlobStore
 
         // BlobUploadOptions without access conditions overwrites an existing blob.
         await blob.UploadAsync(content, uploadOptions, cancellationToken);
-
-        return SnapshotBlobPath.RootFolder(message);
     }
 
     public async Task<string> ReadHeaderAsync(string adlsRootPath, CancellationToken cancellationToken)

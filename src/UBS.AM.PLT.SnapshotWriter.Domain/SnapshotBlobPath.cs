@@ -12,14 +12,18 @@ public static class SnapshotBlobPath
     /// <summary>
     /// Snapshot root folder — everything up to and including the snapshotId segment,
     /// no trailing slash. Stored later as the tracking row's adls_root_path (design §6).
+    /// The year/month segments come from <paramref name="firstArrivalUtc"/> — the arrival
+    /// time of the snapshot's FIRST payload, pinned once per snapshot by the caller —
+    /// never from <c>message.PublishedAt</c>, so payloads whose publish timestamps
+    /// straddle a month/year boundary still land under one folder.
     /// </summary>
-    public static string RootFolder(SnapshotMessage message)
+    public static string RootFolder(SnapshotMessage message, DateTimeOffset firstArrivalUtc)
     {
-        var publishedAtUtc = message.PublishedAt.ToUniversalTime();
+        var arrivalUtc = firstArrivalUtc.ToUniversalTime();
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{message.SnapshotType}_snapshots/year={publishedAtUtc:yyyy}/month={publishedAtUtc:MM}/accountId={message.AccountId}/snapshotId={message.SnapshotId}");
+            $"{message.SnapshotType}_snapshots/year={arrivalUtc:yyyy}/month={arrivalUtc:MM}/accountId={message.AccountId}/snapshotId={message.SnapshotId}");
     }
 
     /// <summary>
@@ -33,7 +37,9 @@ public static class SnapshotBlobPath
 
     /// <summary>
     /// Full blob name within the container: root folder plus <see cref="FileName"/>.
+    /// Takes the already-resolved root folder (pinned per snapshot) rather than deriving
+    /// one, so no caller can accidentally compute a path from per-message timestamps.
     /// </summary>
-    public static string FullPath(SnapshotMessage message)
-        => $"{RootFolder(message)}/{FileName(message.PayloadType)}";
+    public static string FullPath(string rootFolder, string payloadType)
+        => $"{rootFolder}/{FileName(payloadType)}";
 }

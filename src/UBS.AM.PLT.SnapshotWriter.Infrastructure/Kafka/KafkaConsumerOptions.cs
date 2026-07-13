@@ -17,16 +17,14 @@ public sealed record KafkaConsumerOptions
 
     /// <summary>
     /// Delay before retry attempt N after the Nth consecutive failure of the same
-    /// message, per solution design §9 (immediate / 5s / 30s by default). Once the last
-    /// delay is reached the consumer keeps retrying at that delay indefinitely; an
-    /// operations alert is logged when the final attempt in this list fails.
+    /// message, per solution design §9 (immediate / 5s / 30s, supplied by
+    /// appsettings.json). Once the last delay is reached the consumer keeps retrying at
+    /// that delay indefinitely; an operations alert is logged when the final attempt in
+    /// this list fails. The in-code default must stay empty: the configuration binder
+    /// appends configured entries onto a non-empty default array instead of replacing
+    /// it, doubling the list.
     /// </summary>
-    public TimeSpan[] RetryDelays { get; set; } =
-    [
-        TimeSpan.Zero,
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(30),
-    ];
+    public TimeSpan[] RetryDelays { get; set; } = [];
 
     /// <summary>
     /// While a partition stays blocked past the alert threshold

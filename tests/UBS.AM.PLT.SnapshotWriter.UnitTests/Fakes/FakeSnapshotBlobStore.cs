@@ -5,10 +5,10 @@ namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 
 public sealed class FakeSnapshotBlobStore : ISnapshotBlobStore
 {
-    private readonly List<SnapshotMessage> _written = [];
+    private readonly List<(SnapshotMessage Message, string RootPath)> _written = [];
     private readonly List<string> _headerReadsFor = [];
 
-    public IReadOnlyList<SnapshotMessage> Written => _written;
+    public IReadOnlyList<(SnapshotMessage Message, string RootPath)> Written => _written;
 
     public IReadOnlyList<string> HeaderReadsFor => _headerReadsFor;
 
@@ -18,15 +18,15 @@ public sealed class FakeSnapshotBlobStore : ISnapshotBlobStore
 
     public string HeaderJson { get; set; } = "{}";
 
-    public Task<string> WriteAsync(SnapshotMessage message, CancellationToken cancellationToken)
+    public Task WriteAsync(SnapshotMessage message, string rootPath, CancellationToken cancellationToken)
     {
         if (ThrowOnWrite is not null)
         {
             throw ThrowOnWrite;
         }
 
-        _written.Add(message);
-        return Task.FromResult(SnapshotBlobPath.RootFolder(message));
+        _written.Add((message, rootPath));
+        return Task.CompletedTask;
     }
 
     public Task<string> ReadHeaderAsync(string adlsRootPath, CancellationToken cancellationToken)

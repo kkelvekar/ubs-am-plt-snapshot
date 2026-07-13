@@ -15,6 +15,13 @@ public interface ISnapshotTrackingStore
     Task<SnapshotTrackingEntry> UpsertReceivedAsync(SnapshotMessage message, string adlsRootPath, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Read-only lookup of the pinned root path; null when no tracking row exists yet.
+    /// Lets the handler reuse the root folder pinned by the snapshot's first payload for
+    /// every subsequent (or redelivered) payload instead of re-deriving it per message.
+    /// </summary>
+    Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Flips a tracking row to COMPLETE — the final step of the strict write order,
     /// called only after the index UPSERT has succeeded (design §8), so a failed index
     /// write leaves the row RECEIVING and redelivery retries the completeness check.
