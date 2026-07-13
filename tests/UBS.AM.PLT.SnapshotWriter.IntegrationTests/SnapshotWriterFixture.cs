@@ -24,6 +24,9 @@ namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 /// </summary>
 public sealed class SnapshotWriterFixture : IDisposable
 {
+    private static readonly SemaphoreSlim HistoricalCleanupLock = new(1, 1);
+    private static bool historicalCleanupDone;
+
     private readonly ServiceProvider _provider;
 
     public SnapshotWriterFixture()
@@ -50,6 +53,9 @@ public sealed class SnapshotWriterFixture : IDisposable
         var blobOptions = Configuration.GetSection(BlobStorageOptions.SectionName).Get<BlobStorageOptions>()
             ?? throw new InvalidOperationException("BlobStorage configuration section is missing.");
         BlobContainer = BlobContainerClientFactory.Create(blobOptions);
+        TestSettings = Configuration.GetSection(IntegrationTestSettings.SectionName).Get<IntegrationTestSettings>()
+            ?? new IntegrationTestSettings();
+        Cleanup = new IntegrationTestCleanup(DbContextFactory, BlobContainer, blobOptions, TestSettings);
     }
 
     public IConfiguration Configuration { get; }
@@ -62,11 +68,39 @@ public sealed class SnapshotWriterFixture : IDisposable
 
     public IDbContextFactory<SnapshotWriterDbContext> DbContextFactory { get; }
 
+    public IntegrationTestSettings TestSettings { get; }
+
+    internal IntegrationTestCleanup Cleanup { get; }
+
     /// <summary>
     /// The mocked "now". Tests pin this to a known value at the start and advance it
     /// between messages to assert last_updated_at behaviour.
     /// </summary>
     public DateTimeOffset CurrentTime { get; set; } = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
+
+    public async Task CleanupExistingTestDataOnStartAsync()
+    {
+        if (!TestSettings.CleanupAfterTest || !TestSettings.CleanupExistingTestDataOnStart)
+        {
+            return;
+        }
+
+        await HistoricalCleanupLock.WaitAsync();
+        try
+        {
+            if (historicalCleanupDone)
+            {
+                return;
+            }
+
+            await Cleanup.CleanupAllKnownTestDataAsync();
+            historicalCleanupDone = true;
+        }
+        finally
+        {
+            HistoricalCleanupLock.Release();
+        }
+    }
 
     public void Dispose() => _provider.Dispose();
 }
