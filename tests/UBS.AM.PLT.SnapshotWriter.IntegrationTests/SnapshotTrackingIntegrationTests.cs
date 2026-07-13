@@ -235,7 +235,8 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     {
         var snapshotId = NewSnapshotId();
         var timeProvider = new SteppingTimeProvider(StartTime);
-        var trackingStore = new SqlSnapshotTrackingStore(new SingleContextFactory(_dbOptions), timeProvider);
+        var trackingStore = new SqlSnapshotTrackingStore(
+            new SnapshotTrackingRepository(new SingleContextFactory(_dbOptions)), timeProvider);
         var message = CreateMessage(snapshotId, "instruments", """{"total":21}""");
         Track(message);
 
@@ -249,11 +250,39 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
         Assert.Equal(row!.AdlsRootPath, await trackingStore.GetRootPathAsync(snapshotId, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Repository_call_after_a_throwing_apply_succeeds_on_the_same_instance()
+    {
+        // Statelessness lock-in: the repository holds no state between calls, so a call
+        // whose apply delegate throws must not leak or poison anything — the very next
+        // call on the SAME instance gets a fresh DbContext and succeeds cleanly.
+        var snapshotId = NewSnapshotId();
+        var timeProvider = new SteppingTimeProvider(StartTime);
+        var repository = new SnapshotTrackingRepository(new SingleContextFactory(_dbOptions));
+        var trackingStore = new SqlSnapshotTrackingStore(repository, timeProvider);
+        var message = CreateMessage(snapshotId, "instruments", """{"total":21}""");
+        MarkForCleanup(snapshotId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.UpsertAsync(
+                snapshotId,
+                _ => throw new InvalidOperationException("boom"),
+                CancellationToken.None));
+
+        var entry = await trackingStore.UpsertReceivedAsync(
+            message, SnapshotBlobPath.RootFolder(message, StartTime), CancellationToken.None);
+
+        Assert.Equal(SnapshotTrackingStatus.Receiving, entry.Status);
+        var row = await LoadTrackingEntryAsync(snapshotId);
+        Assert.NotNull(row);
+        Assert.Equal(["instruments.json"], row!.ReceivedFiles);
+    }
+
     private SnapshotMessageHandler CreateHandler(TimeProvider timeProvider)
     {
         var blobStore = new AzureBlobSnapshotStore(Options.Create(_blobOptions));
         var factory = new SingleContextFactory(_dbOptions);
-        var trackingStore = new SqlSnapshotTrackingStore(factory, timeProvider);
+        var trackingStore = new SqlSnapshotTrackingStore(new SnapshotTrackingRepository(factory), timeProvider);
         return new SnapshotMessageHandler(
             blobStore,
             trackingStore,

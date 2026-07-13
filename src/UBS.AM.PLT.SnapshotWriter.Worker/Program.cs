@@ -21,10 +21,16 @@ builder.Services.Configure<Dictionary<string, SnapshotTypeConfig>>(
 
 builder.Services.AddSingleton(TimeProvider.System);
 
-// The tracking store is a singleton like the rest of the pipeline, so it takes the
-// factory and creates a short-lived DbContext per operation.
-builder.Services.AddDbContextFactory<SnapshotWriterDbContext>((serviceProvider, options) =>
+// The repositories are stateless singletons that take the pooled factory and scope one
+// short-lived DbContext to each call. Pooled contexts reset their state on return to the
+// pool — safe because nothing stashes state on the context between calls.
+// EnableRetryOnFailure / an EF execution strategy is deliberately NOT enabled: retry is
+// owned by Kafka redelivery per design §8/§9 — do not add one.
+builder.Services.AddPooledDbContextFactory<SnapshotWriterDbContext>((serviceProvider, options) =>
     options.UseSqlServer(serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+
+builder.Services.AddSingleton<ISnapshotTrackingRepository, SnapshotTrackingRepository>();
+builder.Services.AddSingleton<ISnapshotIndexRepository, SnapshotIndexRepository>();
 
 builder.Services.AddSingleton<ISnapshotBlobStore, AzureBlobSnapshotStore>();
 builder.Services.AddSingleton<ISnapshotTrackingStore, SqlSnapshotTrackingStore>();

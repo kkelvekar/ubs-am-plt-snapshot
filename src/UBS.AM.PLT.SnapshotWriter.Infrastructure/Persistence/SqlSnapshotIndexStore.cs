@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
@@ -10,42 +9,45 @@ namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 /// UPDATE) — design §7, §8. created_at is set only on first INSERT and never touched on
 /// UPDATE, so redelivery of the completing message upserts identical row content without
 /// disturbing the original write timestamp.
+/// Raw EF Core access lives in <see cref="ISnapshotIndexRepository"/>; this class keeps
+/// only the UPSERT/idempotency decisions, expressed as the <c>apply</c> delegate passed
+/// to the repository's single-call upsert.
 /// </summary>
-public sealed class SqlSnapshotIndexStore : ISnapshotIndexStore
+internal sealed class SqlSnapshotIndexStore : ISnapshotIndexStore
 {
-    private readonly IDbContextFactory<SnapshotWriterDbContext> _contextFactory;
+    private readonly ISnapshotIndexRepository _repository;
     private readonly TimeProvider _timeProvider;
 
     public SqlSnapshotIndexStore(
-        IDbContextFactory<SnapshotWriterDbContext> contextFactory,
+        ISnapshotIndexRepository repository,
         TimeProvider timeProvider)
     {
-        _contextFactory = contextFactory;
+        _repository = repository;
         _timeProvider = timeProvider;
     }
 
-    public async Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
+    public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        var existing = await context.SnapshotIndex
-            .SingleOrDefaultAsync(e => e.SnapshotId == entry.SnapshotId, cancellationToken);
+        return _repository.UpsertAsync(
+            entry.SnapshotId,
+            existing =>
+            {
+                if (existing is null)
+                {
+                    entry.CreatedAt = now;
+                    return entry;
+                }
 
-        if (existing is null)
-        {
-            entry.CreatedAt = _timeProvider.GetUtcNow().UtcDateTime;
-            context.SnapshotIndex.Add(entry);
-        }
-        else
-        {
-            existing.AccountId = entry.AccountId;
-            existing.SnapshotDate = entry.SnapshotDate;
-            existing.EventType = entry.EventType;
-            existing.AdlsPath = entry.AdlsPath;
-            existing.DisplayData = entry.DisplayData;
-            // created_at is intentionally left untouched on UPDATE.
-        }
-
-        await context.SaveChangesAsync(cancellationToken);
+                existing.AccountId = entry.AccountId;
+                existing.SnapshotDate = entry.SnapshotDate;
+                existing.EventType = entry.EventType;
+                existing.AdlsPath = entry.AdlsPath;
+                existing.DisplayData = entry.DisplayData;
+                // created_at is intentionally left untouched on UPDATE.
+                return existing;
+            },
+            cancellationToken);
     }
 }

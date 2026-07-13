@@ -212,6 +212,52 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Replaying_the_completing_message_leaves_the_tracking_row_and_index_created_at_identical()
+    {
+        var snapshotId = NewSnapshotId();
+        var timeProvider = new SteppingTimeProvider(StartTime);
+        var handler = CreateHandler(timeProvider);
+
+        var header = CreateMessage(snapshotId, "header", HeaderJson);
+        var instruments = CreateMessage(snapshotId, "instruments", """{"total":21}""");
+        var calculations = CreateMessage(snapshotId, "calculations", """{"pnl":100}""");
+        var settings = CreateMessage(snapshotId, "settings", """{"rebalance":true}""");
+        Track(header, instruments, calculations, settings);
+
+        await handler.HandleAsync(header, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await handler.HandleAsync(instruments, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await handler.HandleAsync(calculations, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await handler.HandleAsync(settings, CancellationToken.None); // completes it
+
+        var trackingBefore = await LoadTrackingEntryAsync(snapshotId);
+        var indexBefore = await LoadIndexEntryAsync(snapshotId);
+        Assert.NotNull(trackingBefore);
+        Assert.NotNull(indexBefore);
+
+        // Full end-to-end replay of the completing message, as Kafka redelivery would.
+        timeProvider.Advance(TimeSpan.FromMinutes(1));
+        await handler.HandleAsync(settings, CancellationToken.None);
+
+        var trackingAfter = await LoadTrackingEntryAsync(snapshotId);
+        var indexAfter = await LoadIndexEntryAsync(snapshotId);
+
+        Assert.NotNull(trackingAfter);
+        Assert.Equal(trackingBefore!.Status, trackingAfter!.Status);
+        Assert.Equal(trackingBefore.AdlsRootPath, trackingAfter.AdlsRootPath);
+        Assert.Equal(trackingBefore.ReceivedFiles, trackingAfter.ReceivedFiles);
+        Assert.Equal(trackingBefore.FirstReceivedAt, trackingAfter.FirstReceivedAt);
+        Assert.Equal(trackingBefore.CompletedAt, trackingAfter.CompletedAt);
+        // The one field the §6 update path is allowed to advance on redelivery.
+        Assert.Equal(timeProvider.UtcNow.UtcDateTime, trackingAfter.LastUpdatedAt);
+
+        Assert.NotNull(indexAfter);
+        Assert.Equal(indexBefore!.CreatedAt, indexAfter!.CreatedAt);
+    }
+
+    [Fact]
     public async Task Redelivery_of_an_earlier_payload_after_completion_does_not_regress_status_or_duplicate_the_index_row()
     {
         var snapshotId = NewSnapshotId();
@@ -408,8 +454,8 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     {
         var blobStore = new AzureBlobSnapshotStore(Options.Create(_blobOptions));
         var factory = new SingleContextFactory(_dbOptions);
-        var trackingStore = new SqlSnapshotTrackingStore(factory, timeProvider);
-        var indexStore = new SqlSnapshotIndexStore(factory, timeProvider);
+        var trackingStore = new SqlSnapshotTrackingStore(new SnapshotTrackingRepository(factory), timeProvider);
+        var indexStore = new SqlSnapshotIndexStore(new SnapshotIndexRepository(factory), timeProvider);
         var requiredFilesProvider = new SnapshotConfigRequiredFilesProvider(
             Options.Create(TestConfiguration.SnapshotConfig));
 
