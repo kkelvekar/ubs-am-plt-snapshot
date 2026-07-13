@@ -75,10 +75,11 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         }
 
         _logger.LogInformation(
-            "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
+            "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} stage={Stage} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
             message.SnapshotId,
             message.AccountId,
             message.PayloadType,
+            message.Stage,
             rootPath,
             tracking.ReceivedFiles.Count);
     }
@@ -92,7 +93,6 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             SnapshotId = message.SnapshotId,
             AccountId = message.AccountId,
             SnapshotDate = tracking.FirstReceivedAt,
-            Stage = message.Stage,
             EventType = header.EventType,
             AdlsPath = tracking.AdlsRootPath,
             DisplayData = new SnapshotIndexDisplayData

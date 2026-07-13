@@ -388,7 +388,6 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
         Assert.NotNull(index);
         Assert.Equal(snapshotId, index!.SnapshotId);
         Assert.Equal(headerMessage.AccountId, index.AccountId);
-        Assert.Equal(headerMessage.Stage, index.Stage);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
         Assert.Equal(tracking.FirstReceivedAt, index.SnapshotDate);
 

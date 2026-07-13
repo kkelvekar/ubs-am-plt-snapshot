@@ -381,7 +381,7 @@ Responsibility 2 -- 30-day purge
 
 ## 7. Index Table Design -- Azure SQL
 
-The Azure SQL index table holds exactly one thin row per snapshot containing the filterable grid columns, a single JSON display column for all non-filterable display fields, and the ADLS folder path. Fat payload data stays entirely in blob.
+The Azure SQL index table holds exactly one thin row per snapshot containing the filterable grid columns, a single JSON display column for all non-filterable display fields, and the ADLS folder path. Fat payload data stays entirely in blob. The `stage` wire field is deliberately not persisted here — it is emitted in the structured application logs instead.
 
 This table is created in a **new database on an existing Azure SQL server**, shared with the snapshot_tracking table described above, for clean separation from existing application databases.
 
@@ -394,7 +394,7 @@ Columns displayed in the grid but not used as filter criteria are stored as a si
 ```
 Filterable SQL columns (indexed):
   snapshot_id, account_id, snapshot_date,
-  stage, event_type, adls_path
+  event_type, adls_path
 
 JSON display column:
   display_data -- all non-filterable grid fields:
@@ -419,7 +419,6 @@ JSON display column:
 |snapshot_id|VARCHAR(50)|Primary key -- correlationId from Kafka|
 |account_id|VARCHAR(20)|Indexed -- always in grid query|
 |snapshot_date|DATETIME2|Partition column -- year-based|
-|stage|VARCHAR(50)|Optimisation / PreTrade / OrderGeneration|
 |event_type|VARCHAR(50)|ModelChange / Cashflow / NoEvent|
 |adls_path|VARCHAR(500)|Root folder path to snapshot files|
 |display_data|NVARCHAR(MAX)|JSON -- all non-filterable grid fields|
@@ -439,7 +438,6 @@ JSON display column:
 SELECT   snapshot_id,
          account_id,
          snapshot_date,
-         stage,
          event_type,
          adls_path,
          display_data

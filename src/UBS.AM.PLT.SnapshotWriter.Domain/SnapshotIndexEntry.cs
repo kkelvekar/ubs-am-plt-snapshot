@@ -10,7 +10,6 @@ public class SnapshotIndexEntry
     public required string SnapshotId { get; set; }
     public required string AccountId { get; set; }
     public DateTime SnapshotDate { get; set; }
-    public required string Stage { get; set; }
     public required string EventType { get; set; }
     public required string AdlsPath { get; set; }
     public required SnapshotIndexDisplayData DisplayData { get; set; }

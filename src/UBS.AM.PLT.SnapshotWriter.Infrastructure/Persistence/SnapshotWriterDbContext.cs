@@ -122,10 +122,6 @@ public sealed class SnapshotWriterDbContext : DbContext
             .HasColumnName("snapshot_date")
             .HasColumnType("datetime2");
 
-        indexEntity.Property(e => e.Stage)
-            .HasColumnName("stage")
-            .HasColumnType("varchar(50)");
-
         indexEntity.Property(e => e.EventType)
             .HasColumnName("event_type")
             .HasColumnType("varchar(50)");

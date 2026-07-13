@@ -40,7 +40,6 @@ public sealed class SqlSnapshotIndexStore : ISnapshotIndexStore
         {
             existing.AccountId = entry.AccountId;
             existing.SnapshotDate = entry.SnapshotDate;
-            existing.Stage = entry.Stage;
             existing.EventType = entry.EventType;
             existing.AdlsPath = entry.AdlsPath;
             existing.DisplayData = entry.DisplayData;

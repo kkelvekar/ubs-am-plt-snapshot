@@ -114,7 +114,7 @@ public class SnapshotMessageHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_logs_snapshotId_accountId_and_payloadType()
+    public async Task HandleAsync_logs_snapshotId_accountId_payloadType_and_stage()
     {
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(new FakeSnapshotBlobStore(), new FakeSnapshotTrackingStore(), logger: logger);
@@ -126,6 +126,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal("corr98765", entry.State["SnapshotId"]);
         Assert.Equal("00675442A", entry.State["AccountId"]);
         Assert.Equal("instruments", entry.State["PayloadType"]);
+        Assert.Equal("PreTrade", entry.State["Stage"]);
     }
 
     [Fact]
@@ -198,7 +199,6 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(message.SnapshotId, indexEntry.SnapshotId);
         Assert.Equal(message.AccountId, indexEntry.AccountId);
         Assert.Equal(new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc), indexEntry.SnapshotDate);
-        Assert.Equal(message.Stage, indexEntry.Stage);
         Assert.Equal("ModelChange", indexEntry.EventType);
         Assert.Equal(expectedRootPath, indexEntry.AdlsPath);
         Assert.Equal("MCCHM2EQ", indexEntry.DisplayData.Benchmark);
