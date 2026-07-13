@@ -19,6 +19,14 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
     /// <summary>Status (and received files) returned by the next <see cref="UpsertReceivedAsync"/> call.</summary>
     public SnapshotTrackingStatus StatusToReturn { get; set; } = SnapshotTrackingStatus.Receiving;
 
+    /// <summary>
+    /// Pinned root path per snapshotId, mirroring the real store: the first
+    /// <see cref="UpsertReceivedAsync"/> pins it, later upserts never change it, and
+    /// <see cref="GetRootPathAsync"/> reads it (null when nothing pinned yet). Tests can
+    /// pre-seed an entry to simulate an existing tracking row.
+    /// </summary>
+    public Dictionary<string, string> RootPathsBySnapshotId { get; } = new(StringComparer.Ordinal);
+
     public List<string> ReceivedFilesToReturn { get; set; } = [];
 
     /// <summary>
@@ -39,6 +47,7 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
         }
 
         _upserts.Add((message, adlsRootPath));
+        RootPathsBySnapshotId.TryAdd(message.SnapshotId, adlsRootPath);
 
         var receivedFiles = ReceivedFilesToReturn.Count > 0
             ? ReceivedFilesToReturn
@@ -56,6 +65,9 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
             LastUpdatedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
         });
     }
+
+    public Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken)
+        => Task.FromResult(RootPathsBySnapshotId.TryGetValue(snapshotId, out var rootPath) ? rootPath : null);
 
     public Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
     {

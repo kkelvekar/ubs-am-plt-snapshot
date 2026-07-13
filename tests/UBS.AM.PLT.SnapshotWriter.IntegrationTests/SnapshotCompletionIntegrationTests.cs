@@ -52,6 +52,13 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
         }
         """;
 
+    /// <summary>
+    /// Canonical first-arrival time most tests start their <see cref="SteppingTimeProvider"/>
+    /// at — the handler pins each snapshot's root folder at this instant, making blob
+    /// paths deterministic for assertions and cleanup.
+    /// </summary>
+    private static readonly DateTimeOffset StartTime = new(2026, 5, 22, 6, 10, 14, TimeSpan.Zero);
+
     private readonly BlobContainerClient _container;
     private readonly BlobStorageOptions _blobOptions;
     private readonly DbContextOptions<SnapshotWriterDbContext> _dbOptions;
@@ -93,7 +100,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     public async Task Three_of_four_required_payloads_leaves_tracking_receiving_with_no_index_row()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         var instruments = CreateMessage(snapshotId, "instruments", """{"total":21}""");
@@ -120,7 +127,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     public async Task Fourth_required_payload_completes_the_snapshot_and_writes_the_index_row()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         // header is deliberately the LAST (completing) payload to arrive here — the
@@ -156,7 +163,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     public async Task Redelivery_of_the_completing_message_produces_no_duplicate_index_row()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         var header = CreateMessage(snapshotId, "header", HeaderJson);
@@ -208,7 +215,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     public async Task Redelivery_of_an_earlier_payload_after_completion_does_not_regress_status_or_duplicate_the_index_row()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         var header = CreateMessage(snapshotId, "header", HeaderJson);
@@ -250,7 +257,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     public async Task Out_of_order_arrival_with_header_first_still_completes_correctly()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         // header arrives FIRST here (not last, as in Fourth_required_payload_completes_...
@@ -284,10 +291,69 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Payloads_published_across_a_month_boundary_land_under_one_root_folder_and_complete()
+    {
+        var snapshotId = NewSnapshotId();
+        var firstArrival = new DateTimeOffset(2026, 5, 31, 23, 59, 58, TimeSpan.Zero);
+        var timeProvider = new SteppingTimeProvider(firstArrival);
+        var handler = CreateHandler(timeProvider);
+
+        // Publish timestamps deliberately straddle the May/June 2026 boundary — before
+        // the fix, per-message PublishedAt-derived paths split this snapshot across
+        // month=05 and month=06 folders and completion could not find header.json.
+        var header = CreateMessage(snapshotId, "header", HeaderJson,
+            publishedAt: new DateTime(2026, 5, 31, 23, 59, 58, DateTimeKind.Utc));
+        var instruments = CreateMessage(snapshotId, "instruments", """{"total":21}""",
+            publishedAt: new DateTime(2026, 6, 1, 0, 0, 2, DateTimeKind.Utc));
+        var calculations = CreateMessage(snapshotId, "calculations", """{"pnl":100}""",
+            publishedAt: new DateTime(2026, 6, 1, 0, 0, 2, DateTimeKind.Utc));
+        var settings = CreateMessage(snapshotId, "settings", """{"rebalance":true}""",
+            publishedAt: new DateTime(2026, 6, 1, 0, 0, 2, DateTimeKind.Utc));
+        Track(firstArrival, header, instruments, calculations, settings);
+
+        await handler.HandleAsync(header, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(4)); // wall clock also crosses the boundary
+        await handler.HandleAsync(instruments, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await handler.HandleAsync(calculations, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        // Completing message: ReadHeaderAsync must find header.json under the pinned
+        // root — if any payload had landed elsewhere this throws and the test fails.
+        await handler.HandleAsync(settings, CancellationToken.None);
+
+        var tracking = await LoadTrackingEntryAsync(snapshotId);
+        var index = await LoadIndexEntryAsync(snapshotId);
+
+        Assert.NotNull(tracking);
+        Assert.Equal(SnapshotTrackingStatus.Complete, tracking!.Status);
+
+        // All four blobs exist under the SAME root folder — the tracking row's pinned one.
+        var rootFolder = tracking.AdlsRootPath;
+        Assert.Contains("year=2026/month=05", rootFolder);
+        var blobNames = new List<string>();
+        await foreach (var blobItem in _container.GetBlobsAsync(prefix: $"{rootFolder}/"))
+        {
+            blobNames.Add(blobItem.Name);
+        }
+
+        Assert.Equal(
+            [
+                $"{rootFolder}/calculations.json",
+                $"{rootFolder}/header.json",
+                $"{rootFolder}/instruments.json",
+                $"{rootFolder}/settings.json",
+            ],
+            blobNames.OrderBy(name => name, StringComparer.Ordinal));
+
+        Assert.NotNull(index);
+        Assert.Equal(rootFolder, index!.AdlsPath);
+    }
+
+    [Fact]
     public async Task Unconfigured_snapshot_type_throws_and_writes_no_index_row()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         // "unknown_type" is deliberately absent from this project's appsettings.json
@@ -303,12 +369,12 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
         // before the completeness check that threw — per the strict write order, this is
         // expected: the exception propagates unchanged so no offset would ever be
         // committed by the real consumer, and redelivery would retry from the top.
-        var blob = _container.GetBlobClient(SnapshotBlobPath.FullPath(message));
-        Assert.True(await blob.ExistsAsync());
-
         var tracking = await LoadTrackingEntryAsync(snapshotId);
         Assert.NotNull(tracking);
         Assert.Equal(SnapshotTrackingStatus.Receiving, tracking!.Status);
+
+        var blob = _container.GetBlobClient($"{tracking.AdlsRootPath}/header.json");
+        Assert.True(await blob.ExistsAsync());
 
         Assert.Null(await LoadIndexEntryAsync(snapshotId));
     }
@@ -353,6 +419,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
             trackingStore,
             requiredFilesProvider,
             indexStore,
+            timeProvider,
             NullLogger<SnapshotMessageHandler>.Instance);
     }
 
@@ -372,11 +439,16 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
             .SingleOrDefaultAsync(e => e.SnapshotId == snapshotId);
     }
 
-    private void Track(params SnapshotMessage[] messages)
+    private void Track(params SnapshotMessage[] messages) => Track(StartTime, messages);
+
+    private void Track(DateTimeOffset pinnedArrival, params SnapshotMessage[] messages)
     {
         foreach (var message in messages)
         {
-            _blobNamesToCleanUp.Add(SnapshotBlobPath.FullPath(message));
+            // The handler pins each snapshot's root at the first payload's arrival time
+            // (the test's SteppingTimeProvider start), so blob names are deterministic.
+            _blobNamesToCleanUp.Add(
+                SnapshotBlobPath.FullPath(SnapshotBlobPath.RootFolder(message, pinnedArrival), message.PayloadType));
             MarkForCleanup(message.SnapshotId);
         }
     }
@@ -395,7 +467,8 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
         string snapshotId,
         string payloadType,
         string payloadJson,
-        string snapshotType = "portfolio")
+        string snapshotType = "portfolio",
+        DateTime? publishedAt = null)
     {
         using var payload = JsonDocument.Parse(payloadJson);
         return new SnapshotMessage
@@ -405,7 +478,7 @@ public sealed class SnapshotCompletionIntegrationTests : IAsyncLifetime
             SnapshotType = snapshotType,
             PayloadType = payloadType,
             Stage = "PreTrade",
-            PublishedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            PublishedAt = publishedAt ?? new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
             PublishedBy = "PortfolioCalculation",
             SchemaVersion = "1.0",
             Payload = payload.RootElement.Clone(),

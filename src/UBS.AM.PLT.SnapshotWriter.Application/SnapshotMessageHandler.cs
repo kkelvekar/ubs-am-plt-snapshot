@@ -20,6 +20,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     private readonly ISnapshotTrackingStore _trackingStore;
     private readonly IRequiredFilesProvider _requiredFilesProvider;
     private readonly ISnapshotIndexStore _indexStore;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<SnapshotMessageHandler> _logger;
 
     public SnapshotMessageHandler(
@@ -27,18 +28,29 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         ISnapshotTrackingStore trackingStore,
         IRequiredFilesProvider requiredFilesProvider,
         ISnapshotIndexStore indexStore,
+        TimeProvider timeProvider,
         ILogger<SnapshotMessageHandler> logger)
     {
         _blobStore = blobStore;
         _trackingStore = trackingStore;
         _requiredFilesProvider = requiredFilesProvider;
         _indexStore = indexStore;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
     public async Task HandleAsync(SnapshotMessage message, CancellationToken cancellationToken)
     {
-        var rootPath = await _blobStore.WriteAsync(message, cancellationToken);
+        // The root folder is pinned to the FIRST payload's arrival time for this
+        // snapshotId and reused by every subsequent (or redelivered) payload, so a
+        // snapshot whose publish timestamps straddle a month/year boundary never splits
+        // across two folders. The lookup is read-only (mutates nothing) — the write order
+        // below still starts at the blob write. Kafka's accountId partitioning processes
+        // a snapshot's messages sequentially on one consumer (see SqlSnapshotTrackingStore),
+        // so no locking is needed around it.
+        var rootPath = await _trackingStore.GetRootPathAsync(message.SnapshotId, cancellationToken)
+            ?? SnapshotBlobPath.RootFolder(message, _timeProvider.GetUtcNow());
+        await _blobStore.WriteAsync(message, rootPath, cancellationToken);
         var tracking = await _trackingStore.UpsertReceivedAsync(message, rootPath, cancellationToken);
 
         // Guard: stray redelivery of a file long after the snapshot already completed (or

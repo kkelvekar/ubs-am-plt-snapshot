@@ -32,6 +32,13 @@ namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 /// </summary>
 public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
 {
+    /// <summary>
+    /// Canonical first-arrival time every test starts its <see cref="SteppingTimeProvider"/>
+    /// at — the handler pins each snapshot's root folder at this instant, making blob
+    /// paths deterministic for assertions and cleanup.
+    /// </summary>
+    private static readonly DateTimeOffset StartTime = new(2026, 5, 22, 6, 10, 14, TimeSpan.Zero);
+
     private readonly BlobContainerClient _container;
     private readonly BlobStorageOptions _blobOptions;
     private readonly DbContextOptions<SnapshotWriterDbContext> _dbOptions;
@@ -70,7 +77,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     public async Task First_payload_inserts_a_receiving_row_with_the_expected_shape()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
         var message = CreateMessage(snapshotId, "instruments", """{"total":21}""");
         Track(message);
@@ -81,7 +88,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
 
         Assert.NotNull(row);
         Assert.Equal(SnapshotTrackingStatus.Receiving, row!.Status);
-        Assert.Equal(SnapshotBlobPath.RootFolder(message), row.AdlsRootPath);
+        Assert.Equal(SnapshotBlobPath.RootFolder(message, StartTime), row.AdlsRootPath);
         Assert.Equal(["instruments.json"], row.ReceivedFiles);
         Assert.Equal(timeProvider.UtcNow.UtcDateTime, row.FirstReceivedAt);
         Assert.Equal(row.FirstReceivedAt, row.LastUpdatedAt);
@@ -99,7 +106,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     public async Task Redelivery_of_the_same_message_is_idempotent_and_produces_no_duplicate_entries()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
         var message = CreateMessage(snapshotId, "instruments", """{"total":21}""");
         Track(message);
@@ -123,7 +130,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     public async Task Subsequent_payload_appends_the_filename_and_advances_last_updated_at_only()
     {
         var snapshotId = NewSnapshotId();
-        var firstReceivedAt = new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero);
+        var firstReceivedAt = StartTime;
         var secondReceivedAt = firstReceivedAt.AddMinutes(3);
         var timeProvider = new SteppingTimeProvider(firstReceivedAt);
         var handler = CreateHandler(timeProvider);
@@ -141,7 +148,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
         Assert.NotNull(row);
         Assert.Equal(["header.json", "instruments.json"], row!.ReceivedFiles);
         Assert.Equal(SnapshotTrackingStatus.Receiving, row.Status);
-        Assert.Equal(SnapshotBlobPath.RootFolder(header), row.AdlsRootPath);
+        Assert.Equal(SnapshotBlobPath.RootFolder(header, firstReceivedAt), row.AdlsRootPath);
         Assert.Equal(firstReceivedAt.UtcDateTime, row.FirstReceivedAt);
         Assert.Equal(secondReceivedAt.UtcDateTime, row.LastUpdatedAt);
     }
@@ -150,7 +157,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     public async Task Out_of_order_payload_arrival_produces_the_same_row_regardless_of_arrival_order()
     {
         var snapshotId = NewSnapshotId();
-        var timeProvider = new SteppingTimeProvider(new DateTimeOffset(2026, 5, 22, 6, 10, 14, TimeSpan.Zero));
+        var timeProvider = new SteppingTimeProvider(StartTime);
         var handler = CreateHandler(timeProvider);
 
         var header = CreateMessage(snapshotId, "header", """{"eventType":"ModelChange"}""");
@@ -196,7 +203,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
                 SnapshotId = snapshotId,
                 AccountId = message.AccountId,
                 SnapshotType = message.SnapshotType,
-                AdlsRootPath = SnapshotBlobPath.RootFolder(message),
+                AdlsRootPath = SnapshotBlobPath.RootFolder(message, seededAt),
                 ReceivedFiles = ["header.json", "instruments.json", "calculations.json", "settings.json"],
                 Status = SnapshotTrackingStatus.Complete,
                 FirstReceivedAt = seededAt,
@@ -216,11 +223,30 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
 
         Assert.NotNull(row);
         Assert.Equal(SnapshotTrackingStatus.Complete, row!.Status);
-        Assert.Equal(SnapshotBlobPath.RootFolder(message), row.AdlsRootPath);
+        Assert.Equal(SnapshotBlobPath.RootFolder(message, seededAt), row.AdlsRootPath);
         Assert.Equal(seededAt, row.FirstReceivedAt);
         Assert.Equal(
             ["header.json", "instruments.json", "calculations.json", "settings.json"],
             row.ReceivedFiles);
+    }
+
+    [Fact]
+    public async Task GetRootPathAsync_returns_null_for_an_unknown_snapshot_and_the_pinned_root_for_an_existing_one()
+    {
+        var snapshotId = NewSnapshotId();
+        var timeProvider = new SteppingTimeProvider(StartTime);
+        var trackingStore = new SqlSnapshotTrackingStore(new SingleContextFactory(_dbOptions), timeProvider);
+        var message = CreateMessage(snapshotId, "instruments", """{"total":21}""");
+        Track(message);
+
+        Assert.Null(await trackingStore.GetRootPathAsync(snapshotId, CancellationToken.None));
+
+        var handler = CreateHandler(timeProvider);
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var row = await LoadTrackingEntryAsync(snapshotId);
+        Assert.NotNull(row);
+        Assert.Equal(row!.AdlsRootPath, await trackingStore.GetRootPathAsync(snapshotId, CancellationToken.None));
     }
 
     private SnapshotMessageHandler CreateHandler(TimeProvider timeProvider)
@@ -233,6 +259,7 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
             trackingStore,
             new NeverCompleteRequiredFilesProvider(),
             new NoOpSnapshotIndexStore(),
+            timeProvider,
             NullLogger<SnapshotMessageHandler>.Instance);
     }
 
@@ -273,7 +300,10 @@ public sealed class SnapshotTrackingIntegrationTests : IAsyncLifetime
     {
         foreach (var message in messages)
         {
-            _blobNamesToCleanUp.Add(SnapshotBlobPath.FullPath(message));
+            // Every test in this suite pins the snapshot's root at StartTime (each
+            // SteppingTimeProvider starts there), so the blob names are deterministic.
+            _blobNamesToCleanUp.Add(
+                SnapshotBlobPath.FullPath(SnapshotBlobPath.RootFolder(message, StartTime), message.PayloadType));
             MarkForCleanup(message.SnapshotId);
         }
     }

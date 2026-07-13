@@ -27,8 +27,15 @@ namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 /// </summary>
 public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
 {
+    /// <summary>
+    /// Fixed arrival time (via <see cref="FixedTimeProvider"/>) so the handler pins a
+    /// deterministic year=2026/month=05 root folder for every message in this suite.
+    /// </summary>
+    private static readonly DateTimeOffset ArrivalTime = new(2026, 5, 22, 6, 10, 14, TimeSpan.Zero);
+
     private readonly BlobContainerClient _container;
     private readonly SnapshotMessageHandler _handler;
+    private readonly InMemorySnapshotTrackingStore _trackingStore = new();
     private readonly List<string> _blobNamesToCleanUp = [];
 
     public SnapshotBlobWriteIntegrationTests()
@@ -38,26 +45,34 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
         var blobStore = new AzureBlobSnapshotStore(Options.Create(options));
         _handler = new SnapshotMessageHandler(
             blobStore,
-            new NoOpSnapshotTrackingStore(),
+            _trackingStore,
             new PortfolioRequiredFilesProvider(),
             new NoOpSnapshotIndexStore(),
+            new FixedTimeProvider(ArrivalTime),
             NullLogger<SnapshotMessageHandler>.Instance);
     }
 
     /// <summary>
-    /// Keeps these slice-2 tests blob-only: tracking (step 2) is satisfied by a no-op so
+    /// Keeps these slice-2 tests blob-only: tracking (step 2) is satisfied in memory so
     /// no SQL Server is required. SQL-asserting integration tests are a separate suite.
-    /// Each call reports only the single filename just "received" (never accumulated
-    /// across calls), so the completeness check (steps 3-4, slice 4) never sees more than
-    /// one received file and is never satisfied here regardless of the required list.
+    /// Mirrors the real store's root pinning (first upsert wins, <see cref="GetRootPathAsync"/>
+    /// reads it back) so the handler's root reuse works here, but each upsert reports only
+    /// the single filename just "received" (never accumulated across calls), so the
+    /// completeness check (steps 3-4, slice 4) never sees more than one received file and
+    /// is never satisfied here regardless of the required list.
     /// </summary>
-    private sealed class NoOpSnapshotTrackingStore : ISnapshotTrackingStore
+    private sealed class InMemorySnapshotTrackingStore : ISnapshotTrackingStore
     {
+        public Dictionary<string, string> RootPathsBySnapshotId { get; } = new(StringComparer.Ordinal);
+
         public Task<SnapshotTrackingEntry> UpsertReceivedAsync(
             SnapshotMessage message,
             string adlsRootPath,
             CancellationToken cancellationToken)
-            => Task.FromResult(new SnapshotTrackingEntry
+        {
+            RootPathsBySnapshotId.TryAdd(message.SnapshotId, adlsRootPath);
+
+            return Task.FromResult(new SnapshotTrackingEntry
             {
                 SnapshotId = message.SnapshotId,
                 AccountId = message.AccountId,
@@ -68,6 +83,10 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
                 FirstReceivedAt = message.PublishedAt,
                 LastUpdatedAt = message.PublishedAt,
             });
+        }
+
+        public Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken)
+            => Task.FromResult(RootPathsBySnapshotId.TryGetValue(snapshotId, out var rootPath) ? rootPath : null);
 
         public Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
             => Task.CompletedTask;
@@ -80,11 +99,17 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
             => new HashSet<string> { "header.json", "instruments.json", "calculations.json", "settings.json" };
     }
 
-    /// <summary>Never invoked in this suite (see <see cref="NoOpSnapshotTrackingStore"/>); present only to satisfy DI.</summary>
+    /// <summary>Never invoked in this suite (see <see cref="InMemorySnapshotTrackingStore"/>); present only to satisfy DI.</summary>
     private sealed class NoOpSnapshotIndexStore : ISnapshotIndexStore
     {
         public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
             => Task.CompletedTask;
+    }
+
+    /// <summary>Deterministic <see cref="TimeProvider"/> so pinned root folders are exact, assertable paths.</summary>
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -128,7 +153,7 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
         await _handler.HandleAsync(message, CancellationToken.None);
         await _handler.HandleAsync(message, CancellationToken.None);
 
-        var blobName = SnapshotBlobPath.FullPath(message);
+        var blobName = BlobNameFor(message);
         var blobsUnderPath = await ListBlobNamesAsync(blobName);
 
         Assert.Single(blobsUnderPath);
@@ -152,7 +177,7 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
 
         await _handler.HandleAsync(redelivered, CancellationToken.None);
 
-        var blob = _container.GetBlobClient(SnapshotBlobPath.FullPath(firstDelivery));
+        var blob = _container.GetBlobClient(BlobNameFor(firstDelivery));
         var download = await blob.DownloadContentAsync();
         Assert.Equal("""{"pnl":100}""", download.Value.Content.ToString());
     }
@@ -172,7 +197,9 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
         await _handler.HandleAsync(calculations, CancellationToken.None);
         await _handler.HandleAsync(settings, CancellationToken.None);
 
-        var rootFolder = SnapshotBlobPath.RootFolder(header);
+        // The root all four blobs must share is the one the handler actually pinned
+        // (visible via the tracking store), not one recomputed from the messages.
+        var rootFolder = _trackingStore.RootPathsBySnapshotId[snapshotId];
         var blobNames = await ListBlobNamesAsync(rootFolder);
 
         Assert.Equal(
@@ -203,9 +230,13 @@ public sealed class SnapshotBlobWriteIntegrationTests : IAsyncLifetime
     {
         foreach (var message in messages)
         {
-            _blobNamesToCleanUp.Add(SnapshotBlobPath.FullPath(message));
+            _blobNamesToCleanUp.Add(BlobNameFor(message));
         }
     }
+
+    /// <summary>Expected blob name for a message in this suite — the handler pins the root at <see cref="ArrivalTime"/>.</summary>
+    private static string BlobNameFor(SnapshotMessage message)
+        => SnapshotBlobPath.FullPath(SnapshotBlobPath.RootFolder(message, ArrivalTime), message.PayloadType);
 
     private static string NewSnapshotId() => $"it-{Guid.NewGuid():N}";
 

@@ -71,6 +71,17 @@ public sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
         return entry;
     }
 
+    public async Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.SnapshotTracking
+            .AsNoTracking()
+            .Where(e => e.SnapshotId == snapshotId)
+            .Select(e => e.AdlsRootPath)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

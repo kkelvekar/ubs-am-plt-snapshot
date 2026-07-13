@@ -22,21 +22,52 @@ public class SnapshotMessageHandlerTests
         await handler.HandleAsync(message, CancellationToken.None);
 
         var written = Assert.Single(blobStore.Written);
-        Assert.Same(message, written);
+        Assert.Same(message, written.Message);
     }
 
     [Fact]
-    public async Task HandleAsync_upserts_tracking_with_the_root_path_returned_by_the_blob_store()
+    public async Task HandleAsync_writes_blob_and_upserts_tracking_with_the_root_path_pinned_at_arrival_time()
     {
+        var timeProvider = new RecordingTimeProvider();
+        var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
-        var handler = CreateHandler(new FakeSnapshotBlobStore(), trackingStore);
+        var handler = CreateHandler(blobStore, trackingStore, timeProvider: timeProvider);
         var message = CreateMessage();
 
         await handler.HandleAsync(message, CancellationToken.None);
 
+        var expectedRootPath = SnapshotBlobPath.RootFolder(message, timeProvider.UtcNow);
+        var written = Assert.Single(blobStore.Written);
+        Assert.Equal(expectedRootPath, written.RootPath);
+
         var upsert = Assert.Single(trackingStore.Upserts);
         Assert.Same(message, upsert.Message);
-        Assert.Equal(SnapshotBlobPath.RootFolder(message), upsert.AdlsRootPath);
+        Assert.Equal(expectedRootPath, upsert.AdlsRootPath);
+    }
+
+    [Fact]
+    public async Task HandleAsync_reuses_the_pinned_root_path_for_a_later_payload_arriving_in_a_different_month()
+    {
+        var timeProvider = new RecordingTimeProvider { UtcNow = new DateTimeOffset(2026, 5, 31, 23, 59, 58, TimeSpan.Zero) };
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var handler = CreateHandler(blobStore, trackingStore, timeProvider: timeProvider);
+
+        var header = CreateMessage(payloadType: "header");
+        var instruments = CreateMessage(payloadType: "instruments");
+
+        await handler.HandleAsync(header, CancellationToken.None);
+        timeProvider.UtcNow = new DateTimeOffset(2026, 6, 1, 0, 0, 2, TimeSpan.Zero); // month boundary crossed
+        await handler.HandleAsync(instruments, CancellationToken.None);
+
+        var pinnedRootPath = SnapshotBlobPath.RootFolder(header, new DateTimeOffset(2026, 5, 31, 23, 59, 58, TimeSpan.Zero));
+        Assert.Contains("month=05", pinnedRootPath);
+
+        Assert.Equal(2, blobStore.Written.Count);
+        Assert.All(blobStore.Written, written => Assert.Equal(pinnedRootPath, written.RootPath));
+        Assert.Equal(2, trackingStore.Upserts.Count);
+        Assert.All(trackingStore.Upserts, upsert => Assert.Equal(pinnedRootPath, upsert.AdlsRootPath));
+        Assert.Equal(pinnedRootPath, trackingStore.RootPathsBySnapshotId[header.SnapshotId]);
     }
 
     [Fact]
@@ -155,11 +186,12 @@ public class SnapshotMessageHandlerTests
         // must still re-fetch header.json via the blob store, never via message.Payload.
         var message = CreateMessage(payloadType: "header", payload: """{"eventType":"ShouldNeverBeUsed"}""");
 
-        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore);
+        var timeProvider = new RecordingTimeProvider();
+        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore, timeProvider: timeProvider);
 
         await handler.HandleAsync(message, CancellationToken.None);
 
-        var expectedRootPath = SnapshotBlobPath.RootFolder(message);
+        var expectedRootPath = SnapshotBlobPath.RootFolder(message, timeProvider.UtcNow);
         Assert.Equal([expectedRootPath], blobStore.HeaderReadsFor);
 
         var indexEntry = Assert.Single(indexStore.Upserts);
@@ -187,7 +219,11 @@ public class SnapshotMessageHandlerTests
     [Fact]
     public async Task HandleAsync_skips_completeness_check_entirely_when_tracking_already_complete()
     {
+        // Redelivery long after completion: the root pinned by the snapshot's first
+        // payload (a different month than "now") must still be reused for the blob write.
+        const string pinnedRootPath = "portfolio_snapshots/year=2026/month=04/accountId=00675442A/snapshotId=corr98765";
         var trackingStore = new FakeSnapshotTrackingStore { StatusToReturn = SnapshotTrackingStatus.Complete };
+        trackingStore.RootPathsBySnapshotId["corr98765"] = pinnedRootPath;
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
         var indexStore = new FakeSnapshotIndexStore();
@@ -197,6 +233,8 @@ public class SnapshotMessageHandlerTests
 
         await handler.HandleAsync(CreateMessage(), CancellationToken.None);
 
+        var written = Assert.Single(blobStore.Written);
+        Assert.Equal(pinnedRootPath, written.RootPath);
         Assert.Empty(requiredFilesProvider.Calls);
         Assert.Empty(blobStore.HeaderReadsFor);
         Assert.Empty(indexStore.Upserts);
@@ -230,6 +268,7 @@ public class SnapshotMessageHandlerTests
         FakeSnapshotTrackingStore trackingStore,
         FakeRequiredFilesProvider? requiredFilesProvider = null,
         FakeSnapshotIndexStore? indexStore = null,
+        TimeProvider? timeProvider = null,
         CapturingLogger<SnapshotMessageHandler>? logger = null)
     {
         if (requiredFilesProvider is null)
@@ -243,6 +282,7 @@ public class SnapshotMessageHandlerTests
             trackingStore,
             requiredFilesProvider,
             indexStore ?? new FakeSnapshotIndexStore(),
+            timeProvider ?? new RecordingTimeProvider(),
             logger ?? new CapturingLogger<SnapshotMessageHandler>());
     }
 
