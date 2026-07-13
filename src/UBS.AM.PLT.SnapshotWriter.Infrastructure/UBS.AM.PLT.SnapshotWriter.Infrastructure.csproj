@@ -9,6 +9,7 @@
          registers them in-assembly, and the unit tests exercise the stores' upsert logic
          against fake repositories. -->
     <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.UnitTests" />
+    <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>
