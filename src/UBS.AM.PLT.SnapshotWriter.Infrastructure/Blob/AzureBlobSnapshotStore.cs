@@ -9,7 +9,8 @@ namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
 
 /// <summary>
 /// Blob adapter for <see cref="ISnapshotBlobStore"/> using <c>Azure.Storage.Blobs</c>
-/// so the same code runs against Azurite locally and ADLS Gen2 in production. The
+/// so the same code runs against Azurite locally (connection string) and ADLS Gen2
+/// (credential auth via <see cref="BlobContainerClientFactory"/>) with no change. The
 /// payload is written opaquely via <c>GetRawText()</c>; overwrite makes the write
 /// content-idempotent under redelivery. No retry here — the consumer owns retry via
 /// redelivery.
@@ -29,7 +30,7 @@ public sealed class AzureBlobSnapshotStore : ISnapshotBlobStore
         var clientOptions = new BlobClientOptions();
         clientOptions.Retry.MaxRetries = 0;
 
-        _container = new BlobContainerClient(options.Value.ConnectionString, options.Value.ContainerName, clientOptions);
+        _container = BlobContainerClientFactory.Create(options.Value, clientOptions);
     }
 
     public async Task WriteAsync(SnapshotMessage message, string rootPath, CancellationToken cancellationToken)
