@@ -5,10 +5,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The persistence stores/repositories are internal to Infrastructure; the Worker
-         composition root registers them, the integration tests construct them, and the
-         unit tests exercise the stores' upsert logic against fake repositories. -->
-    <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.Worker" />
+    <!-- The persistence stores/repositories are internal to Infrastructure; AddInfrastructure
+         registers them in-assembly, the integration tests construct them, and the unit tests
+         exercise the stores' upsert logic against fake repositories. -->
     <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.IntegrationTests" />
     <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.UnitTests" />
   </ItemGroup>
@@ -19,6 +18,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
