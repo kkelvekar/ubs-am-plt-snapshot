@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
@@ -14,93 +13,88 @@ namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 /// The update path only set-unions the filename and advances last_updated_at; it never
 /// touches status, adls_root_path or first_received_at, so a COMPLETE row stays
 /// COMPLETE under redelivery.
+/// Raw EF Core access lives in <see cref="ISnapshotTrackingRepository"/>; this class
+/// keeps only the upsert/idempotency decisions, expressed as the <c>apply</c> delegate
+/// each call passes to the repository's single-call upsert.
 /// </summary>
-public sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
+internal sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
 {
-    private readonly IDbContextFactory<SnapshotWriterDbContext> _contextFactory;
+    private readonly ISnapshotTrackingRepository _repository;
     private readonly TimeProvider _timeProvider;
 
     public SqlSnapshotTrackingStore(
-        IDbContextFactory<SnapshotWriterDbContext> contextFactory,
+        ISnapshotTrackingRepository repository,
         TimeProvider timeProvider)
     {
-        _contextFactory = contextFactory;
+        _repository = repository;
         _timeProvider = timeProvider;
     }
 
-    public async Task<SnapshotTrackingEntry> UpsertReceivedAsync(
+    public Task<SnapshotTrackingEntry> UpsertReceivedAsync(
         SnapshotMessage message,
         string adlsRootPath,
         CancellationToken cancellationToken)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
         var fileName = SnapshotBlobPath.FileName(message.PayloadType);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        var entry = await context.SnapshotTracking
-            .SingleOrDefaultAsync(e => e.SnapshotId == message.SnapshotId, cancellationToken);
-
-        if (entry is null)
-        {
-            entry = new SnapshotTrackingEntry
+        return _repository.UpsertAsync(
+            message.SnapshotId,
+            existing =>
             {
-                SnapshotId = message.SnapshotId,
-                AccountId = message.AccountId,
-                SnapshotType = message.SnapshotType,
-                AdlsRootPath = adlsRootPath,
-                ReceivedFiles = [fileName],
-                Status = SnapshotTrackingStatus.Receiving,
-                FirstReceivedAt = now,
-                LastUpdatedAt = now,
-            };
-            context.SnapshotTracking.Add(entry);
-        }
-        else
-        {
-            if (!entry.ReceivedFiles.Contains(fileName, StringComparer.Ordinal))
-            {
-                entry.ReceivedFiles = [.. entry.ReceivedFiles, fileName];
-            }
+                if (existing is null)
+                {
+                    return new SnapshotTrackingEntry
+                    {
+                        SnapshotId = message.SnapshotId,
+                        AccountId = message.AccountId,
+                        SnapshotType = message.SnapshotType,
+                        AdlsRootPath = adlsRootPath,
+                        ReceivedFiles = [fileName],
+                        Status = SnapshotTrackingStatus.Receiving,
+                        FirstReceivedAt = now,
+                        LastUpdatedAt = now,
+                    };
+                }
 
-            entry.LastUpdatedAt = now;
-        }
+                if (!existing.ReceivedFiles.Contains(fileName, StringComparer.Ordinal))
+                {
+                    existing.ReceivedFiles = [.. existing.ReceivedFiles, fileName];
+                }
 
-        await context.SaveChangesAsync(cancellationToken);
-
-        return entry;
+                existing.LastUpdatedAt = now;
+                return existing;
+            },
+            cancellationToken);
     }
 
-    public async Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        return await context.SnapshotTracking
-            .AsNoTracking()
-            .Where(e => e.SnapshotId == snapshotId)
-            .Select(e => e.AdlsRootPath)
-            .SingleOrDefaultAsync(cancellationToken);
-    }
+    public Task<string?> GetRootPathAsync(string snapshotId, CancellationToken cancellationToken)
+        => _repository.FindRootPathAsync(snapshotId, cancellationToken);
 
     public async Task MarkCompleteAsync(string snapshotId, CancellationToken cancellationToken)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        var entry = await context.SnapshotTracking
-            .SingleOrDefaultAsync(e => e.SnapshotId == snapshotId, cancellationToken);
+        await _repository.UpsertAsync(
+            snapshotId,
+            existing =>
+            {
+                if (existing is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot mark snapshot '{snapshotId}' complete: no tracking row exists.");
+                }
 
-        if (entry is null)
-        {
-            throw new InvalidOperationException(
-                $"Cannot mark snapshot '{snapshotId}' complete: no tracking row exists.");
-        }
+                if (existing.Status != SnapshotTrackingStatus.Complete)
+                {
+                    existing.Status = SnapshotTrackingStatus.Complete;
+                    existing.CompletedAt = now;
+                }
 
-        if (entry.Status != SnapshotTrackingStatus.Complete)
-        {
-            entry.Status = SnapshotTrackingStatus.Complete;
-            entry.CompletedAt = _timeProvider.GetUtcNow().UtcDateTime;
-
-            await context.SaveChangesAsync(cancellationToken);
-        }
+                // Already COMPLETE: returned unchanged, so SaveChanges detects no change
+                // and issues no SQL — the §8 Scenario 5 redelivery no-op.
+                return existing;
+            },
+            cancellationToken);
     }
 }
