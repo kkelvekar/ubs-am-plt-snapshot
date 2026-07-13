@@ -12,13 +12,17 @@ BEGIN
         snapshot_id   VARCHAR(50)   NOT NULL CONSTRAINT pk_snapshot_index PRIMARY KEY,
         account_id    VARCHAR(20)   NOT NULL,
         snapshot_date DATETIME2     NOT NULL,
-        stage         VARCHAR(50)   NOT NULL,
         event_type    VARCHAR(50)   NOT NULL,
         adls_path     VARCHAR(500)  NOT NULL,
         display_data  NVARCHAR(MAX) NOT NULL,
         created_at    DATETIME2     NOT NULL
     );
 END;
+
+-- stage was removed from the index row (emitted in structured logs instead); drop it
+-- from databases created before the change.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.snapshot_index') AND name = N'stage')
+    ALTER TABLE dbo.snapshot_index DROP COLUMN stage;
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_index_account_snapshotdate' AND object_id = OBJECT_ID(N'dbo.snapshot_index'))
     CREATE INDEX ix_index_account_snapshotdate ON dbo.snapshot_index (account_id, snapshot_date DESC);
