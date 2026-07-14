@@ -64,6 +64,51 @@ public class KafkaSnapshotConsumerTests
     }
 
     [Fact]
+    public async Task Retry_delay_sequence_follows_configured_cadence_and_then_holds_at_max()
+    {
+        // TC-27/TC-28 (Group I — infra unavailability): while an infra dependency is down
+        // the same message keeps failing, and the design §9 cadence is 0s, 5s, 30s, 30s,
+        // 30s... — the configured RetryDelays, then held at the last (largest) delay for
+        // every further attempt. This test drives the REAL shipped config
+        // (["00:00:00","00:00:05","00:00:30"]) rather than the all-zero delays the other
+        // tests use, and asserts the actual delay values applied between attempts.
+        var consumer = new FakeKafkaConsumer { MaxConsumeCalls = 5 };
+        consumer.Enqueue(Result(MessageJson(DefaultSnapshotId), offset: 3));
+        var handler = new ScriptedHandler();
+        handler.FailAlways(DefaultSnapshotId, new InvalidOperationException("infra unavailable"));
+
+        var logger = new CapturingLogger<KafkaSnapshotConsumer>();
+        var timeProvider = new RecordingTimeProvider();
+        var retryDelays = new[] { TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30) };
+
+        await RunToCompletionAsync(consumer, handler, logger, timeProvider, retryDelays: retryDelays);
+
+        // Five failed attempts apply delays 0s, 5s, 30s, 30s, 30s. RecordingTimeProvider
+        // only records strictly-positive due times, so attempt 1's 0s slot is (correctly)
+        // absent — that absence is itself the proof the first configured slot is zero.
+        // The remaining recorded delays prove 5s (slot 2), 30s (slot 3), then 30s held for
+        // attempts 4 and 5 after the three configured slots are exhausted.
+        Assert.Equal(
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)],
+            timeProvider.Delays);
+
+        // Offset never committed on any failure path; the same message is seeked back and
+        // redelivered on every attempt.
+        Assert.Empty(consumer.Commits);
+        Assert.Equal(5, consumer.Seeks.Count);
+        Assert.All(consumer.Seeks, tpo =>
+            Assert.Equal(new TopicPartitionOffset(Topic, new Partition(0), new Offset(3)), tpo));
+        Assert.Equal(5, handler.Handled.Count);
+
+        // Operations alert (Critical) fires once, at the 3rd consecutive failure — the end
+        // of the configured retry slots (default AlertRepeatEveryFailures=10 → next re-alert
+        // would be at 13, beyond this 5-attempt budget).
+        var alert = Assert.Single(logger.Entries, e => e.Level == LogLevel.Critical);
+        Assert.Equal(3, alert.State["FailureCount"]);
+        Assert.Contains("Operations alert", alert.Message);
+    }
+
+    [Fact]
     public async Task Malformed_json_means_no_commit_and_seek_back_to_failed_offset()
     {
         var consumer = new FakeKafkaConsumer { MaxConsumeCalls = 4 };
@@ -80,6 +125,36 @@ public class KafkaSnapshotConsumerTests
             Assert.Equal(new TopicPartitionOffset(Topic, new Partition(0), new Offset(0)), tpo));
 
         // The envelope never deserialises, so the poison message is identifiable by its
+        // message key; snapshot identity fields are null.
+        var alert = Assert.Single(logger.Entries, e => e.Level == LogLevel.Critical);
+        Assert.Equal(DefaultMessageKey, alert.State["MessageKey"]);
+        Assert.Null(alert.State["SnapshotId"]);
+        Assert.Null(alert.State["AccountId"]);
+        Assert.Null(alert.State["PayloadType"]);
+    }
+
+    [Fact]
+    public async Task Envelope_missing_a_required_field_means_no_commit_and_seek_back_to_failed_offset()
+    {
+        // TC-23a: syntactically valid JSON, but a required envelope field (snapshotId) is
+        // entirely absent. System.Text.Json's `required` check throws during deserialise,
+        // exactly like malformed JSON — the message never reaches the handler, the offset
+        // is never committed, and the consumer seeks back and retries (poison message,
+        // partition blocked, ops alerted — no skip, no DLQ).
+        var consumer = new FakeKafkaConsumer { MaxConsumeCalls = 4 };
+        consumer.Enqueue(Result(EnvelopeMissingSnapshotIdJson(), offset: 0));
+        var handler = new ScriptedHandler();
+
+        var logger = new CapturingLogger<KafkaSnapshotConsumer>();
+        await RunToCompletionAsync(consumer, handler, logger);
+
+        Assert.Empty(consumer.Commits);
+        Assert.Empty(handler.Handled);
+        Assert.Equal(4, consumer.Seeks.Count);
+        Assert.All(consumer.Seeks, tpo =>
+            Assert.Equal(new TopicPartitionOffset(Topic, new Partition(0), new Offset(0)), tpo));
+
+        // Envelope never deserialised, so the poison message is identifiable only by its
         // message key; snapshot identity fields are null.
         var alert = Assert.Single(logger.Entries, e => e.Level == LogLevel.Critical);
         Assert.Equal(DefaultMessageKey, alert.State["MessageKey"]);
@@ -270,6 +345,20 @@ public class KafkaSnapshotConsumerTests
           "publishedBy": "PortfolioCalculation",
           "schemaVersion": "1.0",
           "payload": { "total": 21, "equities": [], "futures": [], "cash": [] }
+        }
+        """;
+
+    // Valid JSON, but the required snapshotId field is absent (not merely null).
+    private static string EnvelopeMissingSnapshotIdJson() => """
+        {
+          "accountId": "00675442A",
+          "snapshotType": "portfolio",
+          "payloadType": "instruments",
+          "stage": "PreTrade",
+          "publishedAt": "2026-05-22T06:10:14Z",
+          "publishedBy": "PortfolioCalculation",
+          "schemaVersion": "1.0",
+          "payload": { "total": 21 }
         }
         """;
 

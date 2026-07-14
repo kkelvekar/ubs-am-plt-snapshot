@@ -284,12 +284,103 @@
     errors in the worker log, and the offset commits normally. State
     explicitly in the test report that the fallback was taken and why.
 
+  ================================================================================
+  LIVE-TEST PROCEDURES (Mode B — Group I infra unavailability, TC-27 / TC-28)
+  ================================================================================
+  Design doc §9. Both scenarios use the SAME env-var config-override mechanism as
+  TC-16 (NOT SQL triggers, NOT RBAC revocation): point the worker at an
+  unreachable endpoint via a local config override, observe the §9 retry cadence
+  (0s, 5s, 30s, 30s...) and the Critical "Operations alert" at the 3rd
+  consecutive failure, prove the offset never commits, then restore config and
+  confirm forward recovery. Do NOT take down the shared dev Azure SQL server and
+  do NOT revoke RBAC — only local config overrides pointing at dead endpoints.
+
+  The deterministic halves of these scenarios are ALSO covered, faster, in
+  committed tests:
+    - retry cadence + Critical alert at attempt 3:
+        tests/UBS.AM.PLT.SnapshotWriter.UnitTests/KafkaSnapshotConsumerTests.cs
+        (Retry_delay_sequence_follows_configured_cadence_and_then_holds_at_max)
+    - exception-propagates + no durable tracking/index row:
+        tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests/GroupIInfraUnavailabilityTests.cs
+  These live procedures add the one thing Mode A cannot: the real broker
+  offset-lag / no-commit proof and forward recovery on the live consume path.
+
+  Config keys (standard .NET double-underscore env-var override binding):
+    - SQL connection string:  Database__ConnectionString
+      (bound to DatabaseOptions.ConnectionString — see
+       src/UBS.AM.PLT.SnapshotWriter.Infrastructure/Persistence/DatabaseOptions.cs)
+    - Blob service endpoint:  BlobStorage__ServiceUri
+      (bound to BlobStorageOptions.ServiceUri — ServiceUri wins over
+       ConnectionString in BlobContainerClientFactory; AzureBlobSnapshotStore
+       sets Retry.MaxRetries=0 so failures surface on the first attempt)
+
+  --------------------------------------------------------------------------
+  TC-27 — Azure SQL unreachable during the tracking write (design §9)
+  --------------------------------------------------------------------------
+    1. No triggers needed. Start the worker with the SQL connection string
+       repointed at an unreachable host + short connect timeout so it fails
+       fast (bash):
+         Database__ConnectionString='Server=tcp:localhost,9;Database=fault-injected;Connect Timeout=2;Encrypt=False;TrustServerCertificate=True' \
+           dotnet run --project src/UBS.AM.PLT.SnapshotWriter.Worker
+    2. Publish one snapshot's messages (producer, as in the Preconditions above).
+    3. Verify WHILE the fault is active:
+         - no snapshot_tracking row for the snapshotId (query the REAL dev DB
+           from a normally-configured connection — the worker's writes never
+           reach it); no snapshot_index row either
+         - blob MAY or MAY NOT exist (the write order does a SQL read
+           (GetRootPathAsync) BEFORE the blob write, so the failure can surface
+           before anything is written) — do NOT assert on blob presence
+         - worker logs show "Failed to process message ... attempt N" at the §9
+           cadence (0s, 5s, 30s, 30s...), and a Critical "Operations alert ..."
+           line at the 3rd consecutive failure, repeating every
+           AlertRepeatEveryFailures thereafter
+         - docker exec ... kafka-consumer-groups.sh --describe shows LAG > 0 /
+           committed offset unchanged for the partition; no "Committed offset"
+           log line for the message
+    4. Stop the worker (Stop-Process -Force). Restart WITHOUT the override
+       (normal config → the real dev Azure SQL). Republish the remaining
+       payloads if only some were sent, or let redelivery retry the
+       uncommitted one.
+       Verify forward recovery: snapshot completes — exactly one
+       snapshot_tracking row (COMPLETE) and exactly one snapshot_index row (no
+       duplicates), lag returns to 0, "Committed offset" logged per message.
+
+  --------------------------------------------------------------------------
+  TC-28 — ADLS unreachable during the blob write (design §9)
+  --------------------------------------------------------------------------
+    Same shape as TC-27, reusing TC-16's BlobStorage__ServiceUri override.
+    1. Start the worker with the blob endpoint repointed at a dead endpoint
+       (bash):
+         BlobStorage__ServiceUri='https://127.0.0.1:1/' \
+           dotnet run --project src/UBS.AM.PLT.SnapshotWriter.Worker
+       (port 1 refuses immediately; MaxRetries=0 → first write fails fast. The
+        TC-16 form 'https://fault-injected-nonexistent.blob.core.windows.net'
+        works equally well.)
+    2. Publish one payload (any type) for a fresh snapshotId.
+    3. Verify WHILE the fault is active:
+         - no blob at the expected path in the real dev ADLS account
+         - EXPLICIT SQL check: no snapshot_tracking row for the snapshotId
+           (blob-first write order means a blob failure leaves ZERO tracking
+           rows even though SQL is perfectly reachable) — and no snapshot_index
+           row
+         - worker logs show the §9 retry cadence and the Critical "Operations
+           alert" at the 3rd consecutive failure
+         - kafka-consumer-groups.sh --describe shows lag > 0 / offset
+           uncommitted; no "Committed offset" line for the message
+    4. Stop the worker (Stop-Process -Force). Restart WITHOUT the override
+       (real ADLS). Let redelivery retry / republish remaining payloads.
+       Verify forward recovery: blob written, tracking row appears, snapshot
+       COMPLETEs, exactly one index row, lag back to 0 — no duplicates, no
+       manual SQL/blob intervention.
+
   --------------------------------------------------------------------------
   CLEANUP (mandatory — shared dev database)
   --------------------------------------------------------------------------
     ./fault-injection.ps1 -Remove -Target Both
     ./fault-injection.ps1 -Remove -Target Delay
     ./fault-injection.ps1 -VerifyClean
+    (TC-27 / TC-28 install no triggers — just unset the env-var overrides and
+     confirm the worker is back on normal config.)
 #>
 [CmdletBinding()]
 param(

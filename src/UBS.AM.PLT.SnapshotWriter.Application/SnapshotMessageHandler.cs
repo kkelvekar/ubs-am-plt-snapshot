@@ -41,6 +41,15 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
     public async Task HandleAsync(SnapshotMessage message, CancellationToken cancellationToken)
     {
+        // Guard: the JSON `required` check on the envelope only proves each identity field
+        // was present in the message — not that it was non-null (an explicit
+        // "snapshotId": null passes deserialisation with a null value). A null identity
+        // field would corrupt the blob path (e.g. ".../snapshotId=/...") and the tracking
+        // row, so reject it before the first write. Throwing routes it through the
+        // consumer's existing no-commit / seek-back / retry / alert path, identical to a
+        // malformed envelope — recovery is forward, never a silent skip.
+        ValidateIdentity(message);
+
         // The root folder is pinned to the FIRST payload's arrival time for this
         // snapshotId and reused by every subsequent (or redelivered) payload, so a
         // snapshot whose publish timestamps straddle a month/year boundary never splits
@@ -82,6 +91,28 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             message.Stage,
             rootPath,
             tracking.ReceivedFiles.Count);
+    }
+
+    private static void ValidateIdentity(SnapshotMessage message)
+    {
+        // Only the fields that form the blob path and tracking identity are checked —
+        // a null in any of them corrupts a write. Deserialisation guarantees presence;
+        // this guards against present-but-null. (Non-nullable reference-type annotations
+        // are not enforced at runtime, so this check is real, not redundant.)
+        ThrowIfNull(message.SnapshotId, nameof(message.SnapshotId));
+        ThrowIfNull(message.AccountId, nameof(message.AccountId));
+        ThrowIfNull(message.SnapshotType, nameof(message.SnapshotType));
+        ThrowIfNull(message.PayloadType, nameof(message.PayloadType));
+
+        static void ThrowIfNull(string? value, string fieldName)
+        {
+            if (value is null)
+            {
+                throw new ArgumentException(
+                    $"Snapshot message envelope has a null required field '{fieldName}'; rejecting before any write.",
+                    nameof(message));
+            }
+        }
     }
 
     private static SnapshotIndexEntry BuildIndexEntry(
