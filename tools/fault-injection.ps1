@@ -2,16 +2,29 @@
 .SYNOPSIS
   Dev convenience script — NOT an infrastructure artifact.
 
-  Installs/removes THROW triggers on the dev Azure SQL database to simulate a
-  SQL-write failure at a specific point in the write order (blob write ->
-  tracking upsert -> completeness check -> index UPSERT -> offset commit),
-  so the offset-commit-timing and consumer-restart-recovery invariants can be
+  Installs/removes fault triggers on the dev Azure SQL database to simulate
+  failures at specific points in the write order (blob write -> tracking
+  upsert -> completeness check -> index UPSERT -> offset commit), so the
+  offset-commit-timing and consumer-restart-recovery invariants can be
   verified against the REAL Kafka consume/commit path (Mode B — see
-  AGENTS.md). Targets ONLY two triggers, both idempotent to install/remove:
+  AGENTS.md). Targets THREE triggers, all idempotent to install/remove:
 
     trg_fault_snapshot_tracking  on dbo.snapshot_tracking, AFTER INSERT, UPDATE
+                                  — THROWs, simulating a hard tracking-write failure
                                   (SELECT is untouched)
     trg_fault_snapshot_index     on dbo.snapshot_index, AFTER INSERT, UPDATE
+                                  — THROWs, simulating a hard index-write failure
+    trg_delay_snapshot_index     on dbo.snapshot_index, AFTER INSERT ONLY
+                                  — does NOT throw: WAITFOR DELAY '00:00:20' then
+                                  returns successfully, simulating a slow-but-
+                                  succeeding index write (TC-20 — offset commit
+                                  races the delay). AFTER INSERT only (not UPDATE)
+                                  because the index write is an EF Core UPSERT: the
+                                  first (completing) write is always a physical
+                                  INSERT; redelivery of an already-COMPLETE
+                                  snapshot's header message is a physical UPDATE
+                                  and must NOT be delayed again — this is Part 1's
+                                  proof recreated live.
 
   Safe to re-run -Install / -Remove any number of times. -Status reports
   which fault triggers currently exist. -VerifyClean exits non-zero if any
@@ -25,7 +38,12 @@
   Drop the specified trigger(s) if present (idempotent — no-op if absent).
 
 .PARAMETER Target
-  Which table's fault trigger to act on: Tracking, Index, or Both (default: Both).
+  Which fault trigger to act on: Tracking, Index, Delay, or Both (default: Both).
+  Both = Tracking + Index (THROW triggers only, matching the original TC-13/14
+  procedures) — Delay is never implied by Both and must be selected explicitly,
+  since it is a different kind of fault (non-throwing, single-shot) used for a
+  different scenario (TC-20). -Status and -VerifyClean always report/verify all
+  three trigger names regardless of -Target.
 
 .PARAMETER Status
   List fault triggers currently installed on the dev database.
@@ -44,6 +62,8 @@
 .EXAMPLE
   ./fault-injection.ps1 -Install -Target Tracking
   ./fault-injection.ps1 -Remove -Target Tracking
+  ./fault-injection.ps1 -Install -Target Delay
+  ./fault-injection.ps1 -Remove -Target Delay
   ./fault-injection.ps1 -Status
   ./fault-injection.ps1 -VerifyClean
 
@@ -129,9 +149,146 @@
          - no duplicate blobs at the root path
 
   --------------------------------------------------------------------------
+  TC-17 / TC-18 — REGRESSIONS, not separately implemented
+  --------------------------------------------------------------------------
+  TC-17 and TC-18 hit the exact same fault points as TC-13 and TC-14
+  respectively — there is no new mechanism to build. Run them as regression
+  re-executions of the TC-13/TC-14 procedures above, verbatim, with:
+
+    TC-17 = TC-13's procedure + ONE added assertion: while the Tracking fault
+            is active, capture the first payload blob's Last-Modified/ETag
+            (e.g. `Get-AzStorageBlob` or the Azure Portal/`az storage blob show`
+            against the real ADLS account). After step 4 (-Remove -Target
+            Tracking) and the retry succeeding, re-fetch Last-Modified/ETag and
+            assert it ADVANCED with identical content — proving redelivery
+            overwrote the blob (not skipped it, not duplicated it).
+
+    TC-18 = TC-14's procedure, run exactly as written. Every TC-18 verify
+            bullet in the brief is already covered by TC-14's existing verify
+            list (all blobs present, tracking RECEIVING not COMPLETE, no index
+            row, offset uncommitted, then convergence to exactly one index row
+            after -Remove). No new assertions needed.
+
+  --------------------------------------------------------------------------
+  TC-16 — blob write fails (design doc §8 Scenario 1)
+  --------------------------------------------------------------------------
+  Mechanism: env-var config override (NOT a SQL trigger, NOT RBAC revocation —
+  RBAC revocation against the shared storage account is explicitly out of
+  scope: unsafe/non-deterministic for other concurrent users of the account).
+    1. Start the worker with BlobStorage__ServiceUri pointed at an invalid
+       endpoint, e.g. (bash):
+         BlobStorage__ServiceUri=https://fault-injected-nonexistent.blob.core.windows.net \
+           dotnet run --project src/UBS.AM.PLT.SnapshotWriter.Worker
+       ServiceUri wins over ConnectionString in BlobContainerClientFactory, and
+       AzureBlobSnapshotStore sets Retry.MaxRetries=0, so the failure surfaces
+       on the very first write attempt instead of being absorbed by SDK retry.
+    2. Publish one payload (any type) for a fresh snapshotId.
+    3. Verify while the fault is active:
+         - no blob at the expected path in the real dev ADLS account
+         - no snapshot_tracking row for the snapshotId
+         - no snapshot_index row for the snapshotId
+         - worker logs show "Failed to process message ... attempt N"
+         - kafka-consumer-groups.sh --describe shows lag > 0, committed offset
+           unchanged for the partition carrying this message
+         - no "Committed offset" log line for this message
+    4. Kill the worker (Stop-Process -Force). Restart it WITHOUT the override
+       (normal config — BlobStorage__ServiceUri unset or pointed at the real
+       account). Publish the remaining 3 payloads for the same snapshotId if
+       only 1 was sent, or just let the redelivered message retry if the
+       consumer is still up.
+       Verify: full self-heal — blob written, tracking row appears, all 4
+       payloads eventually COMPLETE, index row written, lag returns to 0. No
+       manual SQL/blob intervention.
+
+  --------------------------------------------------------------------------
+  TC-19 — crash mid-message (design doc §8 Scenario 4)
+  --------------------------------------------------------------------------
+  Mechanism: use the existing Tracking/Index THROW triggers to park the
+  worker at a well-defined partial/durable state, hard-kill it there
+  (Stop-Process -Force, simulating a pod crash — NOT a graceful shutdown), then
+  remove the trigger and start a brand-new worker process. Two variants:
+
+    Variant 1 — crash with blob-only durable state (no tracking row):
+      1. ./fault-injection.ps1 -Install -Target Tracking
+      2. Publish one payload for a fresh snapshotId.
+      3. Wait for the "Failed to process message ... attempt N" log (durable
+         state at this point: blob exists, no tracking row, offset
+         uncommitted — confirm via SQL/ADLS query before killing).
+      4. Stop-Process -Force the worker PID (hard kill, not Ctrl+C).
+      5. ./fault-injection.ps1 -Remove -Target Tracking
+      6. Start a brand-new worker process (new PID). Publish the remaining 3
+         payloads if not already sent.
+      Verify convergence: exactly one snapshot_tracking row, COMPLETE; exactly
+      one snapshot_index row; same adls_root_path as the pre-crash blob (proves
+      no orphaned/duplicate root); no duplicate/extra blobs; lag 0.
+
+    Variant 2 — crash with tracking-RECEIVING-all-files durable state (no
+    index row) — the torn mid-message state that TC-15 does NOT cover, since
+    TC-15 kills cleanly between messages, not mid-completion:
+      1. ./fault-injection.ps1 -Install -Target Index
+      2. Publish a full snapshot (4 payloads).
+      3. Wait for the completing (4th) message's failure log (durable state:
+         all 4 blobs exist, tracking row shows all 4 files but status
+         RECEIVING, no index row, offset uncommitted — confirm via SQL/ADLS
+         before killing).
+      4. Stop-Process -Force the worker PID.
+      5. ./fault-injection.ps1 -Remove -Target Index
+      6. Start a brand-new worker process (new PID) — no need to republish;
+         the completing message redelivers from the uncommitted offset.
+      Verify the SAME convergence assertions as Variant 1.
+
+    A third variant — "crash before any durable write at all" — is
+    deliberately NOT run separately: it is covered by construction, identical
+    in effect to TC-16's kill-and-restart-to-success proof (durable state is
+    "nothing yet", offset uncommitted, redelivery does a full clean retry).
+
+  --------------------------------------------------------------------------
+  TC-20 — index write succeeds, offset commit fails (design doc §8 Scenario 5)
+  --------------------------------------------------------------------------
+  Two parts. Part 1 is a deterministic, COMMITTED Mode A integration test —
+  see tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests/GroupFFailureScenarioTests.cs
+  (redelivers the completing header message for an already-COMPLETE snapshot
+  directly through the handler and asserts no duplicate rows / unchanged
+  created_at / unchanged completed_at / blob overwrite-not-duplicate). Part 2
+  is this section — the live proof that a REAL failed Kafka offset commit
+  after a successful index write lands in the same retry path:
+    1. ./fault-injection.ps1 -Install -Target Delay
+    2. Start the worker, publish a full snapshot (4 payloads).
+    3. Watch worker logs for the completing (4th) message reaching the index
+       write. The delay trigger blocks the INSERT for 20s without failing it.
+       While that 20s window is open, run:
+         docker pause snapshot-writer-kafka
+       (pausing the broker container the worker's Confluent.Kafka client is
+       connected to). The index INSERT then returns successfully (after its
+       20s delay) and MarkCompleteAsync succeeds, so HandleAsync returns
+       successfully — but the subsequent consumer.Commit(result) against the
+       paused broker fails/times out, which must land in the same
+       catch/Seek/retry path used for handler failures elsewhere in this
+       script's scenarios.
+    4. ./fault-injection.ps1 -Remove -Target Delay
+       docker unpause snapshot-writer-kafka
+       Redelivery re-runs the handler against an already-COMPLETE snapshot —
+       an idempotent no-op per Part 1's proof (blob overwrite, tracking touch,
+       index UPSERT touch) — and commit succeeds on the retry.
+    Verify: exactly one snapshot_index row, created_at from the FIRST attempt
+    (unchanged by the redelivery); tracking COMPLETE; lag back to 0; no
+    unexpected errors beyond the expected retry/backoff logs around the
+    commit failure.
+
+    FALLBACK (use only if the broker-pause step proves flaky — e.g.
+    consumer.Commit() does not fail cleanly against a paused container, or
+    blocks past librdkafka's internal timeout in a way that hangs the run):
+    rely on Part 1 alone plus one live re-send — republish the identical
+    completing (header) message onto the real topic for an already-COMPLETE
+    snapshot (no trigger, no broker pause) and verify no duplicate rows, no
+    errors in the worker log, and the offset commits normally. State
+    explicitly in the test report that the fallback was taken and why.
+
+  --------------------------------------------------------------------------
   CLEANUP (mandatory — shared dev database)
   --------------------------------------------------------------------------
     ./fault-injection.ps1 -Remove -Target Both
+    ./fault-injection.ps1 -Remove -Target Delay
     ./fault-injection.ps1 -VerifyClean
 #>
 [CmdletBinding()]
@@ -140,7 +297,7 @@ param(
     [switch]$Remove,
     [switch]$Status,
     [switch]$VerifyClean,
-    [ValidateSet('Tracking', 'Index', 'Both')]
+    [ValidateSet('Tracking', 'Index', 'Delay', 'Both')]
     [string]$Target = 'Both',
     [string]$Server = 'sql-kk-tier1-dev-uksouth.database.windows.net',
     [string]$Database = 'platform-core-db-dev'
@@ -151,7 +308,13 @@ $ErrorActionPreference = 'Stop'
 $triggerNames = @{
     Tracking = 'trg_fault_snapshot_tracking'
     Index    = 'trg_fault_snapshot_index'
+    Delay    = 'trg_delay_snapshot_index'
 }
+
+# Every fault-trigger name, independent of -Target — used by -Status/-VerifyClean so
+# both always report/verify the full set (Tracking + Index THROW triggers, and the
+# Delay trigger), never just whatever -Target happened to default to.
+$allTriggerNames = $triggerNames.Values
 
 $triggerDdl = @{
     Tracking = @"
@@ -170,6 +333,21 @@ AFTER INSERT, UPDATE
 AS
 BEGIN
     THROW 51001, 'fault-injection: simulated failure on snapshot_index write', 1;
+END
+"@
+    Delay    = @"
+CREATE TRIGGER dbo.trg_delay_snapshot_index
+ON dbo.snapshot_index
+AFTER INSERT
+AS
+BEGIN
+    -- Non-throwing: the INSERT succeeds, just delayed 20s, so the completing
+    -- message's index write and MarkCompleteAsync both succeed — the fault is
+    -- purely a timing race against the Kafka offset commit that follows (TC-20).
+    -- AFTER INSERT only (no UPDATE): the index UPSERT's redelivery-into-an-
+    -- already-COMPLETE-snapshot path is a physical UPDATE and must return
+    -- immediately, matching Part 1's in-process proof.
+    WAITFOR DELAY '00:00:20';
 END
 "@
 }
@@ -199,15 +377,23 @@ if (-not (Get-Module -ListAvailable SqlServer)) {
 
 $modeCount = @($Install, $Remove, $Status, $VerifyClean) | Where-Object { $_ } | Measure-Object | Select-Object -ExpandProperty Count
 if ($modeCount -ne 1) {
-    Write-Host 'Usage: ./fault-injection.ps1 -Install|-Remove|-Status|-VerifyClean [-Target Tracking|Index|Both]'
-    Write-Host 'See the comment-based help (Get-Help ./fault-injection.ps1 -Full) for the full TC-13/14/15 run procedures.'
+    Write-Host 'Usage: ./fault-injection.ps1 -Install|-Remove|-Status|-VerifyClean [-Target Tracking|Index|Delay|Both]'
+    Write-Host 'See the comment-based help (Get-Help ./fault-injection.ps1 -Full) for the full TC-13..TC-20 run procedures.'
     exit 1
 }
 
 $token = Get-AccessToken
 
+$triggerNameList = "'" + ($allTriggerNames -join "', '") + "'"
+
+$tableForTarget = @{
+    Tracking = 'snapshot_tracking'
+    Index    = 'snapshot_index'
+    Delay    = 'snapshot_index'
+}
+
 if ($VerifyClean) {
-    $existing = Invoke-Sql -Token $token -Query "SELECT name FROM sys.triggers WHERE name IN ('trg_fault_snapshot_tracking', 'trg_fault_snapshot_index')"
+    $existing = Invoke-Sql -Token $token -Query "SELECT name FROM sys.triggers WHERE name IN ($triggerNameList)"
     if ($existing) {
         Write-Host 'FAULT TRIGGERS STILL PRESENT:' -ForegroundColor Red
         $existing | ForEach-Object { Write-Host "  $($_.name)" -ForegroundColor Red }
@@ -218,7 +404,7 @@ if ($VerifyClean) {
 }
 
 if ($Status) {
-    $existing = Invoke-Sql -Token $token -Query "SELECT name, OBJECT_NAME(parent_id) AS table_name FROM sys.triggers WHERE name IN ('trg_fault_snapshot_tracking', 'trg_fault_snapshot_index')"
+    $existing = Invoke-Sql -Token $token -Query "SELECT name, OBJECT_NAME(parent_id) AS table_name FROM sys.triggers WHERE name IN ($triggerNameList)"
     if (-not $existing) {
         Write-Host 'No fault triggers currently installed.'
     } else {
@@ -229,9 +415,10 @@ if ($Status) {
 
 foreach ($t in Get-Targets) {
     $name = $triggerNames[$t]
+    $table = $tableForTarget[$t]
 
     if ($Install) {
-        Write-Host "Installing fault trigger $name on dbo.snapshot_$($t.ToLower())..."
+        Write-Host "Installing fault trigger $name on dbo.$table..."
         # Idempotent: drop first (no-op if absent) then create.
         Invoke-Sql -Token $token -Query "IF OBJECT_ID(N'dbo.$name', N'TR') IS NOT NULL DROP TRIGGER dbo.$name"
         Invoke-Sql -Token $token -Query $triggerDdl[$t]
@@ -245,7 +432,7 @@ foreach ($t in Get-Targets) {
     }
 }
 
-$remaining = Invoke-Sql -Token $token -Query "SELECT name FROM sys.triggers WHERE name IN ('trg_fault_snapshot_tracking', 'trg_fault_snapshot_index')"
+$remaining = Invoke-Sql -Token $token -Query "SELECT name FROM sys.triggers WHERE name IN ($triggerNameList)"
 if ($remaining) {
     Write-Host 'Fault triggers currently installed:'
     $remaining | ForEach-Object { Write-Host "  $($_.name)" }
