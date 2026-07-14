@@ -263,6 +263,47 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(trackingStore.MarkedComplete);
     }
 
+    [Theory]
+    [InlineData("SnapshotId")]
+    [InlineData("AccountId")]
+    [InlineData("SnapshotType")]
+    [InlineData("PayloadType")]
+    public async Task HandleAsync_rejects_a_null_required_identity_field_before_any_write(string nullField)
+    {
+        // TC-23b: a present-but-null identity field passes JSON `required` deserialisation
+        // but would corrupt the blob path / tracking row. The handler must reject it before
+        // the first (blob) write, throwing so the consumer's retry/alert path handles it.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, logger: logger);
+        var message = CreateMessageWithNullField(nullField);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => handler.HandleAsync(message, CancellationToken.None));
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    private static SnapshotMessage CreateMessageWithNullField(string nullField)
+    {
+        using var payloadDocument = JsonDocument.Parse("""{"total":21}""");
+        return new SnapshotMessage
+        {
+            SnapshotId = nullField == "SnapshotId" ? null! : "corr98765",
+            AccountId = nullField == "AccountId" ? null! : "00675442A",
+            SnapshotType = nullField == "SnapshotType" ? null! : "portfolio",
+            PayloadType = nullField == "PayloadType" ? null! : "instruments",
+            Stage = "PreTrade",
+            PublishedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            PublishedBy = "PortfolioCalculation",
+            SchemaVersion = "1.0",
+            Payload = payloadDocument.RootElement.Clone(),
+        };
+    }
+
     private static SnapshotMessageHandler CreateHandler(
         FakeSnapshotBlobStore blobStore,
         FakeSnapshotTrackingStore trackingStore,
