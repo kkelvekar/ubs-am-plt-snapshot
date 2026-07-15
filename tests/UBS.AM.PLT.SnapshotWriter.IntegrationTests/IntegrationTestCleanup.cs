@@ -80,13 +80,21 @@ internal sealed class IntegrationTestCleanup
         }
 
         var accountDirectories = new List<string>();
-        await foreach (var path in _fileSystem.GetPathsAsync(RootPrefix, recursive: true))
+        try
         {
-            if (path.IsDirectory == true
-                && path.Name.EndsWith($"/accountId={accountId}", StringComparison.Ordinal))
+            await foreach (var path in _fileSystem.GetPathsAsync(RootPrefix, recursive: true))
             {
-                accountDirectories.Add(path.Name);
+                if (path.IsDirectory == true
+                    && path.Name.EndsWith($"/accountId={accountId}", StringComparison.Ordinal))
+                {
+                    accountDirectories.Add(path.Name);
+                }
             }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Root path not created yet — nothing to clean up.
+            return;
         }
 
         foreach (var accountDirectory in accountDirectories.OrderByDescending(p => p.Count(c => c == '/')))

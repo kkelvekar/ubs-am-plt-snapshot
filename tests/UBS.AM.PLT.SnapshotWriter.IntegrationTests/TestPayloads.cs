@@ -45,4 +45,32 @@ internal static class TestPayloads
         OrderSentBy = "sender@ubs.com",
         OrderSentAt = new DateTime(2026, 7, 13, 10, 50, 0, DateTimeKind.Utc),
     };
+
+    // Canned opaque required-file payloads. No scenario asserts on their internal fields
+    // (payloads stay opaque and are only compared byte-for-byte against what was sent), so a
+    // single canonical body per required payloadType is sufficient — the feature files name the
+    // payloadType, the step definitions supply the body from here.
+    public const string InstrumentsJson = """
+        {"positions":[{"isin":"CH0038863350","qty":250}]}
+        """;
+
+    // A second, deliberately DIFFERENT instruments body. Used only where a scenario must prove
+    // two snapshots never cross-contaminate, so their instruments blobs must differ.
+    public const string InstrumentsJsonAlt = """
+        {"positions":[{"isin":"US5949181045","qty":400}]}
+        """;
+
+    public const string CalculationsJson = """
+        {"nav":5555.55,"ccy":"CHF"}
+        """;
+
+    public const string SettingsJson = """
+        {"tolerance":0.05}
+        """;
+
+    // An out-of-contract payload: a payloadType (auditlog) that is not part of the required-files
+    // set, stored opaquely but ignored by the completeness check.
+    public const string AuditLogJson = """
+        {"entries":[{"at":"2026-07-14T10:00:00Z","by":"system"}]}
+        """;
 }
