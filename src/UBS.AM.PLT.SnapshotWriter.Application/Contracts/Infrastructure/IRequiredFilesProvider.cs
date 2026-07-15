@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+namespace UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 
 /// <summary>
 /// Port for the completeness check's required-file list — read from

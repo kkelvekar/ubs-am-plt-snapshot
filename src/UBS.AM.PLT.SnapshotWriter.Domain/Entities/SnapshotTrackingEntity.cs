@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Domain;
+namespace UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 /// <summary>
 /// One row of the snapshot_tracking table, per solution design §6: transient
@@ -7,7 +7,7 @@ namespace UBS.AM.PLT.SnapshotWriter.Domain;
 /// <see cref="DeclaredFailedAt"/> and <see cref="Alerted"/> are written only by the
 /// daily cleanup job, which is out of scope for this repository.
 /// </summary>
-public class SnapshotTrackingEntry
+public class SnapshotTrackingEntity
 {
     public required string SnapshotId { get; set; }
     public required string AccountId { get; set; }

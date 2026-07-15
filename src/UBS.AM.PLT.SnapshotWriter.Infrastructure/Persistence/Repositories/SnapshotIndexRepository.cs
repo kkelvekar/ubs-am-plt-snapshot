@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="ISnapshotIndexRepository"/>. Stateless — one
@@ -23,7 +23,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository
 
     public async Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntry?, SnapshotIndexEntry> apply,
+        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
         CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

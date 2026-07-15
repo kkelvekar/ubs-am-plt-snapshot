@@ -1,5 +1,5 @@
-using UBS.AM.PLT.SnapshotWriter.Domain;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 
@@ -10,11 +10,11 @@ namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 /// </summary>
 internal sealed class FakeSnapshotIndexRepository : ISnapshotIndexRepository
 {
-    public Dictionary<string, SnapshotIndexEntry> Rows { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, SnapshotIndexEntity> Rows { get; } = new(StringComparer.Ordinal);
 
     public Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntry?, SnapshotIndexEntry> apply,
+        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
         CancellationToken cancellationToken)
     {
         Rows.TryGetValue(snapshotId, out var existing);

@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Configuration;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.SnapshotConfig;
 
 /// <summary>
 /// Bound from one entry of the <c>SnapshotConfig</c> configuration section, keyed by

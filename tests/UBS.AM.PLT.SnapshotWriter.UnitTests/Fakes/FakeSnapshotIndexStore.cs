@@ -1,11 +1,11 @@
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 
 public sealed class FakeSnapshotIndexStore : ISnapshotIndexStore
 {
-    private readonly List<SnapshotIndexEntry> _upserts = [];
+    private readonly List<SnapshotIndexEntity> _upserts = [];
 
     /// <summary>
     /// Shared call-order log, injected by the test, so ordering against
@@ -14,11 +14,11 @@ public sealed class FakeSnapshotIndexStore : ISnapshotIndexStore
     /// </summary>
     public List<string>? CallOrderLog { get; set; }
 
-    public IReadOnlyList<SnapshotIndexEntry> Upserts => _upserts;
+    public IReadOnlyList<SnapshotIndexEntity> Upserts => _upserts;
 
     public Exception? ThrowOnUpsert { get; set; }
 
-    public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
+    public Task UpsertAsync(SnapshotIndexEntity entry, CancellationToken cancellationToken)
     {
         CallOrderLog?.Add(nameof(UpsertAsync));
 

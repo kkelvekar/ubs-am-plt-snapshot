@@ -1,5 +1,6 @@
 using System.Text.Json;
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 using UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 using Xunit;
@@ -129,7 +130,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         Assert.Equal(completedAt, entry.CompletedAt);
     }
 
-    private static SnapshotTrackingEntry CreateCompleteRow(string snapshotId, DateTime completedAt) => new()
+    private static SnapshotTrackingEntity CreateCompleteRow(string snapshotId, DateTime completedAt) => new()
     {
         SnapshotId = snapshotId,
         AccountId = "00675442A",

@@ -1,6 +1,7 @@
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+namespace UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 
 /// <summary>
 /// Port for the tracking upsert — step 2 of the strict write order, called only after
@@ -12,7 +13,7 @@ namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 /// </summary>
 public interface ISnapshotTrackingStore
 {
-    Task<SnapshotTrackingEntry> UpsertReceivedAsync(SnapshotMessage message, string adlsRootPath, CancellationToken cancellationToken);
+    Task<SnapshotTrackingEntity> UpsertReceivedAsync(SnapshotMessage message, string adlsRootPath, CancellationToken cancellationToken);
 
     /// <summary>
     /// Read-only lookup of the pinned root path; null when no tracking row exists yet.

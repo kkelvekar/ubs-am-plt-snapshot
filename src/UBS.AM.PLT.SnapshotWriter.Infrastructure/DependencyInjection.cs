@@ -2,11 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Configuration;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.SnapshotConfig;
 
 namespace UBS.AM.PLT.SnapshotWriter.Infrastructure;
 

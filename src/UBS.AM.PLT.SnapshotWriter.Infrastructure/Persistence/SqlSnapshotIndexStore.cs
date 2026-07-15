@@ -1,5 +1,6 @@
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 
@@ -26,7 +27,7 @@ internal sealed class SqlSnapshotIndexStore : ISnapshotIndexStore
         _timeProvider = timeProvider;
     }
 
-    public Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken)
+    public Task UpsertAsync(SnapshotIndexEntity entry, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 

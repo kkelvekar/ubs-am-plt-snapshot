@@ -1,3 +1,4 @@
+using UBS.AM.PLT.SnapshotWriter.Application.Models;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;

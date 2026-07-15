@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Configuration;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.SnapshotConfig;
 
 /// <summary>
 /// Config-driven adapter for <see cref="IRequiredFilesProvider"/> — reads the required

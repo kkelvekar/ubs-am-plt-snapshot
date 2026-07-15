@@ -2,7 +2,7 @@ using System.Text;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Options;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
 namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;

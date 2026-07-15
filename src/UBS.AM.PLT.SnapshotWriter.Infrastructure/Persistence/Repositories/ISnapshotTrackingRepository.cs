@@ -1,6 +1,6 @@
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 /// <summary>
 /// Raw EF Core data access for the snapshot_tracking table. Internal to Infrastructure —
@@ -21,9 +21,9 @@ internal interface ISnapshotTrackingRepository
     /// A failed save (e.g. the rebalance-race PK violation) propagates so redelivery
     /// retries.
     /// </summary>
-    Task<SnapshotTrackingEntry> UpsertAsync(
+    Task<SnapshotTrackingEntity> UpsertAsync(
         string snapshotId,
-        Func<SnapshotTrackingEntry?, SnapshotTrackingEntry> apply,
+        Func<SnapshotTrackingEntity?, SnapshotTrackingEntity> apply,
         CancellationToken cancellationToken);
 
     /// <summary>

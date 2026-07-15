@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Domain;
+namespace UBS.AM.PLT.SnapshotWriter.Application.Models;
 
 /// <summary>
 /// Deserialised shape of the <c>header</c> payload, per solution design §4. This is the

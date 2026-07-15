@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Domain;
+namespace UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 /// <summary>
 /// Lifecycle of a snapshot_tracking row, per solution design §6. Persisted as the

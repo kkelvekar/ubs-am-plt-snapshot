@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="ISnapshotTrackingRepository"/>. Stateless — one
@@ -21,9 +21,9 @@ internal sealed class SnapshotTrackingRepository : ISnapshotTrackingRepository
         _contextFactory = contextFactory;
     }
 
-    public async Task<SnapshotTrackingEntry> UpsertAsync(
+    public async Task<SnapshotTrackingEntity> UpsertAsync(
         string snapshotId,
-        Func<SnapshotTrackingEntry?, SnapshotTrackingEntry> apply,
+        Func<SnapshotTrackingEntity?, SnapshotTrackingEntity> apply,
         CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
