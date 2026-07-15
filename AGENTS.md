@@ -121,12 +121,15 @@ a role; the contract between roles is the same everywhere.
 4. **tester-e2e** — two distinct testing modes, both required:
    - **Mode A — in-process integration tests** (committed to `tests/`): builds
      `SnapshotMessage` envelopes in code and feeds them directly into the
-     message-handling pipeline, bypassing real Kafka; asserts on resulting Azurite blob
-     writes and SQL `snapshot_tracking` / `snapshot_index` rows. Fast, deterministic, CI-friendly.
+     message-handling pipeline, bypassing real Kafka; asserts on resulting ADLS Gen2 blob
+     writes and Azure SQL `snapshot_tracking` / `snapshot_index` rows against real Azure
+     dev resources (`DefaultAzureCredential`), configured via `appsettings.json` in the
+     integration test project. Fast, deterministic, CI-friendly.
    - **Mode B — live worker run** (repeatable tooling in `tools/`, not committed tests):
      starts the actual worker process, publishes real messages onto a real Kafka topic via
-     the producer utility, verifies actual end-to-end output (blobs in Azurite, rows in
-     SQL). Exercises the real consume-and-commit path.
+     the producer utility, verifies actual end-to-end output (blobs in ADLS Gen2/Azurite,
+     rows in SQL, per local environment configuration). Exercises the real
+     consume-and-commit path.
 
 **Feedback routing**: reviewer/tester findings tagged **code-level** go back to dev with
 full context; findings that imply a gap in the agreed design are tagged **design-level**
@@ -144,7 +147,11 @@ convenience scripts, not infra artifacts.
 
 - Kafka: ad-hoc container via `tools/` setup script, started when a dev or the
   tester-e2e role needs a broker, torn down after
-- Azurite standing in for ADLS Gen2 (same ad-hoc-on-demand principle)
+- Azurite standing in for ADLS Gen2 (same ad-hoc-on-demand principle) — used for manual/
+  Worker-level local runs (Mode B) and unit tests
 - SQL Server in an ad-hoc container; schema applied from `db/scripts/` only
 - All endpoints (Kafka bootstrap, blob connection string, SQL connection string)
   overridable via environment variables
+- Exception: the committed Mode A integration test project (`tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests`)
+  is configured to target real Azure dev ADLS Gen2 + Azure SQL resources (`DefaultAzureCredential`) rather
+  than this local Azurite/SQL-container stack — see its `appsettings.json` and `SnapshotWriterFixture`

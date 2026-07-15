@@ -7,19 +7,21 @@ using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 
 /// <summary>
-/// Group H — malformed / unexpected input (TC-24..TC-26), run against REAL Azure resources
+/// Malformed / unexpected input handling, run against REAL Azure resources
 /// (ADLS Gen2 + Azure SQL) with Kafka bypassed. These cover inputs that deserialise into a
 /// valid envelope but violate a downstream expectation:
-/// TC-24 an unknown snapshotType (no SnapshotConfig entry); TC-25 an extra payloadType that
-/// is not in the required-files set (opacity: stored, never blocks completion); TC-26 a
-/// header whose <c>eventType</c> is null (rejected by the index's NOT NULL column, then
-/// recovered forward by a corrected header).
+/// TC-24 an unknown snapshotType (no SnapshotConfig entry); TC-26 a header whose
+/// <c>eventType</c> is null (rejected by the index's NOT NULL column, then recovered forward
+/// by a corrected header). Both are open design questions and are intentionally kept here as
+/// xUnit tests rather than converted to Gherkin.
+/// TC-25 (an extra payloadType not in the required-files set) is covered by the Gherkin
+/// scenarios in <c>Features/UnexpectedPayloadHandling.feature</c>.
 /// TC-23 (missing / null required envelope field) is covered as unit tests — the
 /// deserialisation guard in <c>KafkaSnapshotConsumerTests</c> and the Application-layer
 /// null-identity guard in <c>SnapshotMessageHandlerTests</c> — because "no blob / no
 /// tracking / no commit" is asserted most rigorously against fakes.
 /// </summary>
-public sealed class GroupHMalformedInputTests : IntegrationTestBase, IClassFixture<SnapshotWriterFixture>
+public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<SnapshotWriterFixture>
 {
     // Fresh account id — IT-ACC-001..007 are used by Groups A/B/C/F/G.
     private const string AccountId = "IT-ACC-008";
@@ -27,7 +29,6 @@ public sealed class GroupHMalformedInputTests : IntegrationTestBase, IClassFixtu
     private const string InstrumentsJson = """{"positions":[{"isin":"CH0038863350","qty":250}]}""";
     private const string CalculationsJson = """{"nav":5555.55,"ccy":"CHF"}""";
     private const string SettingsJson = """{"tolerance":0.05}""";
-    private const string ExtraPayloadJson = """{"entries":[{"at":"2026-07-14T10:00:00Z","by":"system"}]}""";
 
     // Header with an explicit null eventType: passes System.Text.Json's `required` check
     // (the property is present), so it reaches the index write where event_type NOT NULL
@@ -50,7 +51,7 @@ public sealed class GroupHMalformedInputTests : IntegrationTestBase, IClassFixtu
         }
         """;
 
-    public GroupHMalformedInputTests(SnapshotWriterFixture fixture)
+    public MalformedInputTests(SnapshotWriterFixture fixture)
         : base(fixture)
     {
     }
@@ -84,85 +85,6 @@ public sealed class GroupHMalformedInputTests : IntegrationTestBase, IClassFixtu
 
         // Never reaches the index.
         Assert.False(await IndexRowExistsAsync(snapshotId));
-    }
-
-    [Fact]
-    public async Task Extra_payload_arriving_before_required_files_is_stored_and_does_not_block_completion()
-    {
-        // TC-25 (extra-before): an unconfigured payloadType (auditlog.json) arrives first.
-        // It is stored opaquely and recorded in received_files, but completeness is
-        // required ⊆ received, so the four required files still drive the snapshot COMPLETE.
-        Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 18, 0, 0, TimeSpan.Zero);
-        var snapshotId = NewSnapshotId("tc25a");
-
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "auditlog", ExtraPayloadJson), CancellationToken.None);
-
-        var afterExtra = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Receiving, afterExtra.Status);
-        Assert.Contains("auditlog.json", afterExtra.ReceivedFiles);
-        Assert.False(await IndexRowExistsAsync(snapshotId));
-
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "instruments", InstrumentsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "calculations", CalculationsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "settings", SettingsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "header", TestPayloads.HeaderJson), CancellationToken.None);
-
-        var tracking = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
-        Assert.NotNull(tracking.CompletedAt);
-        // The extra file is retained in received_files alongside the four required ones.
-        Assert.Contains("auditlog.json", tracking.ReceivedFiles);
-        Assert.Equal(5, tracking.ReceivedFiles.Count);
-
-        // The extra blob was stored opaquely (opacity invariant).
-        Assert.True(
-            await Fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/auditlog.json").ExistsAsync(),
-            "Expected the extra auditlog blob to have been stored.");
-
-        Assert.True(await IndexRowExistsAsync(snapshotId));
-    }
-
-    [Fact]
-    public async Task Extra_payload_arriving_after_completion_is_stored_without_re_completing()
-    {
-        // TC-25 (extra-after): the snapshot is already COMPLETE when an unconfigured
-        // payloadType arrives. It is stored and unioned into received_files, but the
-        // completeness/index step is skipped (status no longer RECEIVING) — no duplicate or
-        // re-written index row.
-        Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 19, 0, 0, TimeSpan.Zero);
-        var snapshotId = NewSnapshotId("tc25b");
-
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "instruments", InstrumentsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "calculations", CalculationsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "settings", SettingsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "header", TestPayloads.HeaderJson), CancellationToken.None);
-
-        var trackingBefore = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Complete, trackingBefore.Status);
-        var indexBefore = await GetIndexAsync(snapshotId);
-
-        Fixture.CurrentTime = Fixture.CurrentTime.AddMinutes(5);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "auditlog", ExtraPayloadJson), CancellationToken.None);
-
-        var trackingAfter = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Complete, trackingAfter.Status);
-        Assert.Equal(trackingBefore.CompletedAt, trackingAfter.CompletedAt);
-        Assert.Contains("auditlog.json", trackingAfter.ReceivedFiles);
-        Assert.Equal(5, trackingAfter.ReceivedFiles.Count);
-
-        Assert.True(
-            await Fixture.BlobContainer.GetBlobClient($"{trackingAfter.AdlsRootPath}/auditlog.json").ExistsAsync(),
-            "Expected the extra auditlog blob to have been stored after completion.");
-
-        // Exactly one index row, unchanged — the extra file did not re-trigger the index UPSERT.
-        await using (var context = await Fixture.DbContextFactory.CreateDbContextAsync())
-        {
-            Assert.Equal(1, await context.SnapshotIndex.AsNoTracking().CountAsync(e => e.SnapshotId == snapshotId));
-        }
-
-        var indexAfter = await GetIndexAsync(snapshotId);
-        Assert.Equal(indexBefore.CreatedAt, indexAfter.CreatedAt);
-        Assert.Equal(indexBefore.EventType, indexAfter.EventType);
     }
 
     [Fact]
