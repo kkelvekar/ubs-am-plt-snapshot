@@ -40,7 +40,7 @@ foreach ($script in $scripts) {
 
 Write-Host 'Verifying tables...'
 Invoke-Sqlcmd -ServerInstance $Server -Database $Database -AccessToken $token -ConnectionTimeout 120 -Query `
-    "SELECT name FROM sys.tables WHERE name IN ('snapshot_tracking', 'snapshot_index') ORDER BY name" |
+    "SELECT name FROM sys.tables WHERE name IN ('SnapshotTracking', 'SnapshotIndex') ORDER BY name" |
     ForEach-Object { Write-Host "  $($_.name)" }
 
 Write-Host 'Schema applied.'

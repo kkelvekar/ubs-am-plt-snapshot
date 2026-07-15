@@ -57,9 +57,9 @@ internal sealed class IntegrationTestCleanup
         }
 
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.snapshot_index WHERE snapshot_id = {snapshotId}");
+            $"DELETE FROM dbo.SnapshotIndex WHERE SnapshotId = {snapshotId}");
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.snapshot_tracking WHERE snapshot_id = {snapshotId}");
+            $"DELETE FROM dbo.SnapshotTracking WHERE SnapshotId = {snapshotId}");
     }
 
     public async Task CleanupAllKnownTestDataAsync()
@@ -104,11 +104,7 @@ internal sealed class IntegrationTestCleanup
             return;
         }
 
-        var blobNames = new List<string>();
-        await foreach (var blob in _blobContainer.GetBlobsAsync(prefix: rootPath))
-        {
-            blobNames.Add(blob.Name);
-        }
+        var blobNames = await ListBlobNamesIfContainerExistsAsync(rootPath);
 
         foreach (var blobName in blobNames.OrderByDescending(n => n.Count(c => c == '/')))
         {
@@ -150,14 +146,8 @@ internal sealed class IntegrationTestCleanup
 
     private async Task DeleteAccountBlobsFallbackAsync(string accountId)
     {
-        var blobNames = new List<string>();
-        await foreach (var blob in _blobContainer.GetBlobsAsync(prefix: RootPrefix))
-        {
-            if (blob.Name.Contains($"/accountId={accountId}/", StringComparison.Ordinal))
-            {
-                blobNames.Add(blob.Name);
-            }
-        }
+        var blobNames = (await ListBlobNamesIfContainerExistsAsync(RootPrefix))
+            .Where(name => name.Contains($"/accountId={accountId}/", StringComparison.Ordinal));
 
         foreach (var blobName in blobNames.OrderByDescending(n => n.Count(c => c == '/')))
         {
@@ -165,16 +155,50 @@ internal sealed class IntegrationTestCleanup
         }
     }
 
+    /// <summary>
+    /// The worker creates the blob container itself on first write (see azurite-local.ps1);
+    /// against a freshly started local Azurite it may not exist yet when cleanup runs before
+    /// any test has written anything, so a missing container is treated as "nothing to clean"
+    /// rather than an error.
+    /// </summary>
+    private async Task<List<string>> ListBlobNamesIfContainerExistsAsync(string prefix)
+    {
+        var blobNames = new List<string>();
+        try
+        {
+            await foreach (var blob in _blobContainer.GetBlobsAsync(prefix: prefix))
+            {
+                blobNames.Add(blob.Name);
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Container not created yet — nothing to clean up.
+        }
+
+        return blobNames;
+    }
+
     private async Task DeleteSqlRowsForAccountAsync(string accountId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.snapshot_index WHERE snapshot_id LIKE 'it-%' AND account_id = {accountId}");
+            $"DELETE FROM dbo.SnapshotIndex WHERE SnapshotId LIKE 'it-%' AND AccountId = {accountId}");
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.snapshot_tracking WHERE snapshot_id LIKE 'it-%' AND account_id = {accountId}");
+            $"DELETE FROM dbo.SnapshotTracking WHERE SnapshotId LIKE 'it-%' AND AccountId = {accountId}");
     }
 
+    /// <summary>
+    /// DataLake (DFS) cleanup is only wired up against real ADLS Gen2 (ServiceUri set —
+    /// same ServiceUri-wins-over-ConnectionString rule as <see cref="BlobContainerClientFactory"/>).
+    /// Azurite's blob emulator does not implement the DFS "filesystem" resource (hierarchical
+    /// namespace) — GetPathsAsync returns HTTP 400 against it — so the ConnectionString/local
+    /// branch intentionally returns null here and cleanup falls back to the flat-blob-listing
+    /// paths already implemented below (DeleteAccountBlobsFallbackAsync /
+    /// DeleteSnapshotFolderAsync's non-DataLake branch), which work against both Azurite and
+    /// real blob storage.
+    /// </summary>
     private static DataLakeFileSystemClient? CreateDataLakeFileSystemClient(BlobStorageOptions options)
     {
         if (!string.IsNullOrEmpty(options.ServiceUri))
@@ -183,9 +207,7 @@ internal sealed class IntegrationTestCleanup
             return new DataLakeFileSystemClient(fileSystemUri, new DefaultAzureCredential());
         }
 
-        return !string.IsNullOrEmpty(options.ConnectionString)
-            ? new DataLakeFileSystemClient(options.ConnectionString, options.ContainerName)
-            : null;
+        return null;
     }
 
     private static Uri ToDfsFileSystemUri(string blobServiceUri, string fileSystemName)
