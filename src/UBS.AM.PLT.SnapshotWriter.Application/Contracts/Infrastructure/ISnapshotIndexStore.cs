@@ -1,6 +1,6 @@
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+namespace UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 
 /// <summary>
 /// Port for the index UPSERT — step 4 of the strict write order, called only once the
@@ -9,5 +9,5 @@ namespace UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
 /// </summary>
 public interface ISnapshotIndexStore
 {
-    Task UpsertAsync(SnapshotIndexEntry entry, CancellationToken cancellationToken);
+    Task UpsertAsync(SnapshotIndexEntity entry, CancellationToken cancellationToken);
 }

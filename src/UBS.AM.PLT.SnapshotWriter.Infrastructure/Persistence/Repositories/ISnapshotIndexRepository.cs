@@ -1,6 +1,6 @@
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 /// <summary>
 /// Raw EF Core data access for the snapshot_index table. Internal to Infrastructure —
@@ -21,6 +21,6 @@ internal interface ISnapshotIndexRepository
     /// </summary>
     Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntry?, SnapshotIndexEntry> apply,
+        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
         CancellationToken cancellationToken);
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
@@ -187,7 +188,7 @@ public sealed class GroupBCompletionTests : IntegrationTestBase, IClassFixture<S
         return download.Value.Content.ToString();
     }
 
-    private async Task<SnapshotTrackingEntry> GetTrackingAsync(string snapshotId)
+    private async Task<SnapshotTrackingEntity> GetTrackingAsync(string snapshotId)
     {
         await using var context = await Fixture.DbContextFactory.CreateDbContextAsync();
         return await context.SnapshotTracking
@@ -195,7 +196,7 @@ public sealed class GroupBCompletionTests : IntegrationTestBase, IClassFixture<S
             .SingleAsync(e => e.SnapshotId == snapshotId);
     }
 
-    private async Task<SnapshotIndexEntry> GetIndexAsync(string snapshotId)
+    private async Task<SnapshotIndexEntity> GetIndexAsync(string snapshotId)
     {
         await using var context = await Fixture.DbContextFactory.CreateDbContextAsync();
         return await context.SnapshotIndex

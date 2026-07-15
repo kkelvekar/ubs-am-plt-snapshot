@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Models;
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 namespace UBS.AM.PLT.SnapshotWriter.Application;
 
@@ -115,9 +117,9 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         }
     }
 
-    private static SnapshotIndexEntry BuildIndexEntry(
+    private static SnapshotIndexEntity BuildIndexEntry(
         SnapshotMessage message,
-        SnapshotTrackingEntry tracking,
+        SnapshotTrackingEntity tracking,
         HeaderPayload header)
         => new()
         {

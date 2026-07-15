@@ -1,4 +1,4 @@
-using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 using UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 using Xunit;
@@ -56,7 +56,7 @@ public sealed class SqlSnapshotIndexStoreTests
         Assert.Equal(StartTime.UtcDateTime, row.CreatedAt);
     }
 
-    private static SnapshotIndexEntry CreateEntry(string snapshotId, string eventType) => new()
+    private static SnapshotIndexEntity CreateEntry(string snapshotId, string eventType) => new()
     {
         SnapshotId = snapshotId,
         AccountId = "00675442A",

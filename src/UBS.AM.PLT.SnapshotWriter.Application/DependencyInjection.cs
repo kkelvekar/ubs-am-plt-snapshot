@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts;
 
 namespace UBS.AM.PLT.SnapshotWriter.Application;
 

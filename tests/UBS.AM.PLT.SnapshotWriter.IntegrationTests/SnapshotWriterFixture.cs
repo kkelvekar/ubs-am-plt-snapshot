@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using UBS.AM.PLT.SnapshotWriter.Application;
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
 using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;

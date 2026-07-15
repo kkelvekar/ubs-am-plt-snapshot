@@ -1,9 +1,9 @@
-namespace UBS.AM.PLT.SnapshotWriter.Domain;
+namespace UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 /// <summary>
 /// Non-filterable grid fields persisted as the snapshot_index row's single JSON display
-/// column, per solution design §7. Built 1:1 from <see cref="HeaderPayload"/> at
-/// completion time.
+/// column, per solution design §7. Built 1:1 from the application layer's header
+/// payload DTO at completion time.
 /// </summary>
 public class SnapshotIndexDisplayData
 {

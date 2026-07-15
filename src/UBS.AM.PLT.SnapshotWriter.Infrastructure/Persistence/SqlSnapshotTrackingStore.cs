@@ -1,5 +1,7 @@
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
 
 namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
 
@@ -30,7 +32,7 @@ internal sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
         _timeProvider = timeProvider;
     }
 
-    public Task<SnapshotTrackingEntry> UpsertReceivedAsync(
+    public Task<SnapshotTrackingEntity> UpsertReceivedAsync(
         SnapshotMessage message,
         string adlsRootPath,
         CancellationToken cancellationToken)
@@ -44,7 +46,7 @@ internal sealed class SqlSnapshotTrackingStore : ISnapshotTrackingStore
             {
                 if (existing is null)
                 {
-                    return new SnapshotTrackingEntry
+                    return new SnapshotTrackingEntity
                     {
                         SnapshotId = message.SnapshotId,
                         AccountId = message.AccountId,

@@ -1,5 +1,6 @@
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
+using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 
@@ -36,7 +37,7 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
     /// </summary>
     public List<string>? CallOrderLog { get; set; }
 
-    public Task<SnapshotTrackingEntry> UpsertReceivedAsync(
+    public Task<SnapshotTrackingEntity> UpsertReceivedAsync(
         SnapshotMessage message,
         string adlsRootPath,
         CancellationToken cancellationToken)
@@ -53,7 +54,7 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
             ? ReceivedFilesToReturn
             : [SnapshotBlobPath.FileName(message.PayloadType)];
 
-        return Task.FromResult(new SnapshotTrackingEntry
+        return Task.FromResult(new SnapshotTrackingEntity
         {
             SnapshotId = message.SnapshotId,
             AccountId = message.AccountId,

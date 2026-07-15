@@ -1,4 +1,4 @@
-using UBS.AM.PLT.SnapshotWriter.Application.Interfaces.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 

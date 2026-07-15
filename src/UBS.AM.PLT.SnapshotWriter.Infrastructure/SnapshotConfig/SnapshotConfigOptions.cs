@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Configuration;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.SnapshotConfig;
 
 /// <summary>
 /// Configuration section name for the required-files map. The section root IS the map
