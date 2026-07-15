@@ -51,92 +51,92 @@ public sealed class SnapshotWriterDbContext : DbContext
     {
         var entity = modelBuilder.Entity<SnapshotTrackingEntry>();
 
-        entity.ToTable("snapshot_tracking", "dbo");
+        entity.ToTable("SnapshotTracking", "dbo");
         entity.HasKey(e => e.SnapshotId);
 
         entity.Property(e => e.SnapshotId)
-            .HasColumnName("snapshot_id")
+            .HasColumnName("SnapshotId")
             .HasColumnType("varchar(50)");
 
         entity.Property(e => e.AccountId)
-            .HasColumnName("account_id")
+            .HasColumnName("AccountId")
             .HasColumnType("varchar(20)");
 
         entity.Property(e => e.SnapshotType)
-            .HasColumnName("snapshot_type")
+            .HasColumnName("SnapshotType")
             .HasColumnType("varchar(50)");
 
         entity.Property(e => e.AdlsRootPath)
-            .HasColumnName("adls_root_path")
-            .HasColumnType("varchar(500)");
+            .HasColumnName("AdlsRootPath")
+            .HasColumnType("varchar(max)");
 
         entity.Property(e => e.ReceivedFiles)
-            .HasColumnName("received_files")
-            .HasColumnType("nvarchar(1000)")
+            .HasColumnName("ReceivedFiles")
+            .HasColumnType("nvarchar(max)")
             .HasConversion(FileListConverter, FileListComparer);
 
         entity.Property(e => e.MissingFiles)
-            .HasColumnName("missing_files")
-            .HasColumnType("nvarchar(1000)")
+            .HasColumnName("MissingFiles")
+            .HasColumnType("nvarchar(max)")
             .HasConversion(FileListConverter!, FileListComparer);
 
         entity.Property(e => e.Status)
-            .HasColumnName("status")
+            .HasColumnName("Status")
             .HasColumnType("varchar(20)")
             .HasConversion(StatusConverter);
 
         entity.Property(e => e.FirstReceivedAt)
-            .HasColumnName("first_received_at")
+            .HasColumnName("FirstReceivedAt")
             .HasColumnType("datetime2");
 
         entity.Property(e => e.LastUpdatedAt)
-            .HasColumnName("last_updated_at")
+            .HasColumnName("LastUpdatedAt")
             .HasColumnType("datetime2");
 
         entity.Property(e => e.CompletedAt)
-            .HasColumnName("completed_at")
+            .HasColumnName("CompletedAt")
             .HasColumnType("datetime2");
 
         entity.Property(e => e.DeclaredFailedAt)
-            .HasColumnName("declared_failed_at")
+            .HasColumnName("DeclaredFailedAt")
             .HasColumnType("datetime2");
 
         entity.Property(e => e.Alerted)
-            .HasColumnName("alerted")
+            .HasColumnName("Alerted")
             .HasColumnType("bit");
 
         var indexEntity = modelBuilder.Entity<SnapshotIndexEntry>();
 
-        indexEntity.ToTable("snapshot_index", "dbo");
+        indexEntity.ToTable("SnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
 
         indexEntity.Property(e => e.SnapshotId)
-            .HasColumnName("snapshot_id")
+            .HasColumnName("SnapshotId")
             .HasColumnType("varchar(50)");
 
         indexEntity.Property(e => e.AccountId)
-            .HasColumnName("account_id")
+            .HasColumnName("AccountId")
             .HasColumnType("varchar(20)");
 
         indexEntity.Property(e => e.SnapshotDate)
-            .HasColumnName("snapshot_date")
+            .HasColumnName("SnapshotDate")
             .HasColumnType("datetime2");
 
         indexEntity.Property(e => e.EventType)
-            .HasColumnName("event_type")
+            .HasColumnName("EventType")
             .HasColumnType("varchar(50)");
 
         indexEntity.Property(e => e.AdlsPath)
-            .HasColumnName("adls_path")
-            .HasColumnType("varchar(500)");
+            .HasColumnName("AdlsPath")
+            .HasColumnType("varchar(max)");
 
         indexEntity.Property(e => e.DisplayData)
-            .HasColumnName("display_data")
+            .HasColumnName("DisplayData")
             .HasColumnType("nvarchar(max)")
             .HasConversion(DisplayDataConverter);
 
         indexEntity.Property(e => e.CreatedAt)
-            .HasColumnName("created_at")
+            .HasColumnName("CreatedAt")
             .HasColumnType("datetime2");
     }
 

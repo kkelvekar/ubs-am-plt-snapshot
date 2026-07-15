@@ -9,12 +9,12 @@
   verified against the REAL Kafka consume/commit path (Mode B — see
   AGENTS.md). Targets THREE triggers, all idempotent to install/remove:
 
-    trg_fault_snapshot_tracking  on dbo.snapshot_tracking, AFTER INSERT, UPDATE
+    trg_fault_SnapshotTracking   on dbo.SnapshotTracking, AFTER INSERT, UPDATE
                                   — THROWs, simulating a hard tracking-write failure
                                   (SELECT is untouched)
-    trg_fault_snapshot_index     on dbo.snapshot_index, AFTER INSERT, UPDATE
+    trg_fault_SnapshotIndex      on dbo.SnapshotIndex, AFTER INSERT, UPDATE
                                   — THROWs, simulating a hard index-write failure
-    trg_delay_snapshot_index     on dbo.snapshot_index, AFTER INSERT ONLY
+    trg_delay_SnapshotIndex      on dbo.SnapshotIndex, AFTER INSERT ONLY
                                   — does NOT throw: WAITFOR DELAY '00:00:20' then
                                   returns successfully, simulating a slow-but-
                                   succeeding index write (TC-20 — offset commit
@@ -397,9 +397,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $triggerNames = @{
-    Tracking = 'trg_fault_snapshot_tracking'
-    Index    = 'trg_fault_snapshot_index'
-    Delay    = 'trg_delay_snapshot_index'
+    Tracking = 'trg_fault_SnapshotTracking'
+    Index    = 'trg_fault_SnapshotIndex'
+    Delay    = 'trg_delay_SnapshotIndex'
 }
 
 # Every fault-trigger name, independent of -Target — used by -Status/-VerifyClean so
@@ -409,26 +409,26 @@ $allTriggerNames = $triggerNames.Values
 
 $triggerDdl = @{
     Tracking = @"
-CREATE TRIGGER dbo.trg_fault_snapshot_tracking
-ON dbo.snapshot_tracking
+CREATE TRIGGER dbo.trg_fault_SnapshotTracking
+ON dbo.SnapshotTracking
 AFTER INSERT, UPDATE
 AS
 BEGIN
-    THROW 51000, 'fault-injection: simulated failure on snapshot_tracking write', 1;
+    THROW 51000, 'fault-injection: simulated failure on SnapshotTracking write', 1;
 END
 "@
     Index    = @"
-CREATE TRIGGER dbo.trg_fault_snapshot_index
-ON dbo.snapshot_index
+CREATE TRIGGER dbo.trg_fault_SnapshotIndex
+ON dbo.SnapshotIndex
 AFTER INSERT, UPDATE
 AS
 BEGIN
-    THROW 51001, 'fault-injection: simulated failure on snapshot_index write', 1;
+    THROW 51001, 'fault-injection: simulated failure on SnapshotIndex write', 1;
 END
 "@
     Delay    = @"
-CREATE TRIGGER dbo.trg_delay_snapshot_index
-ON dbo.snapshot_index
+CREATE TRIGGER dbo.trg_delay_SnapshotIndex
+ON dbo.SnapshotIndex
 AFTER INSERT
 AS
 BEGIN
@@ -478,9 +478,9 @@ $token = Get-AccessToken
 $triggerNameList = "'" + ($allTriggerNames -join "', '") + "'"
 
 $tableForTarget = @{
-    Tracking = 'snapshot_tracking'
-    Index    = 'snapshot_index'
-    Delay    = 'snapshot_index'
+    Tracking = 'SnapshotTracking'
+    Index    = 'SnapshotIndex'
+    Delay    = 'SnapshotIndex'
 }
 
 if ($VerifyClean) {

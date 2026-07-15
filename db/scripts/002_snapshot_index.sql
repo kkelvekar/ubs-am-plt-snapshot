@@ -1,31 +1,54 @@
--- snapshot_index (solution design §7) — permanent audit-UI grid data source, one thin
+-- SnapshotIndex (solution design §7) — permanent audit-UI grid data source, one thin
 -- row per snapshot, written once all required files for the snapshot are received. This
 -- script is the source of truth for the schema: EF Core maps to it by hand and never
--- generates migrations. Idempotent — safe to re-run at any time.
+-- generates migrations. Idempotent in schema shape (safe to re-run at any time, always
+-- ends in the same state) — NOT data-preserving, since it drops and recreates the table.
 --
--- No table partitioning here — explicitly out of scope for this repository.
+-- Year-based partitioning (design §7). The 11 boundaries below (RANGE RIGHT) create 12
+-- partitions: dedicated partitions for 2026 through 2035 (10 years), with everything
+-- before 2026-01-01 falling into the leftmost catch-all and everything from 2036-01-01
+-- onward into the rightmost catch-all. This is a static dev-local window; ongoing
+-- production boundary maintenance (adding future years, sliding-window merges) is out of
+-- scope for this repository.
 
-IF OBJECT_ID(N'dbo.snapshot_index', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.snapshot_index
-    (
-        snapshot_id   VARCHAR(50)   NOT NULL CONSTRAINT pk_snapshot_index PRIMARY KEY,
-        account_id    VARCHAR(20)   NOT NULL,
-        snapshot_date DATETIME2     NOT NULL,
-        event_type    VARCHAR(50)   NOT NULL,
-        adls_path     VARCHAR(500)  NOT NULL,
-        display_data  NVARCHAR(MAX) NOT NULL,
-        created_at    DATETIME2     NOT NULL
-    );
-END;
+DROP TABLE IF EXISTS dbo.SnapshotIndex;
 
--- stage was removed from the index row (emitted in structured logs instead); drop it
--- from databases created before the change.
-IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.snapshot_index') AND name = N'stage')
-    ALTER TABLE dbo.snapshot_index DROP COLUMN stage;
+IF EXISTS (SELECT 1 FROM sys.partition_schemes WHERE name = N'PS_SnapshotIndex_Year')
+    DROP PARTITION SCHEME PS_SnapshotIndex_Year;
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_index_account_snapshotdate' AND object_id = OBJECT_ID(N'dbo.snapshot_index'))
-    CREATE INDEX ix_index_account_snapshotdate ON dbo.snapshot_index (account_id, snapshot_date DESC);
+IF EXISTS (SELECT 1 FROM sys.partition_functions WHERE name = N'PF_SnapshotIndex_Year')
+    DROP PARTITION FUNCTION PF_SnapshotIndex_Year;
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_index_eventtype_snapshotdate' AND object_id = OBJECT_ID(N'dbo.snapshot_index'))
-    CREATE INDEX ix_index_eventtype_snapshotdate ON dbo.snapshot_index (event_type, snapshot_date DESC);
+CREATE PARTITION FUNCTION PF_SnapshotIndex_Year (DATETIME2(7))
+AS RANGE RIGHT FOR VALUES
+('2026-01-01', '2027-01-01', '2028-01-01', '2029-01-01', '2030-01-01',
+ '2031-01-01', '2032-01-01', '2033-01-01', '2034-01-01', '2035-01-01',
+ '2036-01-01');
+
+CREATE PARTITION SCHEME PS_SnapshotIndex_Year
+AS PARTITION PF_SnapshotIndex_Year ALL TO ([PRIMARY]);
+
+-- PK_SnapshotIndex is NONCLUSTERED on SnapshotId alone: it preserves the exact
+-- index-UPSERT uniqueness guarantee the completeness invariant relies on. SQL Server
+-- requires the partition column in every *aligned* unique index, and SnapshotId must
+-- stay independently unique without SnapshotDate baked into the key — so the clustered
+-- (partition-aligned) index lives separately on SnapshotDate below.
+CREATE TABLE dbo.SnapshotIndex
+(
+    SnapshotId   VARCHAR(50)   NOT NULL CONSTRAINT PK_SnapshotIndex PRIMARY KEY NONCLUSTERED,
+    AccountId    VARCHAR(20)   NOT NULL,
+    SnapshotDate DATETIME2     NOT NULL,
+    EventType    VARCHAR(50)   NOT NULL,
+    AdlsPath     VARCHAR(MAX)  NOT NULL,
+    DisplayData  NVARCHAR(MAX) NOT NULL,
+    CreatedAt    DATETIME2     NOT NULL
+);
+
+-- The clustered index on SnapshotDate is what actually partitions the table.
+CREATE CLUSTERED INDEX CIX_SnapshotIndex_SnapshotDate
+    ON dbo.SnapshotIndex (SnapshotDate)
+    ON PS_SnapshotIndex_Year (SnapshotDate);
+
+-- Secondary indexes auto-align (SnapshotDate is a key column in both), so no ON clause.
+CREATE INDEX IX_SnapshotIndex_AccountId_SnapshotDate ON dbo.SnapshotIndex (AccountId, SnapshotDate DESC);
+CREATE INDEX IX_SnapshotIndex_EventType_SnapshotDate ON dbo.SnapshotIndex (EventType, SnapshotDate DESC);
