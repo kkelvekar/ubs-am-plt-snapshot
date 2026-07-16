@@ -1,0 +1,85 @@
+image: mcr.microsoft.com/dotnet/sdk:10.0
+
+stages:
+  - build
+  - test
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  BUILD_CONFIGURATION: Release
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .nuget/packages/
+
+build:
+  stage: build
+  script:
+    - dotnet restore UBS.AM.PLT.SnapshotWriter.sln
+    - dotnet build UBS.AM.PLT.SnapshotWriter.sln --configuration "$BUILD_CONFIGURATION" --no-restore
+
+unit_tests:
+  stage: test
+  script:
+    - dotnet test tests/UBS.AM.PLT.SnapshotWriter.UnitTests/UBS.AM.PLT.SnapshotWriter.UnitTests.csproj --configuration "$BUILD_CONFIGURATION"
+
+integration_tests:
+  stage: test
+  services:
+    - name: mcr.microsoft.com/mssql/server:2022-latest
+      alias: sqlserver
+    - name: mcr.microsoft.com/azure-storage/azurite
+      alias: azurite
+      command:
+        - azurite-blob
+        - --loose
+        - --blobHost
+        - 0.0.0.0
+        - --blobPort
+        - "10000"
+        - --disableProductStyleUrl
+  variables:
+    ACCEPT_EULA: "Y"
+    MSSQL_SA_PASSWORD: "Your_strong_Passw0rd!"
+    DOTNET_ENVIRONMENT: ci
+  before_script:
+    - apt-get update
+    - apt-get install -y curl gnupg
+    - . /etc/os-release && curl -fsSL "https://packages.microsoft.com/config/debian/${VERSION_ID%%.*}/packages-microsoft-prod.deb" -o packages-microsoft-prod.deb || curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o packages-microsoft-prod.deb
+    - dpkg -i packages-microsoft-prod.deb
+    - rm packages-microsoft-prod.deb
+    - apt-get update
+    - ACCEPT_EULA=Y apt-get install -y mssql-tools18
+    - export PATH="$PATH:/opt/mssql-tools18/bin"
+  script:
+    - |
+      for i in $(seq 1 40); do
+        if sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"; then
+          break
+        fi
+        if [ "$i" -eq 40 ]; then
+          echo "SQL Server did not become ready in time."
+          exit 1
+        fi
+        sleep 3
+      done
+    - |
+      for i in $(seq 1 30); do
+        if (echo > /dev/tcp/azurite/10000) >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$i" -eq 30 ]; then
+          echo "Azurite did not become ready in time."
+          exit 1
+        fi
+        sleep 2
+      done
+    - sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "IF DB_ID(N'UbsAdvantageSnapshots') IS NULL CREATE DATABASE [UbsAdvantageSnapshots];"
+    - |
+      for script in db/scripts/*.sql; do
+        sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -d UbsAdvantageSnapshots -i "$script"
+      done
+    - dotnet test tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests/UBS.AM.PLT.SnapshotWriter.IntegrationTests.csproj --configuration "$BUILD_CONFIGURATION"
