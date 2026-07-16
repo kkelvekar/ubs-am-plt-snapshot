@@ -29,7 +29,7 @@ unit_tests:
 integration_tests:
   stage: test
   services:
-    - name: mcr.microsoft.com/mssql/server:2022-latest
+    - name: server:2022-cu4-ubuntu-20.04
       alias: sqlserver
     - name: mcr.microsoft.com/azure-storage/azurite
       alias: azurite
