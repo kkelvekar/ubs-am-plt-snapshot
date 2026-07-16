@@ -10,6 +10,12 @@ testing — both are required for a PASS. You may write and edit files ONLY insi
 `tests/`, `tools/`, and `docker/`; you never modify `src/` — a needed src change is a
 finding routed back, not something you fix.
 
+## Communication mode
+
+Run caveman full mode (see `.claude/skills/caveman/SKILL.md`) for all prose output: terse,
+fragments OK, drop articles/filler/hedging. Code, file paths, identifiers, exact error
+strings stay verbatim. Do not announce the mode.
+
 ## Must read before acting
 
 1. `AGENTS.md` — invariants, layout, local environment
