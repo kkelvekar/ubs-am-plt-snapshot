@@ -43,6 +43,8 @@ integration_tests:
         - --disableProductStyleUrl
   variables:
     ACCEPT_EULA: "Y"
+    MSSQL_SA_PASSWORD: "$SQLSERVER_SA_PASSWORD"
+    Database__ConnectionString: "Server=sqlserver,1433;Database=UbsAdvantageSnapshots;User Id=sa;Password=$SQLSERVER_SA_PASSWORD;TrustServerCertificate=True;Encrypt=False"
     BlobStorage__ServiceUri: ""
   before_script:
     - apt-get update
@@ -55,7 +57,7 @@ integration_tests:
     - export PATH="$PATH:/opt/mssql-tools18/bin"
   script:
     - |
-      required_vars="MSSQL_SA_PASSWORD Database__ConnectionString BlobStorage__ConnectionString BlobStorage__ContainerName"
+      required_vars="SQLSERVER_SA_PASSWORD BlobStorage__ConnectionString BlobStorage__ContainerName"
       for name in $required_vars; do
         eval "value=\${$name:-}"
         if [ -z "$value" ]; then
