@@ -32,6 +32,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
     private readonly ISnapshotMessageHandler _handler;
     private readonly KafkaConsumerOptions _options;
     private readonly TimeProvider _timeProvider;
+    private readonly IHostApplicationLifetime _appLifetime;
     private readonly ILogger<KafkaSnapshotConsumer> _logger;
 
     public KafkaSnapshotConsumer(
@@ -39,12 +40,14 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         ISnapshotMessageHandler handler,
         IOptions<KafkaConsumerOptions> options,
         TimeProvider timeProvider,
+        IHostApplicationLifetime appLifetime,
         ILogger<KafkaSnapshotConsumer> logger)
     {
         _consumerFactory = consumerFactory;
         _handler = handler;
         _options = options.Value;
         _timeProvider = timeProvider;
+        _appLifetime = appLifetime;
         _logger = logger;
     }
 
@@ -55,13 +58,10 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     private async Task ConsumeLoopAsync(CancellationToken stoppingToken)
     {
-        using var consumer = _consumerFactory.Create();
-        consumer.Subscribe(_options.Topic);
-
-        _logger.LogInformation(
-            "Kafka consumer subscribed to topic {Topic} as consumer group {ConsumerGroup}",
-            _options.Topic,
-            _options.ConsumerGroup);
+        // Create()/Subscribe() sit inside the guarded region so a bad bootstrap config or
+        // subscribe throw is caught by the outer catch and logged Critical, not surfaced as
+        // a bare "BackgroundService failed" without our context.
+        IConsumer<string, string>? consumer = null;
 
         // Keyed by partition, validated against the failed offset: an entry left behind
         // by a rebalance is either overwritten on the next failure (offset mismatch
@@ -70,6 +70,14 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
         try
         {
+            consumer = _consumerFactory.Create();
+            consumer.Subscribe(_options.Topic);
+
+            _logger.LogInformation(
+                "Kafka consumer subscribed to topic {Topic} as consumer group {ConsumerGroup}",
+                _options.Topic,
+                _options.ConsumerGroup);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 ConsumeResult<string, string> result;
@@ -147,9 +155,42 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                 }
             }
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Clean shutdown (SIGTERM / host stop): exit quietly, no Error/Critical noise.
+        }
+        catch (Exception ex)
+        {
+            // The consume loop terminated unexpectedly (bad bootstrap config, seek throw,
+            // a bug). Emit exactly ONE Critical with our context, then trigger host shutdown
+            // and return cleanly rather than rethrowing.
+            //
+            // Why not rethrow: with BackgroundServiceExceptionBehavior.StopHost a rethrow
+            // faults the BackgroundService task, and Host.TryExecuteBackgroundServiceAsync
+            // then independently logs the SAME exception again (a second Critical plus a
+            // BackgroundServiceFaulted Error) under its own category — ops would see 2-3
+            // alerts for one incident. Returning cleanly after StopApplication() reaches the
+            // same outcome (host stops, pod restarts) with a single Critical: the Host's
+            // duplicate-log path only runs when the task actually faults, which it now won't.
+            //
+            // Environment.ExitCode is set so the process exits non-zero: StopApplication()
+            // alone unwinds host.Run() to a normal exit 0, which k8s would treat as a clean
+            // stop and not a crash. Exit 1 makes the pod restart as intended.
+            _logger.LogCritical(
+                ex,
+                "Kafka consume loop terminated unexpectedly; worker will stop and the pod will restart. topic={Topic} consumerGroup={ConsumerGroup}",
+                _options.Topic,
+                _options.ConsumerGroup);
+
+            Environment.ExitCode = 1;
+            _appLifetime.StopApplication();
+        }
         finally
         {
-            consumer.Close();
+            // Close commits nothing (auto-commit disabled) but leaves the group cleanly;
+            // Dispose releases the native handle. Both null-guarded: Create() may have thrown.
+            consumer?.Close();
+            consumer?.Dispose();
         }
     }
 

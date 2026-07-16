@@ -1,12 +1,7 @@
-using UBS.AM.PLT.SnapshotWriter.Application;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Worker;
 
-var builder = Host.CreateApplicationBuilder(args);
-
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services
-    .AddApplication()
-    .AddInfrastructure(builder.Configuration);
-
-var host = builder.Build();
-host.Run();
+// Thin entry point: all bootstrap logic (including the single-Critical fatal-startup path)
+// lives in WorkerBootstrap so it is testable. No rethrow here — RunAsync sets
+// Environment.ExitCode on the fatal path and returns; returning normally lets that exit code
+// surface as the process exit code.
+await WorkerBootstrap.RunAsync(args);

@@ -82,6 +82,16 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
                 // tracking must still read RECEIVING on redelivery so this guard retries.
                 await _indexStore.UpsertAsync(indexEntry, cancellationToken);
                 await _trackingStore.MarkCompleteAsync(message.SnapshotId, cancellationToken);
+
+                // Distinct completion event: the business-critical moment the snapshot
+                // becomes visible in the audit UI. Answers "when did snapshot X complete".
+                _logger.LogInformation(
+                    "Snapshot complete: index row upserted and tracking marked complete snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} adlsRootPath={AdlsRootPath} eventType={EventType}",
+                    message.SnapshotId,
+                    message.AccountId,
+                    message.PayloadType,
+                    tracking.AdlsRootPath,
+                    header.EventType);
             }
         }
 
