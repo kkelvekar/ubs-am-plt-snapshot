@@ -31,18 +31,10 @@ public sealed class SnapshotWriterFixture : IDisposable
 
     public SnapshotWriterFixture()
     {
-        var environmentName = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
-            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-
-        var configurationBuilder = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json");
-
-        if (!string.IsNullOrWhiteSpace(environmentName))
-        {
-            configurationBuilder.AddJsonFile($"appsettings.{environmentName}.json", optional: true);
-        }
-
-        Configuration = configurationBuilder.AddEnvironmentVariables().Build();
+        Configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json")
+            .AddEnvironmentVariables()
+            .Build();
 
         MockTime = new Mock<TimeProvider> { CallBase = true };
         MockTime.Setup(t => t.GetUtcNow()).Returns(() => CurrentTime);
