@@ -15,12 +15,44 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<KafkaConsumerOptions>(
-            configuration.GetSection(KafkaConsumerOptions.SectionName));
-        services.Configure<BlobStorageOptions>(
-            configuration.GetSection(BlobStorageOptions.SectionName));
-        services.Configure<DatabaseOptions>(
-            configuration.GetSection(DatabaseOptions.SectionName));
+        // Fail-fast at host start: a misconfigured pod must crash-loop immediately with a
+        // clear reason (the acceptable-crash case) rather than sit Running and fail per
+        // message. Validation messages name the missing configuration key exactly.
+        services.AddOptions<KafkaConsumerOptions>()
+            .Bind(configuration.GetSection(KafkaConsumerOptions.SectionName))
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.BootstrapServers),
+                "Kafka:BootstrapServers must be configured (non-empty).")
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.Topic),
+                "Kafka:Topic must be configured (non-empty).")
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.ConsumerGroup),
+                "Kafka:ConsumerGroup must be configured (non-empty).")
+            .ValidateOnStart();
+
+        services.AddOptions<BlobStorageOptions>()
+            .Bind(configuration.GetSection(BlobStorageOptions.SectionName))
+            .Validate(
+                // Mirror BlobContainerClientFactory: either credential auth (ServiceUri)
+                // or the Azurite/local ConnectionString fallback must be present.
+                o => !string.IsNullOrWhiteSpace(o.ServiceUri) || !string.IsNullOrWhiteSpace(o.ConnectionString),
+                "BlobStorage:ServiceUri or BlobStorage:ConnectionString must be configured (non-empty).")
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.ContainerName),
+                "BlobStorage:ContainerName must be configured (non-empty).")
+            .ValidateOnStart();
+
+        services.AddOptions<DatabaseOptions>()
+            .Bind(configuration.GetSection(DatabaseOptions.SectionName))
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.ConnectionString),
+                "Database:ConnectionString must be configured (non-empty).")
+            .ValidateOnStart();
+
+        // SnapshotConfig is deliberately NOT validated at startup: a missing snapshot type
+        // already throws a clear KeyNotFoundException per message, and requiring entries at
+        // startup would fight the config-driven-extensibility invariant.
         services.Configure<Dictionary<string, SnapshotTypeConfig>>(
             configuration.GetSection(SnapshotConfigOptions.SectionName));
 

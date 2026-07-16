@@ -327,6 +327,7 @@ public class KafkaSnapshotConsumerTests
             handler,
             options,
             timeProvider ?? new RecordingTimeProvider(),
+            new FakeHostApplicationLifetime(),
             logger ?? new CapturingLogger<KafkaSnapshotConsumer>());
 
         await service.StartAsync(CancellationToken.None);
