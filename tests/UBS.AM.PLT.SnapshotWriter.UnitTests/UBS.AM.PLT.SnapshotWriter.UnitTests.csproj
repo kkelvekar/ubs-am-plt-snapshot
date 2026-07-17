@@ -7,9 +7,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Domain\UBS.AM.PLT.SnapshotWriter.Domain.csproj" />
     <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Application\UBS.AM.PLT.SnapshotWriter.Application.csproj" />
-    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql\UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.csproj" />
-    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls\UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls.csproj" />
-    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka\UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka.csproj" />
+    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure\Sql\UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.csproj" />
+    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure\Adls\UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls.csproj" />
+    <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Infrastructure\Kafka\UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka.csproj" />
     <ProjectReference Include="..\..\src\UBS.AM.PLT.SnapshotWriter.Worker\UBS.AM.PLT.SnapshotWriter.Worker.csproj" />
   </ItemGroup>
 

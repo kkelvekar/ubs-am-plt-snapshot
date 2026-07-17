@@ -1,19 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Application\UBS.AM.PLT.SnapshotWriter.Application.csproj" />
+    <ProjectReference Include="..\..\UBS.AM.PLT.SnapshotWriter.Application\UBS.AM.PLT.SnapshotWriter.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The persistence stores/repositories are internal to this assembly; AddSqlInfrastructure
-         registers them in-assembly, and the unit tests exercise the stores' upsert logic
-         against fake repositories. -->
+    <!-- BlobContainerClientFactory is internal to this assembly; the integration tests reach it
+         via InternalsVisibleTo for assertion/cleanup against the real container. -->
     <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.UnitTests" />
     <InternalsVisibleTo Include="UBS.AM.PLT.SnapshotWriter.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
