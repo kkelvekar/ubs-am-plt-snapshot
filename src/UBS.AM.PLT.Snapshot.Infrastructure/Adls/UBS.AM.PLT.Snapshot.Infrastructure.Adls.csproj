@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- BlobContainerClientFactory is internal to this assembly; the integration tests reach it
+         via InternalsVisibleTo for assertion/cleanup against the real container. -->
+    <InternalsVisibleTo Include="UBS.AM.PLT.Snapshot.UnitTests" />
+    <InternalsVisibleTo Include="UBS.AM.PLT.Snapshot.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
+</Project>
