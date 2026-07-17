@@ -1,9 +1,9 @@
 using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Repositories;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 /// <summary>
 /// SQL adapter for <see cref="ISnapshotTrackingStore"/> using the read-then-write flow

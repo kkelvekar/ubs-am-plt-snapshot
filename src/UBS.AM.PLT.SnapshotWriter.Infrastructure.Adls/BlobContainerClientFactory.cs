@@ -1,7 +1,7 @@
 using Azure.Identity;
 using Azure.Storage.Blobs;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
 
 /// <summary>
 /// The single place the blob authentication selection rule lives: a configured

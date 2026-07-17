@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 

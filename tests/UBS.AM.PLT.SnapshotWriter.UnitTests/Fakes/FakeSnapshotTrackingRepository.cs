@@ -1,5 +1,5 @@
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Repositories;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 

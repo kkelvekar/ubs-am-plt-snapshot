@@ -5,9 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using UBS.AM.PLT.SnapshotWriter.Application;
 using UBS.AM.PLT.SnapshotWriter.Application.Contracts;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 
@@ -42,7 +41,10 @@ public sealed class SnapshotWriterFixture : IDisposable
         var services = new ServiceCollection();
         services.AddLogging(); // AddApplication/AddInfrastructure assume the host registered logging.
         services.AddSingleton(MockTime.Object);
-        services.AddApplication().AddInfrastructure(Configuration);
+        services.AddApplication()
+            .AddSqlInfrastructure(Configuration)
+            .AddAdlsInfrastructure(Configuration)
+            .AddSnapshotConfigInfrastructure(Configuration);
         _provider = services.BuildServiceProvider();
 
         Handler = _provider.GetRequiredService<ISnapshotMessageHandler>();

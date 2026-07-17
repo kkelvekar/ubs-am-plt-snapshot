@@ -3,8 +3,8 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Files.DataLake;
 using Microsoft.EntityFrameworkCore;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests;
 

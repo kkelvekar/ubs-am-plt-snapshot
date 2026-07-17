@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
 
 /// <summary>
 /// Bound from the <c>BlobStorage</c> configuration section. All values come from

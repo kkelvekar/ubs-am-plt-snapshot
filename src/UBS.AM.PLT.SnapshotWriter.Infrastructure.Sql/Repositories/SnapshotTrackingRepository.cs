@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="ISnapshotTrackingRepository"/>. Stateless — one

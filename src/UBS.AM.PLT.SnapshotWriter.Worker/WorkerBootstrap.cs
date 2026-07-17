@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Console;
 using UBS.AM.PLT.SnapshotWriter.Application;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 namespace UBS.AM.PLT.SnapshotWriter.Worker;
 
@@ -26,7 +28,10 @@ public static class WorkerBootstrap
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services
                 .AddApplication()
-                .AddInfrastructure(builder.Configuration);
+                .AddSqlInfrastructure(builder.Configuration)
+                .AddAdlsInfrastructure(builder.Configuration)
+                .AddKafkaInfrastructure(builder.Configuration)
+                .AddSnapshotConfigInfrastructure(builder.Configuration);
 
             var host = builder.Build();
 

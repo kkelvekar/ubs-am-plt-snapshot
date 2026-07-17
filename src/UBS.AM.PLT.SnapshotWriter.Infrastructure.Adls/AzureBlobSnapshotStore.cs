@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using UBS.AM.PLT.SnapshotWriter.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.SnapshotWriter.Domain;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Blob;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
 
 /// <summary>
 /// Blob adapter for <see cref="ISnapshotBlobStore"/> using <c>Azure.Storage.Blobs</c>

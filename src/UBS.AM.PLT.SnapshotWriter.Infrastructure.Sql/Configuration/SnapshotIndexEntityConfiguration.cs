@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Configuration;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Configuration;
 
 /// <summary>
 /// EF Core mapping for <see cref="SnapshotIndexEntity"/> onto the hand-written schema in

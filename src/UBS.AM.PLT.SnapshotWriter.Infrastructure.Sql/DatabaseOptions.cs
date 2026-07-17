@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 /// <summary>
 /// Bound from the <c>Database</c> configuration section. All values come from

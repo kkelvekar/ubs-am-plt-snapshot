@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 using Xunit;
 
 namespace UBS.AM.PLT.SnapshotWriter.UnitTests;
@@ -64,7 +66,10 @@ public class InfrastructureOptionsValidationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
-        services.AddInfrastructure(configuration);
+        services.AddSqlInfrastructure(configuration);
+        services.AddAdlsInfrastructure(configuration);
+        services.AddKafkaInfrastructure(configuration);
+        services.AddSnapshotConfigInfrastructure(configuration);
 
         return services.BuildServiceProvider().GetRequiredService<IStartupValidator>();
     }

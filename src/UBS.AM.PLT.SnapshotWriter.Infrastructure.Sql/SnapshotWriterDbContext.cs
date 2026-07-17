@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Configuration;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Configuration;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 
 /// <summary>
 /// EF Core mapping onto the hand-written schema in <c>db/scripts/001_snapshot_tracking.sql</c>

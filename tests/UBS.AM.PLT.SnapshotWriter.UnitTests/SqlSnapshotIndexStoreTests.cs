@@ -1,5 +1,5 @@
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 using UBS.AM.PLT.SnapshotWriter.UnitTests.Fakes;
 using Xunit;
 

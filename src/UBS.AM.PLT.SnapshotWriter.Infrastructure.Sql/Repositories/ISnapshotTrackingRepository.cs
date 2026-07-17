@@ -1,6 +1,6 @@
 using UBS.AM.PLT.SnapshotWriter.Domain.Entities;
 
-namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Persistence.Repositories;
+namespace UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.Repositories;
 
 /// <summary>
 /// Raw EF Core data access for the snapshot_tracking table. Internal to Infrastructure —

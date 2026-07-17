@@ -2,7 +2,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Application\UBS.AM.PLT.SnapshotWriter.Application.csproj" />
-    <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Infrastructure\UBS.AM.PLT.SnapshotWriter.Infrastructure.csproj" />
+    <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql\UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql.csproj" />
+    <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls\UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls.csproj" />
+    <ProjectReference Include="..\UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka\UBS.AM.PLT.SnapshotWriter.Infrastructure.Kafka.csproj" />
   </ItemGroup>
 
   <ItemGroup>

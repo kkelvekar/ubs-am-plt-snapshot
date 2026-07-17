@@ -5,7 +5,8 @@ using Reqnroll;
 using UBS.AM.PLT.SnapshotWriter.Application;
 using UBS.AM.PLT.SnapshotWriter.Application.Contracts;
 using UBS.AM.PLT.SnapshotWriter.Domain;
-using UBS.AM.PLT.SnapshotWriter.Infrastructure;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Adls;
+using UBS.AM.PLT.SnapshotWriter.Infrastructure.Sql;
 using UBS.AM.PLT.SnapshotWriter.IntegrationTests.Support;
 
 namespace UBS.AM.PLT.SnapshotWriter.IntegrationTests.StepDefinitions;
@@ -171,7 +172,10 @@ public sealed class InfrastructureFailureDuringWriteSteps
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(_fixture.MockTime.Object);
-        services.AddApplication().AddInfrastructure(configuration);
+        services.AddApplication()
+            .AddSqlInfrastructure(configuration)
+            .AddAdlsInfrastructure(configuration)
+            .AddSnapshotConfigInfrastructure(configuration);
         return services.BuildServiceProvider();
     }
 }
