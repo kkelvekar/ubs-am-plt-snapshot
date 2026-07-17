@@ -66,7 +66,7 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 ## Repository layout
 
 ```
-src/        UBS.AM.PLT.SnapshotWriter.{Domain|Application|Infrastructure|Worker}
+src/        UBS.AM.PLT.Snapshot.{Domain|Application|Infrastructure|Worker}
 tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
@@ -152,6 +152,6 @@ convenience scripts, not infra artifacts.
 - SQL Server in an ad-hoc container; schema applied from `db/scripts/` only
 - All endpoints (Kafka bootstrap, blob connection string, SQL connection string)
   overridable via environment variables
-- Exception: the committed Mode A integration test project (`tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests`)
+- Exception: the committed Mode A integration test project (`tests/UBS.AM.PLT.Snapshot.IntegrationTests`)
   is configured to target real Azure dev ADLS Gen2 + Azure SQL resources (`DefaultAzureCredential`) rather
-  than this local Azurite/SQL-container stack — see its `appsettings.json` and `SnapshotWriterFixture`
+  than this local Azurite/SQL-container stack — see its `appsettings.json` and `SnapshotFixture`

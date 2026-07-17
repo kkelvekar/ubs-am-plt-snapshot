@@ -18,13 +18,13 @@ cache:
 build:
   stage: build
   script:
-    - dotnet restore UBS.AM.PLT.SnapshotWriter.sln
-    - dotnet build UBS.AM.PLT.SnapshotWriter.sln --configuration "$BUILD_CONFIGURATION" --no-restore
+    - dotnet restore UBS.AM.PLT.Snapshot.sln
+    - dotnet build UBS.AM.PLT.Snapshot.sln --configuration "$BUILD_CONFIGURATION" --no-restore
 
 unit_tests:
   stage: test
   script:
-    - dotnet test tests/UBS.AM.PLT.SnapshotWriter.UnitTests/UBS.AM.PLT.SnapshotWriter.UnitTests.csproj --configuration "$BUILD_CONFIGURATION"
+    - dotnet test tests/UBS.AM.PLT.Snapshot.UnitTests/UBS.AM.PLT.Snapshot.UnitTests.csproj --configuration "$BUILD_CONFIGURATION"
 
 integration_tests:
   stage: test
@@ -92,4 +92,4 @@ integration_tests:
       for script in db/scripts/*.sql; do
         sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -d UbsAdvantageSnapshots -i "$script"
       done
-    - dotnet test tests/UBS.AM.PLT.SnapshotWriter.IntegrationTests/UBS.AM.PLT.SnapshotWriter.IntegrationTests.csproj --configuration "$BUILD_CONFIGURATION"
+    - dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj --configuration "$BUILD_CONFIGURATION"
