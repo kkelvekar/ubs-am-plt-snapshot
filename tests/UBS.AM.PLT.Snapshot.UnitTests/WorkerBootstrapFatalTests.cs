@@ -144,6 +144,7 @@ public class WorkerBootstrapFatalTests
         var dll = Path.Combine(
             current!.FullName,
             "src",
+            "Clients",
             workerAssembly,
             "bin",
             configuration,

@@ -76,7 +76,7 @@
     - Dev Azure SQL schema applied:     ./tools/apply-schema-azure.ps1
     - az login already authenticated (worker/tools use DefaultAzureCredential
       and Active Directory Default against the dev Azure SQL DB and ADLS Gen2
-      container configured in src/UBS.AM.PLT.Snapshot.Worker/appsettings.json
+      container configured in src/Clients/UBS.AM.PLT.Snapshot.Worker/appsettings.json
       — no Azurite/local SQL container needed for these TCs).
     - Worker bootstrap servers configurable via Kafka__BootstrapServers env var
       (defaults to localhost:9092, matching kafka-local.ps1).
@@ -95,7 +95,7 @@
   TC-13 — fault between blob write and tracking write
   --------------------------------------------------------------------------
     1. ./fault-injection.ps1 -Install -Target Tracking
-    2. Start the worker (dotnet run --project src/UBS.AM.PLT.Snapshot.Worker),
+    2. Start the worker (dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker),
        then publish one snapshot's messages with the producer above.
     3. Verify while the fault is active:
          - first payload's blob exists in ADLS at the expected path
@@ -178,7 +178,7 @@
     1. Start the worker with BlobStorage__ServiceUri pointed at an invalid
        endpoint, e.g. (bash):
          BlobStorage__ServiceUri=https://fault-injected-nonexistent.blob.core.windows.net \
-           dotnet run --project src/UBS.AM.PLT.Snapshot.Worker
+           dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker
        ServiceUri wins over ConnectionString in BlobContainerClientFactory, and
        AzureBlobSnapshotStore sets Retry.MaxRetries=0, so the failure surfaces
        on the very first write attempt instead of being absorbed by SDK retry.
@@ -308,7 +308,7 @@
   Config keys (standard .NET double-underscore env-var override binding):
     - SQL connection string:  Database__ConnectionString
       (bound to DatabaseOptions.ConnectionString — see
-       src/UBS.AM.PLT.Snapshot.Infrastructure/Persistence/DatabaseOptions.cs)
+       src/Infrastructure/Sql/DatabaseOptions.cs)
     - Blob service endpoint:  BlobStorage__ServiceUri
       (bound to BlobStorageOptions.ServiceUri — ServiceUri wins over
        ConnectionString in BlobContainerClientFactory; AzureBlobSnapshotStore
@@ -321,7 +321,7 @@
        repointed at an unreachable host + short connect timeout so it fails
        fast (bash):
          Database__ConnectionString='Server=tcp:localhost,9;Database=fault-injected;Connect Timeout=2;Encrypt=False;TrustServerCertificate=True' \
-           dotnet run --project src/UBS.AM.PLT.Snapshot.Worker
+           dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker
     2. Publish one snapshot's messages (producer, as in the Preconditions above).
     3. Verify WHILE the fault is active:
          - no snapshot_tracking row for the snapshotId (query the REAL dev DB
@@ -352,7 +352,7 @@
     1. Start the worker with the blob endpoint repointed at a dead endpoint
        (bash):
          BlobStorage__ServiceUri='https://127.0.0.1:1/' \
-           dotnet run --project src/UBS.AM.PLT.Snapshot.Worker
+           dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker
        (port 1 refuses immediately; MaxRetries=0 → first write fails fast. The
         TC-16 form 'https://fault-injected-nonexistent.blob.core.windows.net'
         works equally well.)

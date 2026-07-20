@@ -43,10 +43,10 @@
     - Dev Azure SQL schema applied: ./tools/apply-schema-azure.ps1
     - az login already authenticated (worker uses DefaultAzureCredential /
       Active Directory Default against the dev Azure SQL DB and the real ADLS
-      Gen2 container configured in src/UBS.AM.PLT.Snapshot.Worker/appsettings.json
+      Gen2 container configured in src/Clients/UBS.AM.PLT.Snapshot.Worker/appsettings.json
       — no Azurite/local SQL container needed, matching fault-injection.ps1's
       TC-13..TC-20 live tests).
-    - Worker running: dotnet run --project src/UBS.AM.PLT.Snapshot.Worker
+    - Worker running: dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker
     - Consumer-group offset/lag inspection:
         docker exec snapshot-writer-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
           --bootstrap-server localhost:9092 --describe --group snapshot-writer-api
