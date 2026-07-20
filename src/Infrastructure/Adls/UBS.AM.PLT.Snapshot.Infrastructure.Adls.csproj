@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
+    <ProjectReference Include="..\..\Core\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

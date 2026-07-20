@@ -66,7 +66,7 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 ## Repository layout
 
 ```
-src/        UBS.AM.PLT.Snapshot.{Domain|Application|Infrastructure|Worker}
+src/        Core/ (Domain, Application) | Infrastructure/ (Sql, Adls, Kafka) | Clients/ (Worker)
 tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
