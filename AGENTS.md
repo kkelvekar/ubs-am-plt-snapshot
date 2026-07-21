@@ -57,9 +57,14 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 3. **Offset committed last**: the Kafka offset is committed only after all writes for the
    message succeed. No commit on any failure path. No rollback — recovery is always
    forward (retry via redelivery).
-4. **Completeness is config-driven**: the required file list comes from
-   `SnapshotConfig` in appsettings, never from code. The index row is written only when
-   all required files are received. Adding a new payload type must require no code change.
+4. **Completeness is driven by a single declarative required-files map**: the required
+   file list is one declarative source of truth, never scattered through processing logic.
+   The index row is written only when all required files are received.
+   **Exception (post-lift-and-shift reality):** that map lives in the library-owned
+   `SnapshotConfigDefinition` code constant (`Infrastructure.Sql`), not in appsettings,
+   because the org configuration layer cannot carry custom appsettings keys. Adding a new
+   payload type is one entry in that constant plus a library rebuild (previously an
+   appsettings edit) — never a change to the write pipeline or consumer processing logic.
 5. **Payloads are opaque**: never parse a payload's internal structure, except `header`
    at completion time when building the index row.
 

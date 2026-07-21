@@ -72,7 +72,7 @@ public class InfrastructureOptionsValidationTests
             configuration["BlobStorage:ContainerName"] ?? string.Empty,
             configuration["BlobStorage:ConnectionString"]);
         services.AddKafkaInfrastructure(configuration);
-        services.AddSnapshotConfigInfrastructure(configuration);
+        services.AddSnapshotConfigInfrastructure();
 
         return services.BuildServiceProvider().GetRequiredService<IStartupValidator>();
     }

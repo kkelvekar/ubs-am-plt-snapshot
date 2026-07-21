@@ -4,9 +4,9 @@ using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.SnapshotConfig;
 
 /// <summary>
-/// Config-driven adapter for <see cref="IRequiredFilesProvider"/> — reads the required
-/// file list from <c>SnapshotConfig</c> (design §4) so a new payload type needs only a
-/// config change, never a code change.
+/// Adapter for <see cref="IRequiredFilesProvider"/> backed by the library-owned
+/// <see cref="SnapshotConfigDefinition"/> map, so a new payload type needs only a single
+/// entry in that constant.
 /// </summary>
 public sealed class SnapshotConfigRequiredFilesProvider : IRequiredFilesProvider
 {

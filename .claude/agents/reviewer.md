@@ -33,7 +33,9 @@ strings stay verbatim. Do not announce the mode.
    - Kafka offset committed ONLY after all writes succeed. Trace every failure path:
      none may reach the commit.
    - Index row written only when ALL required files received; required-files list comes
-     from configuration, never code.
+     from the single library-owned `SnapshotConfigDefinition` map (the sanctioned home,
+     since the org config layer cannot carry custom appsettings keys) — an entry there is
+     not a violation; scattering the list through processing logic is.
    - Payloads treated as opaque `JsonElement` except `header` at completion time.
 2. **Clean Architecture** — dependencies inward only; no infrastructure types leaking
    into `Application`/`Domain`; ports in `Application`, adapters in `Infrastructure`;

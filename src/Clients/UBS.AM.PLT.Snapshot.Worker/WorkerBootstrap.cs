@@ -34,7 +34,7 @@ public static class WorkerBootstrap
                     builder.Configuration["BlobStorage:ContainerName"] ?? string.Empty,
                     builder.Configuration["BlobStorage:ConnectionString"])
                 .AddKafkaInfrastructure(builder.Configuration)
-                .AddSnapshotConfigInfrastructure(builder.Configuration);
+                .AddSnapshotConfigInfrastructure();
 
             var host = builder.Build();
 

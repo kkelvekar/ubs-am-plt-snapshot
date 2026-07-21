@@ -47,7 +47,7 @@ public sealed class SnapshotFixture : IDisposable
                 Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
                 Configuration["BlobStorage:ContainerName"] ?? string.Empty,
                 Configuration["BlobStorage:ConnectionString"])
-            .AddSnapshotConfigInfrastructure(Configuration);
+            .AddSnapshotConfigInfrastructure();
         _provider = services.BuildServiceProvider();
 
         Handler = _provider.GetRequiredService<ISnapshotMessageHandler>();

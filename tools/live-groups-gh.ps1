@@ -121,7 +121,7 @@
   --------------------------------------------------------------------------
     1. ./live-groups-gh.ps1 -Scenario TC24
        Publishes one instruments.json payload with snapshotType "mystery"
-       (absent from Worker/appsettings.json SnapshotConfig).
+       (absent from the library-owned SnapshotConfigDefinition map).
     2. Verify:
          - blob IS written to the real ADLS container at
            mystery_snapshots/... (blob write precedes the completeness
@@ -136,9 +136,10 @@
            Unknown_snapshotType_writes_blob_and_tracking_but_never_completes),
            NOT silently skipped
     3. This is the expected/designed blocked state for an unconfigured type
-       (design doc: completeness/required-file list comes from config; there
-       is no separate pre-write config validation step) — do not "fix" it by
-       editing the live worker's SnapshotConfig mid-run; report the blocked
+       (design doc: completeness/required-file list comes from the library-owned
+       SnapshotConfigDefinition code constant; there is no separate pre-write
+       config validation step) — do not "fix" it by adding "mystery" to
+       SnapshotConfigDefinition and rebuilding mid-run; report the blocked
        state as expected and move on. `./kafka-local.ps1 -Down` releases it.
 
   --------------------------------------------------------------------------
