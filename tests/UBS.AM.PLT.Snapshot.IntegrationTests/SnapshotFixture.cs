@@ -42,8 +42,11 @@ public sealed class SnapshotFixture : IDisposable
         services.AddLogging(); // AddApplication/AddInfrastructure assume the host registered logging.
         services.AddSingleton(MockTime.Object);
         services.AddApplication()
-            .AddSqlInfrastructure(Configuration)
-            .AddAdlsInfrastructure(Configuration)
+            .AddSqlInfrastructure(Configuration["Database:ConnectionString"] ?? string.Empty)
+            .AddAdlsInfrastructure(
+                Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
+                Configuration["BlobStorage:ContainerName"] ?? string.Empty,
+                Configuration["BlobStorage:ConnectionString"])
             .AddSnapshotConfigInfrastructure(Configuration);
         _provider = services.BuildServiceProvider();
 

@@ -66,8 +66,11 @@ public class InfrastructureOptionsValidationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
-        services.AddSqlInfrastructure(configuration);
-        services.AddAdlsInfrastructure(configuration);
+        services.AddSqlInfrastructure(configuration["Database:ConnectionString"] ?? string.Empty);
+        services.AddAdlsInfrastructure(
+            configuration["BlobStorage:ServiceUri"] ?? string.Empty,
+            configuration["BlobStorage:ContainerName"] ?? string.Empty,
+            configuration["BlobStorage:ConnectionString"]);
         services.AddKafkaInfrastructure(configuration);
         services.AddSnapshotConfigInfrastructure(configuration);
 

@@ -10,13 +10,13 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddSqlInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddSqlInfrastructure(this IServiceCollection services, string connectionString)
     {
         // Fail-fast at host start: a misconfigured pod must crash-loop immediately with a
         // clear reason (the acceptable-crash case) rather than sit Running and fail per
         // message. Validation messages name the missing configuration key exactly.
         services.AddOptions<DatabaseOptions>()
-            .Bind(configuration.GetSection(DatabaseOptions.SectionName))
+            .Configure(o => o.ConnectionString = connectionString)
             .Validate(
                 o => !string.IsNullOrWhiteSpace(o.ConnectionString),
                 "Database:ConnectionString must be configured (non-empty).")
