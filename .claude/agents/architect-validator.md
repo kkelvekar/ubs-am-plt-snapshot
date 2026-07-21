@@ -37,8 +37,9 @@ conformance checking and producing an unambiguous brief.
   Infrastructure, Domain references nothing, Worker is composition root only.
 - **Core invariants** (from AGENTS.md): strict write order (blob → tracking →
   completeness → index), idempotency of every write, Kafka offset committed last and
-  only on full success, config-driven required-files list, payloads opaque except
-  `header` at completion.
+  only on full success, required-files list from the single library-owned
+  `SnapshotConfigDefinition` map (sanctioned home; org config layer cannot carry custom
+  appsettings keys), payloads opaque except `header` at completion.
 - **Scope**: no cleanup job, no Read API, no speculative abstraction. Flag scope creep.
 
 ## When receiving a design-level finding from reviewer or tester-e2e

@@ -15,7 +15,7 @@ The business requires the ability to view what decisions led to any given order 
 - Retain snapshots for 10 years minimum
 - Snapshots visible in the UI instantly after capture
 - Cost-effective compared to current Azure SQL storage approach
-- Config-driven onboarding so new snapshot types require no code change
+- Declarative onboarding of new snapshot types via a single required-files map, with no change to the write pipeline or consumer processing logic (**post-lift-and-shift:** that map is the library-owned `SnapshotConfigDefinition` code constant, not an appsettings section — adding a type is a one-entry lib edit)
 - No new infrastructure services -- use existing Azure SQL and ADLS Gen2 only
 
 ---
@@ -174,29 +174,27 @@ public class HeaderPayload
 }
 ```
 
-**appsettings.json -- required file list:**
+**Required file list** (illustrative shape below).
+
+> **Post-lift-and-shift note:** the required-files map is a library-owned code constant
+> (`SnapshotConfigDefinition` in `Infrastructure.Sql`), **not** an appsettings section,
+> because the org configuration layer cannot carry custom appsettings keys. The JSON below
+> shows the logical shape only; the live map is the code constant.
 
 ```json
 {
-  "SnapshotConfig": {
-    "portfolio": {
-      "requiredFiles": [
-        "header.json",
-        "instruments.json",
-        "calculations.json",
-        "settings.json"
-      ]
-    }
-  },
-  "Kafka": {
-    "Topic":             "ubs-advantage-snapshots",
-    "ConsumerGroup":     "snapshot-writer-api",
-    "BootstrapServers":  "..."
+  "portfolio": {
+    "requiredFiles": [
+      "header.json",
+      "instruments.json",
+      "calculations.json",
+      "settings.json"
+    ]
   }
 }
 ```
 
-Adding a new payload type in future means adding its filename to requiredFiles. No consumer code change required.
+Adding a new payload type in future means adding one entry to the `SnapshotConfigDefinition` map (a one-entry lib edit plus rebuild). No consumer code change required.
 
 ---
 

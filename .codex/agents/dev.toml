@@ -30,7 +30,7 @@ design-level question back instead of improvising.\r
   UPSERT. Kafka offset committed last, only after all writes succeed, never on a\r
   failure path.\r
 - Every write idempotent. Redelivery of any message at any point must be harmless.\r
-- Required-files list read from configuration (`SnapshotConfig`), never hardcoded.\r
+- Required-files list comes from the single library-owned `SnapshotConfigDefinition` map (`Infrastructure.Sql`), never scattered through processing logic. That constant is the sanctioned home (org config layer cannot carry custom appsettings keys) — an entry there is not a violation.\r
 - Payloads stay opaque `JsonElement`, written via `GetRawText()`; only `header` is\r
   deserialised, at completion time.\r
 - Kafka bootstrap servers and all connection strings configurable via environment\r

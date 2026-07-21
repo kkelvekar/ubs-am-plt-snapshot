@@ -178,7 +178,7 @@ public sealed class InfrastructureFailureDuringWriteSteps
                 configuration["BlobStorage:ServiceUri"] ?? string.Empty,
                 configuration["BlobStorage:ContainerName"] ?? string.Empty,
                 configuration["BlobStorage:ConnectionString"])
-            .AddSnapshotConfigInfrastructure(configuration);
+            .AddSnapshotConfigInfrastructure();
         return services.BuildServiceProvider();
     }
 }

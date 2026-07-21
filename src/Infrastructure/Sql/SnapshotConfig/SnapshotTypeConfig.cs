@@ -1,10 +1,10 @@
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.SnapshotConfig;
 
 /// <summary>
-/// Bound from one entry of the <c>SnapshotConfig</c> configuration section, keyed by
-/// snapshotType (design §4), e.g. <c>SnapshotConfig:portfolio:requiredFiles</c>.
+/// One entry of the library-owned required-files map (<see cref="SnapshotConfigDefinition"/>),
+/// keyed by snapshotType, listing the files a snapshot of that type must receive.
 /// </summary>
 public sealed class SnapshotTypeConfig
 {
-    public string[] RequiredFiles { get; set; } = [];
+    public string[] RequiredFiles { get; init; } = [];
 }

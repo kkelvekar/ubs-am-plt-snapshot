@@ -31,7 +31,8 @@ A proper .NET test project, committed to the repo, running in CI.\r
 - Cover at minimum: single payload arrival (tracking row RECEIVING, no index row);\r
   all required files received (index row written, tracking COMPLETE); redelivery of an\r
   already-processed message (idempotency — no duplicates, no errors); out-of-order\r
-  payload arrival; completeness driven by config (change required list → behaviour follows).\r
+  payload arrival; completeness driven by the library-owned `SnapshotConfigDefinition` map\r
+  (change the required list there → behaviour follows).\r
 \r
 ## Mode B — live worker run (repeatable tooling in `tools/`, not committed tests)\r
 \r

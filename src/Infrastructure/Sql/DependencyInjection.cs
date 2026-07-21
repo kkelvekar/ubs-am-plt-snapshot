@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
@@ -39,13 +38,19 @@ public static class DependencyInjection
         return services;
     }
 
-    public static IServiceCollection AddSnapshotConfigInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddSnapshotConfigInfrastructure(this IServiceCollection services)
     {
-        // SnapshotConfig is deliberately NOT validated at startup: a missing snapshot type
-        // already throws a clear KeyNotFoundException per message, and requiring entries at
-        // startup would fight the config-driven-extensibility invariant.
-        services.Configure<Dictionary<string, SnapshotTypeConfig>>(
-            configuration.GetSection(SnapshotConfigOptions.SectionName));
+        // The required-files map is deliberately NOT validated at startup: a missing snapshot
+        // type already throws a clear KeyNotFoundException per message, so an entry absent from
+        // the library-owned SnapshotConfigDefinition surfaces with a clear reason at the point
+        // it actually matters rather than blocking host start.
+        services.Configure<Dictionary<string, SnapshotTypeConfig>>(map =>
+        {
+            foreach (var (type, config) in SnapshotConfigDefinition.Map)
+            {
+                map[type] = config;
+            }
+        });
 
         services.AddSingleton<IRequiredFilesProvider, SnapshotConfigRequiredFilesProvider>();
 
