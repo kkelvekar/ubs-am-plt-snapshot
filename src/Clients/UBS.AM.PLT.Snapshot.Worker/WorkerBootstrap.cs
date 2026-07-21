@@ -28,8 +28,11 @@ public static class WorkerBootstrap
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services
                 .AddApplication()
-                .AddSqlInfrastructure(builder.Configuration)
-                .AddAdlsInfrastructure(builder.Configuration)
+                .AddSqlInfrastructure(builder.Configuration["Database:ConnectionString"] ?? string.Empty)
+                .AddAdlsInfrastructure(
+                    builder.Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
+                    builder.Configuration["BlobStorage:ContainerName"] ?? string.Empty,
+                    builder.Configuration["BlobStorage:ConnectionString"])
                 .AddKafkaInfrastructure(builder.Configuration)
                 .AddSnapshotConfigInfrastructure(builder.Configuration);
 

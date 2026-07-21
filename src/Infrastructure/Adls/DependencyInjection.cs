@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
@@ -6,13 +5,18 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddAdlsInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddAdlsInfrastructure(this IServiceCollection services, string serviceUri, string containerName, string? connectionString = null)
     {
         // Fail-fast at host start: a misconfigured pod must crash-loop immediately with a
         // clear reason (the acceptable-crash case) rather than sit Running and fail per
         // message. Validation messages name the missing configuration key exactly.
         services.AddOptions<BlobStorageOptions>()
-            .Bind(configuration.GetSection(BlobStorageOptions.SectionName))
+            .Configure(o =>
+            {
+                o.ServiceUri = serviceUri;
+                o.ContainerName = containerName;
+                o.ConnectionString = connectionString ?? string.Empty;
+            })
             .Validate(
                 // Mirror BlobContainerClientFactory: either credential auth (ServiceUri)
                 // or the Azurite/local ConnectionString fallback must be present.

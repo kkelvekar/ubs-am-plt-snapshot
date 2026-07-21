@@ -173,8 +173,11 @@ public sealed class InfrastructureFailureDuringWriteSteps
         services.AddLogging();
         services.AddSingleton(_fixture.MockTime.Object);
         services.AddApplication()
-            .AddSqlInfrastructure(configuration)
-            .AddAdlsInfrastructure(configuration)
+            .AddSqlInfrastructure(configuration["Database:ConnectionString"] ?? string.Empty)
+            .AddAdlsInfrastructure(
+                configuration["BlobStorage:ServiceUri"] ?? string.Empty,
+                configuration["BlobStorage:ContainerName"] ?? string.Empty,
+                configuration["BlobStorage:ConnectionString"])
             .AddSnapshotConfigInfrastructure(configuration);
         return services.BuildServiceProvider();
     }
