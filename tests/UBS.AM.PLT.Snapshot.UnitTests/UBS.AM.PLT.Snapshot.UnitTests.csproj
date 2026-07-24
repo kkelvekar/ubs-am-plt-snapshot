@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\src\Infrastructure\Adls\UBS.AM.PLT.Snapshot.Infrastructure.Adls.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Kafka\UBS.AM.PLT.Snapshot.Infrastructure.Kafka.csproj" />
     <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.Worker\UBS.AM.PLT.Snapshot.Worker.csproj" />
+    <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.ReadApi\UBS.AM.PLT.Snapshot.ReadApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>
