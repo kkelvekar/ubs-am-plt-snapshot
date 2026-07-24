@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.Snapshot.Application.Models;
+namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Deserialised shape of the <c>header</c> payload, per solution design §4. This is the

@@ -1,16 +1,16 @@
 using Microsoft.Data.SqlClient;
-using UBS.AM.PLT.Snapshot.Application.Models;
-using UBS.AM.PLT.Snapshot.Infrastructure.Sql.Queries;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
+using UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 using Xunit;
 
 namespace UBS.AM.PLT.Snapshot.UnitTests;
 
 /// <summary>
-/// Verifies <see cref="SqlSnapshotIndexQuery.BuildQuery"/> parameterises the account filter —
-/// one <c>@pN</c> placeholder per id, generated from the index, with the raw id carried as a
+/// Verifies SnapshotIndexRepository.BuildQuery parameterises the account filter -
+/// one @pN placeholder per id, generated from the index, with the raw id carried as a
 /// parameter value and never concatenated into the SQL text. This is the SQL-injection guard.
 /// </summary>
-public sealed class SqlSnapshotIndexQueryTests
+public sealed class SnapshotIndexRepositoryQueryTests
 {
     private static readonly DateTime From = new(2026, 7, 17, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime To = new(2026, 7, 24, 0, 0, 0, DateTimeKind.Utc);
@@ -26,9 +26,9 @@ public sealed class SqlSnapshotIndexQueryTests
             ToDate = To,
         };
 
-        var sql = SqlSnapshotIndexQuery.BuildQuery(filter, out var parameters);
+        var sql = SnapshotIndexRepository.BuildQuery(filter, out var parameters);
 
-        // Placeholders are positional, derived from the index — never from the value.
+        // Placeholders are positional, derived from the index - never from the value.
         Assert.Contains("AccountId IN (@p0, @p1)", sql);
 
         // The malicious literal must NOT appear anywhere in the SQL text.
@@ -59,7 +59,7 @@ public sealed class SqlSnapshotIndexQueryTests
             EventType = "ModelChange",
         };
 
-        var sql = SqlSnapshotIndexQuery.BuildQuery(filter, out var parameters);
+        var sql = SnapshotIndexRepository.BuildQuery(filter, out var parameters);
 
         Assert.Contains("AND EventType = @event", sql);
         Assert.Equal("ModelChange", ParameterValue(parameters, "@event"));
@@ -70,7 +70,7 @@ public sealed class SqlSnapshotIndexQueryTests
     {
         var filter = new SnapshotGridFilter { AccountIds = ["A"], FromDate = From, ToDate = To };
 
-        var sql = SqlSnapshotIndexQuery.BuildQuery(filter, out _);
+        var sql = SnapshotIndexRepository.BuildQuery(filter, out _);
 
         Assert.Contains("DisplayData AS DisplayDataJson", sql);
         Assert.Contains("FROM dbo.SnapshotIndex", sql);

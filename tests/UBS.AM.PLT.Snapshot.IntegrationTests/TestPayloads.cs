@@ -1,4 +1,4 @@
-using UBS.AM.PLT.Snapshot.Application.Models;
+using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 using UBS.AM.PLT.Snapshot.Domain;
 
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;

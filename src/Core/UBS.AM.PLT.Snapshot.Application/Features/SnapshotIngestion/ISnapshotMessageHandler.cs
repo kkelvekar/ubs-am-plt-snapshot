@@ -1,6 +1,6 @@
 using UBS.AM.PLT.Snapshot.Domain;
 
-namespace UBS.AM.PLT.Snapshot.Application.Contracts;
+namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Application-layer entry point for one snapshot message. The Kafka adapter calls

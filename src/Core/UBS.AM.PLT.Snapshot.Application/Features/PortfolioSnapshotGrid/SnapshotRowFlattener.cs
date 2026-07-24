@@ -1,18 +1,18 @@
 using System.Text.Json;
-using UBS.AM.PLT.Snapshot.Application.Models;
 
-namespace UBS.AM.PLT.Snapshot.Api;
+namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 
 /// <summary>
-/// Flattens each <see cref="SnapshotIndexRow"/> into one flat grid row: the fixed columns at
-/// the top level, then every top-level property of the opaque <c>DisplayData</c> JSON copied
+/// Flattens each SnapshotIndexRow into one flat grid row: the fixed columns at
+/// the top level, then every top-level property of the opaque DisplayData JSON copied
 /// up alongside them. New display keys therefore flow through to the response with zero code
-/// change (solution design §7). Fixed columns win on any key collision, and null/blank/invalid
-/// display JSON degrades to fixed-fields-only rather than throwing.
+/// change (solution design section 7). Fixed columns win on any key collision, and null/blank/invalid
+/// display JSON degrades to fixed-fields-only rather than throwing. AdlsPath is deliberately
+/// never emitted in the response.
 /// </summary>
 public static class SnapshotRowFlattener
 {
-    // Fixed keys are already camelCase and match ASP.NET's default camelCase JSON output.
+    // Fixed keys are already camelCase and match the API default camelCase JSON output.
     private const string SnapshotId = "snapshotId";
     private const string AccountId = "accountId";
     private const string SnapshotDate = "snapshotDate";
@@ -75,7 +75,7 @@ public static class SnapshotRowFlattener
 
         foreach (var property in root.EnumerateObject())
         {
-            // Fixed columns win on collision — skip a duplicate display key.
+            // Fixed columns win on collision - skip a duplicate display key.
             if (flat.ContainsKey(property.Name))
             {
                 continue;

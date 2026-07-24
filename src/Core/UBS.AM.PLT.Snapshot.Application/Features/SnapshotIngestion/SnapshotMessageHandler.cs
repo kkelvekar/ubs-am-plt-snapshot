@@ -1,16 +1,14 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
-using UBS.AM.PLT.Snapshot.Application.Models;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
-namespace UBS.AM.PLT.Snapshot.Application;
+namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Orchestrates the strict write order per message:
-/// blob write → tracking upsert → completeness check → index UPSERT. Any failure
+/// blob write to tracking upsert to completeness check to index UPSERT. Any failure
 /// propagates unchanged so the consumer never commits the offset (recovery is forward,
 /// via redelivery).
 /// </summary>
@@ -43,21 +41,21 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
     public async Task HandleAsync(SnapshotMessage message, CancellationToken cancellationToken)
     {
-        // Guard: the JSON `required` check on the envelope only proves each identity field
-        // was present in the message — not that it was non-null (an explicit
+        // Guard: the JSON "required" check on the envelope only proves each identity field
+        // was present in the message, not that it was non-null (an explicit
         // "snapshotId": null passes deserialisation with a null value). A null identity
         // field would corrupt the blob path (e.g. ".../snapshotId=/...") and the tracking
         // row, so reject it before the first write. Throwing routes it through the
-        // consumer's existing no-commit / seek-back / retry / alert path, identical to a
-        // malformed envelope — recovery is forward, never a silent skip.
+        // existing no-commit / seek-back / retry / alert path, identical to a
+        // malformed envelope - recovery is forward, never a silent skip.
         ValidateIdentity(message);
 
-        // The root folder is pinned to the FIRST payload's arrival time for this
+        // The root folder is pinned to the FIRST payload arrival time for this
         // snapshotId and reused by every subsequent (or redelivered) payload, so a
         // snapshot whose publish timestamps straddle a month/year boundary never splits
-        // across two folders. The lookup is read-only (mutates nothing) — the write order
-        // below still starts at the blob write. Kafka's accountId partitioning processes
-        // a snapshot's messages sequentially on one consumer (see SqlSnapshotTrackingStore),
+        // across two folders. The lookup is read-only (mutates nothing) - the write order
+        // below still starts at the blob write. Kafka accountId partitioning processes
+        // one snapshot messages sequentially on one consumer (see SqlSnapshotTrackingStore),
         // so no locking is needed around it.
         var rootPath = await _trackingStore.GetRootPathAsync(message.SnapshotId, cancellationToken)
             ?? SnapshotBlobPath.RootFolder(message, _timeProvider.GetUtcNow());
@@ -65,7 +63,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         var tracking = await _trackingStore.UpsertReceivedAsync(message, rootPath, cancellationToken);
 
         // Guard: stray redelivery of a file long after the snapshot already completed (or
-        // failed) must do nothing beyond steps 1-2 above — no re-fetch, re-upsert or
+        // failed) must do nothing beyond steps 1-2 above - no re-fetch, re-upsert or
         // re-touch of a row that is no longer RECEIVING.
         if (tracking.Status == SnapshotTrackingStatus.Receiving)
         {
@@ -107,7 +105,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
     private static void ValidateIdentity(SnapshotMessage message)
     {
-        // Only the fields that form the blob path and tracking identity are checked —
+        // Only the fields that form the blob path and tracking identity are checked -
         // a null in any of them corrupts a write. Deserialisation guarantees presence;
         // this guards against present-but-null. (Non-nullable reference-type annotations
         // are not enforced at runtime, so this check is real, not redundant.)

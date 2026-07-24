@@ -1,31 +1,30 @@
 using Microsoft.AspNetCore.Mvc;
-using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
-using UBS.AM.PLT.Snapshot.Application.Models;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Application;
 using UBS.AM.PLT.Snapshot.Api.Models;
 
 namespace UBS.AM.PLT.Snapshot.Api.Controllers;
 
 /// <summary>
-/// Read endpoint for the Audit "Load snapshots" grid (solution design §7): a flat JSON array,
-/// one row per snapshot. Thin edge — maps the request DTO to a <see cref="SnapshotGridFilter"/>,
-/// runs the pure resolver (400 on an empty account list or inverted window), calls the read
-/// port, and flattens the opaque display JSON into the response rows.
+/// Read endpoint for the Audit "Load snapshots" grid (solution design section 7): a flat JSON
+/// array, one row per snapshot. Thin edge - maps the request DTO to a SnapshotGridFilter
+/// and calls the single Application-layer entry point (IPortfolioSnapshotGridQueryHandler),
+/// which owns filter resolution, the read query and the display-JSON flattening. No error
+/// handling here: validation and unexpected faults propagate to the global exception pipeline
+/// (see Program.cs / ErrorHandling), which returns a ProblemDetails and logs server faults.
 /// </summary>
 [ApiController]
 [Route("api/portfolio-snapshots")]
 public sealed class PortfolioSnapshotController : ControllerBase
 {
-    private readonly ISnapshotIndexQuery _indexQuery;
-    private readonly TimeProvider _timeProvider;
+    private readonly IPortfolioSnapshotGridQueryHandler _gridQueryHandler;
     private readonly ILogger<PortfolioSnapshotController> _logger;
 
     public PortfolioSnapshotController(
-        ISnapshotIndexQuery indexQuery,
-        TimeProvider timeProvider,
+        IPortfolioSnapshotGridQueryHandler gridQueryHandler,
         ILogger<PortfolioSnapshotController> logger)
     {
-        _indexQuery = indexQuery;
-        _timeProvider = timeProvider;
+        _gridQueryHandler = gridQueryHandler;
         _logger = logger;
     }
 
@@ -34,33 +33,19 @@ public sealed class PortfolioSnapshotController : ControllerBase
         [FromQuery] PortfolioSnapshotQuery query,
         CancellationToken ct)
     {
-        SnapshotGridFilter filter;
-        try
+        var requestedFilter = new SnapshotGridFilter
         {
-            filter = SnapshotGridFilter.Resolve(
-                new SnapshotGridFilter
-                {
-                    AccountIds = query.AccountIds ?? [],
-                    FromDate = query.From,
-                    ToDate = query.To,
-                    EventType = query.Event,
-                },
-                _timeProvider);
-        }
-        catch (SnapshotGridFilterValidationException ex)
-        {
-            _logger.LogWarning("Rejected snapshot grid query: {Reason}", ex.Message);
-            return BadRequest(new { error = ex.Message });
-        }
+            AccountIds = query.AccountIds ?? [],
+            FromDate = query.From,
+            ToDate = query.To,
+            EventType = query.Event,
+        };
 
-        var rows = await _indexQuery.QueryAsync(filter, ct);
-        var flattened = SnapshotRowFlattener.Flatten(rows);
+        var flattened = await _gridQueryHandler.HandleAsync(requestedFilter, ct);
 
         _logger.LogInformation(
-            "Served snapshot grid query for {AccountCount} account(s) over [{FromDate:o}, {ToDate:o}]: {RowCount} row(s).",
-            filter.AccountIds.Count,
-            filter.FromDate,
-            filter.ToDate,
+            "Served snapshot grid query for {AccountCount} account(s): {RowCount} row(s).",
+            requestedFilter.AccountIds.Count,
             flattened.Count);
 
         return Ok(flattened);

@@ -1,15 +1,15 @@
-using UBS.AM.PLT.Snapshot.Application.Models;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 
 namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
 /// <summary>
-/// Read-side port for the Load-snapshots grid (solution design §7): returns the matching
-/// <c>dbo.SnapshotIndex</c> rows for a resolved filter, newest first. Read-only — this port
-/// never writes, and is registered by the Read API composition root only, never the worker.
-/// The caller passes an already-resolved <see cref="SnapshotGridFilter"/>
-/// (see <see cref="SnapshotGridFilter.Resolve"/>) with a concrete window and validated accounts.
+/// Port for the Load-snapshots grid read query (solution design section 7). Reads the
+/// permanent snapshot_index table filtered by account, date range and optional event type.
+/// The DisplayData JSON column stays opaque on this port (SnapshotIndexRow.DisplayDataJson) -
+/// it is flattened by SnapshotRowFlattener, not here. The SQL implementation is
+/// SnapshotIndexRepository in Infrastructure.
 /// </summary>
 public interface ISnapshotIndexQuery
 {
-    Task<IReadOnlyList<SnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken ct);
+    Task<IReadOnlyList<SnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken);
 }

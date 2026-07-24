@@ -1,8 +1,8 @@
-namespace UBS.AM.PLT.Snapshot.Application.Models;
+namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 
 /// <summary>
-/// The Load-snapshots grid query, in Application terms (solution design §7). Built from the
-/// HTTP request at the edge, then normalised by <see cref="Resolve"/> into a filter with a
+/// The Load-snapshots grid query, in Application terms (solution design section 7). Built from
+/// the HTTP request at the edge, then normalised by Resolve into a filter with a
 /// concrete date window and validated account list before it reaches the query port.
 /// </summary>
 public sealed record SnapshotGridFilter
@@ -22,7 +22,7 @@ public sealed record SnapshotGridFilter
     /// Business rule for the grid query, deliberately free of ASP.NET/DB dependencies so it
     /// unit-tests in isolation. Rejects an empty account list (never allow an unfiltered
     /// all-rows query), fills an omitted date window to the last 7 days using the injected
-    /// <paramref name="timeProvider"/> (never <c>DateTime.UtcNow</c>), trims blanks out of the
+    /// timeProvider (never DateTime.UtcNow), trims blanks out of the
     /// account list, and returns a normalised filter with a concrete From/To window.
     /// </summary>
     /// <exception cref="SnapshotGridFilterValidationException">

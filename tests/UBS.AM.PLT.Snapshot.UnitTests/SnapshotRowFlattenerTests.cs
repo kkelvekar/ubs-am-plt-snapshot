@@ -1,6 +1,5 @@
 using System.Text.Json;
-using UBS.AM.PLT.Snapshot.Application.Models;
-using UBS.AM.PLT.Snapshot.Api;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 using Xunit;
 
 namespace UBS.AM.PLT.Snapshot.UnitTests;

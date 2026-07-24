@@ -3,7 +3,7 @@ using Confluent.Kafka;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using UBS.AM.PLT.Snapshot.Application.Contracts;
+using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 using UBS.AM.PLT.Snapshot.Domain;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;

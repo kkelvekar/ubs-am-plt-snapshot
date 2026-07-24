@@ -9,4 +9,10 @@
     <ProjectReference Include="..\..\Infrastructure\Sql\UBS.AM.PLT.Snapshot.Infrastructure.Sql.csproj" />
   </ItemGroup>
 
+  <!-- The exception handlers are internal wiring details; the unit tests exercise them
+       directly via InternalsVisibleTo, the same pattern the Infrastructure projects use. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="UBS.AM.PLT.Snapshot.UnitTests" />
+  </ItemGroup>
+
 </Project>

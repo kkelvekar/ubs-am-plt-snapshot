@@ -1,10 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
-using UBS.AM.PLT.Snapshot.Application.Models;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
-using UBS.AM.PLT.Snapshot.Api;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 

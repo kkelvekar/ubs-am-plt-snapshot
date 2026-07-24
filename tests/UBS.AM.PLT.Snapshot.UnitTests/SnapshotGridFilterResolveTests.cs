@@ -1,4 +1,4 @@
-using UBS.AM.PLT.Snapshot.Application.Models;
+using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 using UBS.AM.PLT.Snapshot.UnitTests.Fakes;
 using Xunit;
 

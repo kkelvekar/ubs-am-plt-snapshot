@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application;
+using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.UnitTests.Fakes;
