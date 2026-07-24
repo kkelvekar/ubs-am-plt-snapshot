@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.Snapshot.ReadApi.Models;
+namespace UBS.AM.PLT.Snapshot.Api.Models;
 
 /// <summary>
 /// HTTP request DTO for <c>GET /api/portfolio-snapshots</c>. Binds the grid query string:

@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Application.Models;
-using UBS.AM.PLT.Snapshot.ReadApi.Models;
+using UBS.AM.PLT.Snapshot.Api.Models;
 
-namespace UBS.AM.PLT.Snapshot.ReadApi.Controllers;
+namespace UBS.AM.PLT.Snapshot.Api.Controllers;
 
 /// <summary>
 /// Read endpoint for the Audit "Load snapshots" grid (solution design §7): a flat JSON array,

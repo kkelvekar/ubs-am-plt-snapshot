@@ -1,7 +1,7 @@
 using System.Text.Json;
 using UBS.AM.PLT.Snapshot.Application.Models;
 
-namespace UBS.AM.PLT.Snapshot.ReadApi;
+namespace UBS.AM.PLT.Snapshot.Api;
 
 /// <summary>
 /// Flattens each <see cref="SnapshotIndexRow"/> into one flat grid row: the fixed columns at
@@ -17,7 +17,6 @@ public static class SnapshotRowFlattener
     private const string AccountId = "accountId";
     private const string SnapshotDate = "snapshotDate";
     private const string EventType = "eventType";
-    private const string AdlsPath = "adlsPath";
     private const string CreatedAt = "createdAt";
 
     public static IReadOnlyList<Dictionary<string, object?>> Flatten(IEnumerable<SnapshotIndexRow> rows)
@@ -41,7 +40,6 @@ public static class SnapshotRowFlattener
             [AccountId] = row.AccountId,
             [SnapshotDate] = row.SnapshotDate,
             [EventType] = row.EventType,
-            [AdlsPath] = row.AdlsPath,
             [CreatedAt] = row.CreatedAt,
         };
 

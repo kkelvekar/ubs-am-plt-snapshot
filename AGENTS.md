@@ -103,8 +103,8 @@ org-provided consumer library, and that swap must touch **only the Infrastructur
 ## Scope guards
 
 - The daily cleanup job is **out of scope** for this repository — do not build it. The
-  Load-snapshots grid Read API (`GET /api/portfolio-snapshots`) **is in scope**
-  (`src/Clients/UBS.AM.PLT.Snapshot.ReadApi`). The Screen-2 snapshot-detail blob fetch
+  Load-snapshots grid Read API (`GET /snapshot/api/portfolio-snapshots`) **is in scope**
+  (`src/Clients/UBS.AM.PLT.Snapshot.Api`). The Screen-2 snapshot-detail blob fetch
   remains out of scope — do not build it.
 - **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
   K8s manifests, CI/CD pipeline files, or AKS deployment YAML. Deployment is handled

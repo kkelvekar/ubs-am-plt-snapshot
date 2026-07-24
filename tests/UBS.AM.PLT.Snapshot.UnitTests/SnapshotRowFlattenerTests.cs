@@ -1,6 +1,6 @@
 using System.Text.Json;
 using UBS.AM.PLT.Snapshot.Application.Models;
-using UBS.AM.PLT.Snapshot.ReadApi;
+using UBS.AM.PLT.Snapshot.Api;
 using Xunit;
 
 namespace UBS.AM.PLT.Snapshot.UnitTests;
@@ -50,7 +50,7 @@ public sealed class SnapshotRowFlattenerTests
         var flat = SnapshotRowFlattener.Flatten([row])[0];
 
         Assert.Equal(
-            new[] { "snapshotId", "accountId", "snapshotDate", "eventType", "adlsPath", "createdAt" },
+            new[] { "snapshotId", "accountId", "snapshotDate", "eventType", "createdAt" },
             flat.Keys);
     }
 

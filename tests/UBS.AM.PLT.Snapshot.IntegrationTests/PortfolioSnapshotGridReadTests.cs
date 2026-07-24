@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Application.Models;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
-using UBS.AM.PLT.Snapshot.ReadApi;
+using UBS.AM.PLT.Snapshot.Api;
 
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 
@@ -24,7 +24,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// write-side value converter would otherwise round-trip through the typed POCO and drop it).
 /// </para>
 /// <para>
-/// The read port is built the same way the ReadApi composition root builds it
+/// The read port is built the same way the Api composition root builds it
 /// (<c>AddSqlReadInfrastructure</c>) rather than re-using <see cref="SnapshotFixture.Handler"/>'s
 /// provider, which only wires the write-side stores.
 /// </para>
@@ -50,7 +50,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     {
         var sidOlder = NewSnapshotId("grid-older");
         var sidNewer = NewSnapshotId("grid-newer");
-        var sidOtherAccount = NewSnapshotId("grid-other-account");
+        var sidOtherAccount = NewSnapshotId("grid-othacct");
 
         // sidOlder: novel DisplayData key not modelled on SnapshotIndexDisplayData at all —
         // proves zero-code-change flow-through end to end.
@@ -132,8 +132,8 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     [Fact]
     public async Task Grid_query_honors_event_type_filter()
     {
-        var sidRebalance = NewSnapshotId("grid-eventtype-rebalance");
-        var sidCashFlow = NewSnapshotId("grid-eventtype-cashflow");
+        var sidRebalance = NewSnapshotId("grid-evt-reb");
+        var sidCashFlow = NewSnapshotId("grid-evt-cf");
 
         await InsertIndexRowAsync(
             sidRebalance,
@@ -174,8 +174,8 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     [Fact]
     public async Task Grid_query_honors_date_range_filter()
     {
-        var sidInRange = NewSnapshotId("grid-daterange-in");
-        var sidBeforeRange = NewSnapshotId("grid-daterange-before");
+        var sidInRange = NewSnapshotId("grid-dr-in");
+        var sidBeforeRange = NewSnapshotId("grid-dr-bef");
 
         await InsertIndexRowAsync(
             sidBeforeRange,
@@ -214,8 +214,8 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     [Fact]
     public async Task Grid_query_honors_account_id_in_filter()
     {
-        var sidAccountA = NewSnapshotId("grid-accountfilter-a");
-        var sidAccountB = NewSnapshotId("grid-accountfilter-b");
+        var sidAccountA = NewSnapshotId("grid-acct-a");
+        var sidAccountB = NewSnapshotId("grid-acct-b");
 
         await InsertIndexRowAsync(
             sidAccountA,
@@ -271,8 +271,8 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     }
 
     /// <summary>
-    /// Builds <see cref="ISnapshotIndexQuery"/> the same way the ReadApi composition root does
-    /// (<c>AddSqlReadInfrastructure</c>, in <c>ReadApi/Program.cs</c>), rather than reusing
+    /// Builds <see cref="ISnapshotIndexQuery"/> the same way the Api composition root does
+    /// (<c>AddSqlReadInfrastructure</c>, in <c>Api/Program.cs</c>), rather than reusing
     /// <see cref="SnapshotFixture"/>'s write-side provider, which never registers the read port.
     /// The returned wrapper owns its own <see cref="ServiceProvider"/> and disposes it with the
     /// query, closing the pooled DbContext factory it creates.
