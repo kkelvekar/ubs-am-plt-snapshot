@@ -21,7 +21,7 @@ Scenario: An unexpected file arriving before the required files is stored and do
     When an unexpected auditlog payload is stored
     Then the snapshot remains RECEIVING and its received files include "auditlog.json"
     And no index row has been written for the snapshot
-    When a required instruments payload is stored
+    When a required orders payload is stored
     And a required calculations payload is stored
     And a required settings payload is stored
     And the completing header is stored
@@ -32,7 +32,7 @@ Scenario: An unexpected file arriving before the required files is stored and do
 
 Scenario: An unexpected file arriving after completion is stored without re-completing the snapshot
     Given an out-of-contract snapshot for account "IT-ACC-008"
-    When a required instruments payload is stored
+    When a required orders payload is stored
     And a required calculations payload is stored
     And a required settings payload is stored
     And the completing header is stored

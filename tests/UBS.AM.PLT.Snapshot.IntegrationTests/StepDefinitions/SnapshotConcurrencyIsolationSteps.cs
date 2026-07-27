@@ -10,8 +10,8 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// test is that the SQL-keyed write path (tracking/index keyed by snapshotId) never lets one
 /// snapshot's processing observe or mutate another's, regardless of how their messages interleave
 /// on a single consumer thread. Two snapshots that must be proven distinct receive DIFFERENT
-/// canned instruments payloads (one "gets its instruments payload", the other "gets its own
-/// distinct instruments payload") so their blobs can be shown to differ. The clock is anchored to a
+/// canned orders payloads (one "gets its orders payload", the other "gets its own
+/// distinct orders payload") so their blobs can be shown to differ. The clock is anchored to a
 /// fixed-but-arbitrary instant inside the "concurrent snapshot processing begins" step. The
 /// run-scoped <see cref="SnapshotFixture"/> and the scenario-scoped
 /// <see cref="ScenarioFixtureContext"/> are constructor-injected by Reqnroll, which creates one
@@ -56,13 +56,13 @@ public sealed class SnapshotConcurrencyIsolationSteps
         _sentMessages[label] = new Dictionary<string, SnapshotMessage>(StringComparer.Ordinal);
     }
 
-    [When("snapshot \"(.*)\" gets its instruments payload")]
-    public Task WhenSnapshotGetsItsInstrumentsPayload(string label) =>
-        SendPayloadAsync(label, "instruments", TestPayloads.InstrumentsJson);
+    [When("snapshot \"(.*)\" gets its orders payload")]
+    public Task WhenSnapshotGetsItsOrdersPayload(string label) =>
+        SendPayloadAsync(label, "orders", TestPayloads.OrdersJson);
 
-    [When("snapshot \"(.*)\" gets its own distinct instruments payload")]
-    public Task WhenSnapshotGetsItsOwnDistinctInstrumentsPayload(string label) =>
-        SendPayloadAsync(label, "instruments", TestPayloads.InstrumentsJsonAlt);
+    [When("snapshot \"(.*)\" gets its own distinct orders payload")]
+    public Task WhenSnapshotGetsItsOwnDistinctOrdersPayload(string label) =>
+        SendPayloadAsync(label, "orders", TestPayloads.OrdersJsonAlt);
 
     [When("snapshot \"(.*)\" gets its calculations payload")]
     public Task WhenSnapshotGetsItsCalculationsPayload(string label) =>
@@ -151,19 +151,19 @@ public sealed class SnapshotConcurrencyIsolationSteps
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
     }
 
-    [Then("snapshot \"(.*)\" instruments blob equals its sent instruments payload")]
-    public async Task ThenSnapshotInstrumentsBlobEqualsItsSentInstrumentsPayload(string label)
+    [Then("snapshot \"(.*)\" orders blob equals its sent orders payload")]
+    public async Task ThenSnapshotOrdersBlobEqualsItsSentOrdersPayload(string label)
     {
-        var expected = SentMessage(label, "instruments").Payload.GetRawText();
-        var blobText = await DownloadInstrumentsBlobAsync(label);
+        var expected = SentMessage(label, "orders").Payload;
+        var blobText = await DownloadOrdersBlobAsync(label);
         Assert.Equal(expected, blobText);
     }
 
-    [Then("the two instruments blobs differ")]
-    public async Task ThenTheTwoInstrumentsBlobsDiffer()
+    [Then("the two orders blobs differ")]
+    public async Task ThenTheTwoOrdersBlobsDiffer()
     {
-        var a = await DownloadInstrumentsBlobAsync("A");
-        var b = await DownloadInstrumentsBlobAsync("B");
+        var a = await DownloadOrdersBlobAsync("A");
+        var b = await DownloadOrdersBlobAsync("B");
         Assert.NotEqual(a, b);
     }
 
@@ -231,10 +231,10 @@ public sealed class SnapshotConcurrencyIsolationSteps
         await _fixture.Handler.HandleAsync(message, CancellationToken.None);
     }
 
-    private async Task<string> DownloadInstrumentsBlobAsync(string label)
+    private async Task<string> DownloadOrdersBlobAsync(string label)
     {
         var tracking = await GetTrackingAsync(label);
-        return await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/instruments.json");
+        return await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/orders.json");
     }
 
     private Task<SnapshotTrackingEntity> GetTrackingAsync(string label) =>

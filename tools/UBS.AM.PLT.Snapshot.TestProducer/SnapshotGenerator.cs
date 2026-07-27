@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace UBS.AM.PLT.Snapshot.TestProducer;
@@ -15,7 +15,6 @@ public static class SnapshotGenerator
         for (var snapshotIndex = 0; snapshotIndex < options.SnapshotCount; snapshotIndex++)
         {
             var accountId = template.AccountIds[snapshotIndex % template.AccountIds.Count];
-            var stage = template.Stages[snapshotIndex % template.Stages.Count];
             var snapshotId = $"corr{startedAt:yyyyMMddHHmmss}-{snapshotIndex + 1:0000}";
             var snapshotPublishedAt = startedAt
                 .AddTicks(options.MessageDelay.Ticks * snapshotIndex * (template.Payloads.Count - 1))
@@ -30,10 +29,8 @@ public static class SnapshotGenerator
                     accountId,
                     "portfolio",
                     payload.PayloadType,
-                    stage,
-                    messagePublishedAt,
+                    messagePublishedAt.ToString("O", CultureInfo.InvariantCulture),
                     payload.PublishedBy,
-                    "1.0",
                     BuildPayload(payload, snapshotIndex, messagePublishedAt)));
             }
         }
@@ -41,7 +38,7 @@ public static class SnapshotGenerator
         return messages;
     }
 
-    private static JsonElement BuildPayload(PayloadTemplate template, int snapshotIndex, DateTimeOffset publishedAt)
+    private static string BuildPayload(PayloadTemplate template, int snapshotIndex, DateTimeOffset publishedAt)
     {
         var node = JsonNode.Parse(template.Payload.GetRawText())
             ?? throw new InvalidOperationException($"Payload template '{template.PayloadType}' is not valid JSON.");
@@ -63,7 +60,7 @@ public static class SnapshotGenerator
             }
         }
 
-        using var document = JsonDocument.Parse(node.ToJsonString());
-        return document.RootElement.Clone();
+        // The wire contract carries the payload as a string of already-serialised JSON.
+        return node.ToJsonString();
     }
 }

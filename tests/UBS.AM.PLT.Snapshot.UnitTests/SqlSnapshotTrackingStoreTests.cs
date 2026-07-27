@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Globalization;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
@@ -31,7 +31,7 @@ public sealed class SqlSnapshotTrackingStoreTests
     [Fact]
     public async Task Insert_path_creates_a_receiving_row_with_all_fields_set()
     {
-        var message = CreateMessage("snap-1", "instruments");
+        var message = CreateMessage("snap-1", "orders");
 
         var entry = await _store.UpsertReceivedAsync(message, RootPath, CancellationToken.None);
 
@@ -40,7 +40,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         Assert.Equal(message.AccountId, entry.AccountId);
         Assert.Equal(message.SnapshotType, entry.SnapshotType);
         Assert.Equal(RootPath, entry.AdlsRootPath);
-        Assert.Equal(["instruments.json"], entry.ReceivedFiles);
+        Assert.Equal(["orders.json"], entry.ReceivedFiles);
         Assert.Equal(SnapshotTrackingStatus.Receiving, entry.Status);
         Assert.Equal(StartTime.UtcDateTime, entry.FirstReceivedAt);
         Assert.Equal(StartTime.UtcDateTime, entry.LastUpdatedAt);
@@ -50,13 +50,13 @@ public sealed class SqlSnapshotTrackingStoreTests
     [Fact]
     public async Task Update_path_with_a_duplicate_filename_only_advances_last_updated_at()
     {
-        var message = CreateMessage("snap-1", "instruments");
+        var message = CreateMessage("snap-1", "orders");
         await _store.UpsertReceivedAsync(message, RootPath, CancellationToken.None);
 
         _timeProvider.UtcNow = StartTime.AddMinutes(5);
         var entry = await _store.UpsertReceivedAsync(message, "some/other/root", CancellationToken.None);
 
-        Assert.Equal(["instruments.json"], entry.ReceivedFiles);
+        Assert.Equal(["orders.json"], entry.ReceivedFiles);
         Assert.Equal(StartTime.AddMinutes(5).UtcDateTime, entry.LastUpdatedAt);
         // First-write-wins fields are never touched on the update path.
         Assert.Equal(SnapshotTrackingStatus.Receiving, entry.Status);
@@ -70,9 +70,9 @@ public sealed class SqlSnapshotTrackingStoreTests
         await _store.UpsertReceivedAsync(CreateMessage("snap-1", "header"), RootPath, CancellationToken.None);
 
         var entry = await _store.UpsertReceivedAsync(
-            CreateMessage("snap-1", "instruments"), RootPath, CancellationToken.None);
+            CreateMessage("snap-1", "orders"), RootPath, CancellationToken.None);
 
-        Assert.Equal(["header.json", "instruments.json"], entry.ReceivedFiles);
+        Assert.Equal(["header.json", "orders.json"], entry.ReceivedFiles);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class SqlSnapshotTrackingStoreTests
 
         _timeProvider.UtcNow = StartTime.AddHours(2);
         var entry = await _store.UpsertReceivedAsync(
-            CreateMessage("snap-1", "instruments"), "some/other/root", CancellationToken.None);
+            CreateMessage("snap-1", "orders"), "some/other/root", CancellationToken.None);
 
         Assert.Equal(SnapshotTrackingStatus.Complete, entry.Status);
         Assert.Equal(RootPath, entry.AdlsRootPath);
@@ -106,7 +106,7 @@ public sealed class SqlSnapshotTrackingStoreTests
     [Fact]
     public async Task MarkComplete_on_a_receiving_row_sets_complete_and_completed_at()
     {
-        await _store.UpsertReceivedAsync(CreateMessage("snap-1", "instruments"), RootPath, CancellationToken.None);
+        await _store.UpsertReceivedAsync(CreateMessage("snap-1", "orders"), RootPath, CancellationToken.None);
 
         _timeProvider.UtcNow = StartTime.AddMinutes(3);
         await _store.MarkCompleteAsync("snap-1", CancellationToken.None);
@@ -136,7 +136,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         AccountId = "00675442A",
         SnapshotType = "portfolio",
         AdlsRootPath = RootPath,
-        ReceivedFiles = ["header.json", "instruments.json", "calculations.json", "settings.json"],
+        ReceivedFiles = ["header.json", "orders.json", "calculations.json", "settings.json"],
         Status = SnapshotTrackingStatus.Complete,
         FirstReceivedAt = StartTime.UtcDateTime,
         LastUpdatedAt = completedAt,
@@ -144,19 +144,14 @@ public sealed class SqlSnapshotTrackingStoreTests
     };
 
     private static SnapshotMessage CreateMessage(string snapshotId, string payloadType)
-    {
-        using var payload = JsonDocument.Parse("""{"total":21}""");
-        return new SnapshotMessage
+        => new()
         {
             SnapshotId = snapshotId,
             AccountId = "00675442A",
             SnapshotType = "portfolio",
             PayloadType = payloadType,
-            Stage = "PreTrade",
-            PublishedAt = StartTime.UtcDateTime,
+            PublishedAt = StartTime.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = payload.RootElement.Clone(),
+            Payload = """{"total":21}""",
         };
-    }
 }

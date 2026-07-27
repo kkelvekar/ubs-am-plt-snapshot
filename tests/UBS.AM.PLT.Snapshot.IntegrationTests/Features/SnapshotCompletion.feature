@@ -5,7 +5,7 @@ Feature: Snapshot completion and end-to-end ordering
 
 Scenario: The final required payload completes the set and writes the index via upsert
     Given a completion snapshot for account "IT-ACC-002"
-    When the instruments payload is received
+    When the orders payload is received
     Then the snapshot is still receiving with no index row
     When the calculations payload is received
     Then the snapshot is still receiving with no index row
@@ -19,7 +19,7 @@ Scenario: The final required payload completes the set and writes the index via 
 Scenario: A full snapshot in canonical order is queryable with correct display data
     Given a completion snapshot for account "IT-ACC-002"
     When the standard header payload is received
-    And the instruments payload is received
+    And the orders payload is received
     And the calculations payload is received
     And the settings payload is received
     Then the snapshot end state is a well-formed completed snapshot
@@ -29,5 +29,5 @@ Scenario: A full snapshot in shuffled order reaches the same end state as canoni
     When the settings payload is received
     And the calculations payload is received
     And the standard header payload is received
-    And the instruments payload is received
+    And the orders payload is received
     Then the snapshot end state is a well-formed completed snapshot

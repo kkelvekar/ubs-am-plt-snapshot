@@ -1,0 +1,72 @@
+{
+  "_comment": "Sample Kafka messages for the ubs-advantage-snapshots topic, conforming to docs/snapshot-request.schema.json. Each entry is one message value (publish as a JSON string, key = AccountId). Together the four entries form one complete snapshot: the index row is written once all four required files (header, orders, calculations, settings) have been received.",
+  "messages": [
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "header",
+      "PublishedAt": "2026-07-27T10:45:00.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"eventType\":\"REBALANCE\",\"portfolioStatus\":\"APPROVED\",\"orderStatus\":\"SENT\",\"benchmark\":\"MSCI World\",\"baseCcy\":\"CHF\",\"programId\":\"PRG-7\",\"batchId\":\"BATCH-2026-07-13\",\"numOrders\":17,\"ptcAlerts\":2,\"orderApprovedBy\":\"approver@ubs.com\",\"orderApprovedAt\":\"2026-07-13T10:45:00Z\",\"orderSentBy\":\"sender@ubs.com\",\"orderSentAt\":\"2026-07-13T10:50:00Z\"}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "orders",
+      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "calculations",
+      "PublishedAt": "2026-07-27T10:45:10.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"nav\":5555.55,\"ccy\":\"CHF\"}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "settings",
+      "PublishedAt": "2026-07-27T10:45:15.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"tolerance\":0.05}"
+    }
+  ],
+  "malformedExamples": [
+    {
+      "_comment": "Missing SnapshotId - exercises the envelope identity guard / consumer no-commit-retry path.",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "orders",
+      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
+    },
+    {
+      "_comment": "Explicit null AccountId - present but null, rejected by the handler's identity guard before any write.",
+      "SnapshotId": "corr20260727-0002",
+      "AccountId": null,
+      "SnapshotType": "portfolio",
+      "PayloadType": "orders",
+      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
+    },
+    {
+      "_comment": "Syntactically invalid Payload (truncated JSON) - rejected before the blob write, offset never committed, message redelivered.",
+      "SnapshotId": "corr20260727-0003",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "orders",
+      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"positions\":[{\"isin\":"
+    }
+  ]
+}

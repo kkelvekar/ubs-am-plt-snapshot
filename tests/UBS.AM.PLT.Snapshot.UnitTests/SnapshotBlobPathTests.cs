@@ -1,4 +1,3 @@
-using System.Text.Json;
 using UBS.AM.PLT.Snapshot.Domain;
 using Xunit;
 
@@ -16,7 +15,7 @@ public class SnapshotBlobPathTests
         var fullPath = SnapshotBlobPath.FullPath(SnapshotBlobPath.RootFolder(message, ArrivalTime), message.PayloadType);
 
         Assert.Equal(
-            "portfolio_snapshots/year=2026/month=05/accountId=00675442A/snapshotId=corr98765/instruments.json",
+            "portfolio_snapshots/year=2026/month=05/accountId=00675442A/snapshotId=corr98765/orders.json",
             fullPath);
     }
 
@@ -39,7 +38,7 @@ public class SnapshotBlobPathTests
     {
         // PublishedAt (December 2025) and arrival (January 2026) fall in different
         // months AND years — the path must follow arrival, never PublishedAt.
-        var message = CreateMessage(publishedAt: new DateTime(2025, 12, 31, 23, 59, 58, DateTimeKind.Utc));
+        var message = CreateMessage(publishedAt: "2025-12-31T23:59:58Z");
         var arrival = new DateTimeOffset(2026, 1, 1, 0, 0, 2, TimeSpan.Zero);
 
         var rootFolder = SnapshotBlobPath.RootFolder(message, arrival);
@@ -63,7 +62,7 @@ public class SnapshotBlobPathTests
 
     [Theory]
     [InlineData("header", "header.json")]
-    [InlineData("instruments", "instruments.json")]
+    [InlineData("orders", "orders.json")]
     [InlineData("calculations", "calculations.json")]
     public void FileName_is_payloadType_with_json_extension(string payloadType, string expected)
     {
@@ -91,20 +90,15 @@ public class SnapshotBlobPathTests
 
     private static SnapshotMessage CreateMessage(
         string snapshotType = "portfolio",
-        DateTime? publishedAt = null)
-    {
-        using var payload = JsonDocument.Parse("""{"total":21}""");
-        return new SnapshotMessage
+        string publishedAt = "2026-05-22T06:10:14Z")
+        => new()
         {
             SnapshotId = "corr98765",
             AccountId = "00675442A",
             SnapshotType = snapshotType,
-            PayloadType = "instruments",
-            Stage = "PreTrade",
-            PublishedAt = publishedAt ?? new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            PayloadType = "orders",
+            PublishedAt = publishedAt,
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = payload.RootElement.Clone(),
+            Payload = """{"total":21}""",
         };
-    }
 }

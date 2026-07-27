@@ -61,9 +61,9 @@ public sealed class PartialSnapshotReceiptSteps
         _fixture.CurrentTime = _fixture.CurrentTime.AddMinutes(7);
     }
 
-    [When("the instruments payload arrives")]
-    public Task WhenTheInstrumentsPayloadArrives() =>
-        SendPayloadAsync("instruments", TestPayloads.InstrumentsJson);
+    [When("the orders payload arrives")]
+    public Task WhenTheOrdersPayloadArrives() =>
+        SendPayloadAsync("orders", TestPayloads.OrdersJson);
 
     [When("the calculations payload arrives")]
     public Task WhenTheCalculationsPayloadArrives() =>
@@ -81,7 +81,7 @@ public sealed class PartialSnapshotReceiptSteps
     public async Task ThenTheBlobUnderTheSnapshotRootContainsTheSentPayload(string fileName)
     {
         var expectedBody = (_lastMessage ?? throw new InvalidOperationException("No payload has been sent yet."))
-            .Payload.GetRawText();
+            .Payload;
         var blobText = await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{ExpectedRootPath}/{fileName}");
         Assert.Equal(expectedBody, blobText);
     }
@@ -151,7 +151,7 @@ public sealed class PartialSnapshotReceiptSteps
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var rootPath = tracking.AdlsRootPath;
-        foreach (var fileName in new[] { "header.json", "instruments.json", "settings.json", "calculations.json" })
+        foreach (var fileName in new[] { "header.json", "orders.json", "settings.json", "calculations.json" })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{rootPath}/{fileName}").ExistsAsync(),

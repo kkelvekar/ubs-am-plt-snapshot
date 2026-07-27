@@ -7,10 +7,10 @@ Scenario: Interleaved payloads for two snapshots on different partitions never c
     Given concurrent snapshot processing begins
     And snapshot "A" is registered under account "IT-ACC-003"
     And snapshot "B" is registered under account "IT-ACC-004"
-    When snapshot "A" gets its instruments payload
-    And snapshot "B" gets its own distinct instruments payload
-    Then snapshot "A" is RECEIVING with received files "instruments.json"
-    And snapshot "B" is RECEIVING with received files "instruments.json"
+    When snapshot "A" gets its orders payload
+    And snapshot "B" gets its own distinct orders payload
+    Then snapshot "A" is RECEIVING with received files "orders.json"
+    And snapshot "B" is RECEIVING with received files "orders.json"
     And snapshot "A" and snapshot "B" have different tracking roots
     And snapshot "A" tracking root contains the segment "accountId=IT-ACC-003/"
     And snapshot "B" tracking root contains the segment "accountId=IT-ACC-004/"
@@ -22,7 +22,7 @@ Scenario: Interleaved payloads for two snapshots on different partitions never c
     And snapshot "B" gets its settings payload
     And snapshot "A" gets its standard header payload
     Then snapshot "A" is COMPLETE with a completed time and an index row
-    And snapshot "B" is RECEIVING with received files "instruments.json,calculations.json,settings.json"
+    And snapshot "B" is RECEIVING with received files "orders.json,calculations.json,settings.json"
     And snapshot "B" received files exclude "header.json"
     And snapshot "B" has no completed time
     And snapshot "B" has no index row
@@ -31,15 +31,15 @@ Scenario: Interleaved payloads for two snapshots on different partitions never c
     And snapshot "B" is COMPLETE
     And snapshot "A" index row has account "IT-ACC-003" and adls path equal to its tracking root
     And snapshot "B" index row has account "IT-ACC-004" and adls path equal to its tracking root
-    And snapshot "A" instruments blob equals its sent instruments payload
-    And snapshot "B" instruments blob equals its sent instruments payload
-    And the two instruments blobs differ
+    And snapshot "A" orders blob equals its sent orders payload
+    And snapshot "B" orders blob equals its sent orders payload
+    And the two orders blobs differ
 
 Scenario: Two sequential snapshots for the same account stay isolated by snapshotId
     Given concurrent snapshot processing begins
     And snapshot "S1" is registered under account "IT-ACC-005"
     When snapshot "S1" gets its standard header payload
-    And snapshot "S1" gets its instruments payload
+    And snapshot "S1" gets its orders payload
     And snapshot "S1" gets its calculations payload
     And snapshot "S1" gets its settings payload
     Then snapshot "S1" is COMPLETE
@@ -47,7 +47,7 @@ Scenario: Two sequential snapshots for the same account stay isolated by snapsho
     When 20 minutes pass
     And snapshot "S2" is registered under account "IT-ACC-005"
     And snapshot "S2" gets its standard header payload
-    And snapshot "S2" gets its instruments payload
+    And snapshot "S2" gets its orders payload
     And snapshot "S2" gets its calculations payload
     And snapshot "S2" gets its settings payload
     Then snapshot "S2" is COMPLETE

@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace UBS.AM.PLT.Snapshot.TestProducer;
 
 public sealed record SnapshotEnvelope(
@@ -7,8 +5,6 @@ public sealed record SnapshotEnvelope(
     string AccountId,
     string SnapshotType,
     string PayloadType,
-    string Stage,
-    DateTimeOffset PublishedAt,
+    string PublishedAt,
     string PublishedBy,
-    string SchemaVersion,
-    JsonElement Payload);
+    string Payload);

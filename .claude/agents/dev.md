@@ -37,8 +37,11 @@ design-level question back instead of improvising.
   map (`Infrastructure.Sql`), never scattered through processing logic. That constant is
   the sanctioned home (the org config layer cannot carry custom appsettings keys) — adding
   a type there is not a violation.
-- Payloads stay opaque `JsonElement`, written via `GetRawText()`; only `header` is
-  deserialised, at completion time.
+- Wire contract is `docs/snapshot-request.schema.json`: seven string properties, PascalCase.
+  Payloads stay opaque JSON *text* in a `string`, written to blob verbatim (never
+  re-serialised from anything parsed). Only `header` is deserialised, at completion time.
+  The one sanctioned touch is the handler's syntax-only well-formedness check before the
+  first write — parse, dispose immediately, never inspect a field.
 - Kafka bootstrap servers and all connection strings configurable via environment
   variable overrides (standard .NET config binding, e.g. `Kafka__BootstrapServers`).
   No environment-specific code.

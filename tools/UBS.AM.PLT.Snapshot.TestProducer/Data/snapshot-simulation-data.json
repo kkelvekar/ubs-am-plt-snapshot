@@ -5,11 +5,6 @@
     "10923847P",
     "77441290K"
   ],
-  "stages": [
-    "PreTrade",
-    "PortfolioOptimisation",
-    "OrderGeneration"
-  ],
   "payloads": [
     {
       "payloadType": "header",
@@ -31,7 +26,7 @@
       }
     },
     {
-      "payloadType": "instruments",
+      "payloadType": "orders",
       "publishedBy": "PortfolioCalculation",
       "payload": {
         "total": 21,

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application;
 using UBS.AM.PLT.Snapshot.Domain;
@@ -11,7 +10,7 @@ namespace UBS.AM.PLT.Snapshot.UnitTests;
 public class SnapshotMessageHandlerTests
 {
     private static readonly HashSet<string> PortfolioRequiredFiles =
-        ["header.json", "instruments.json", "calculations.json", "settings.json"];
+        ["header.json", "orders.json", "calculations.json", "settings.json"];
 
     [Fact]
     public async Task HandleAsync_writes_to_blob_store_exactly_once_with_the_incoming_message()
@@ -55,11 +54,11 @@ public class SnapshotMessageHandlerTests
         var handler = CreateHandler(blobStore, trackingStore, timeProvider: timeProvider);
 
         var header = CreateMessage(payloadType: "header");
-        var instruments = CreateMessage(payloadType: "instruments");
+        var orders = CreateMessage(payloadType: "orders");
 
         await handler.HandleAsync(header, CancellationToken.None);
         timeProvider.UtcNow = new DateTimeOffset(2026, 6, 1, 0, 0, 2, TimeSpan.Zero); // month boundary crossed
-        await handler.HandleAsync(instruments, CancellationToken.None);
+        await handler.HandleAsync(orders, CancellationToken.None);
 
         var pinnedRootPath = SnapshotBlobPath.RootFolder(header, new DateTimeOffset(2026, 5, 31, 23, 59, 58, TimeSpan.Zero));
         Assert.Contains("month=05", pinnedRootPath);
@@ -115,7 +114,7 @@ public class SnapshotMessageHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_logs_snapshotId_accountId_payloadType_and_stage()
+    public async Task HandleAsync_logs_snapshotId_accountId_and_payloadType()
     {
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(new FakeSnapshotBlobStore(), new FakeSnapshotTrackingStore(), logger: logger);
@@ -126,8 +125,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(LogLevel.Information, entry.Level);
         Assert.Equal("corr98765", entry.State["SnapshotId"]);
         Assert.Equal("00675442A", entry.State["AccountId"]);
-        Assert.Equal("instruments", entry.State["PayloadType"]);
-        Assert.Equal("PreTrade", entry.State["Stage"]);
+        Assert.Equal("orders", entry.State["PayloadType"]);
     }
 
     [Fact]
@@ -136,7 +134,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "instruments.json"],
+            ReceivedFilesToReturn = ["header.json", "orders.json"],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
@@ -159,7 +157,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "instruments.json", "calculations.json", "settings.json"],
+            ReceivedFilesToReturn = ["header.json", "orders.json", "calculations.json", "settings.json"],
             CallOrderLog = callOrderLog,
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
@@ -248,7 +246,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "instruments.json", "calculations.json", "settings.json"],
+            ReceivedFilesToReturn = ["header.json", "orders.json", "calculations.json", "settings.json"],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider(); // "portfolio" deliberately unconfigured
         var indexStore = new FakeSnapshotIndexStore();
@@ -269,11 +267,13 @@ public class SnapshotMessageHandlerTests
     [InlineData("AccountId")]
     [InlineData("SnapshotType")]
     [InlineData("PayloadType")]
-    public async Task HandleAsync_rejects_a_null_required_identity_field_before_any_write(string nullField)
+    [InlineData("Payload")]
+    public async Task HandleAsync_rejects_a_null_required_envelope_field_before_any_write(string nullField)
     {
-        // TC-23b: a present-but-null identity field passes JSON `required` deserialisation
-        // but would corrupt the blob path / tracking row. The handler must reject it before
-        // the first (blob) write, throwing so the consumer's retry/alert path handles it.
+        // TC-23b: a present-but-null envelope field passes JSON `required` deserialisation
+        // but would corrupt the blob path / tracking row (or write an empty .json blob).
+        // The handler must reject it before the first (blob) write, throwing so the
+        // consumer's retry/alert path handles it.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
@@ -288,22 +288,64 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(logger.Entries);
     }
 
-    private static SnapshotMessage CreateMessageWithNullField(string nullField)
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("{")]
+    [InlineData("""{"total":21""")]
+    [InlineData("not json at all")]
+    [InlineData("""{"total":21}{"total":22}""")]
+    public async Task HandleAsync_rejects_a_syntactically_invalid_payload_before_touching_any_store(string payload)
     {
-        using var payloadDocument = JsonDocument.Parse("""{"total":21}""");
-        return new SnapshotMessage
+        // The payload now arrives as a string of already-serialised JSON. A syntactically
+        // broken one would land in blob as an invalid .json file, so the handler rejects it
+        // up front — blob, tracking and index must all be untouched, and nothing logged.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var indexStore = new FakeSnapshotIndexStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => handler.HandleAsync(CreateMessage(payload: payload), CancellationToken.None));
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(blobStore.HeaderReadsFor);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(trackingStore.MarkedComplete);
+        Assert.Empty(indexStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_hands_the_blob_store_the_payload_text_verbatim_on_every_delivery()
+    {
+        // Byte-identity is what makes the blob overwrite content-idempotent: the handler
+        // must never re-serialise the payload from its syntax-check parse. Insignificant
+        // whitespace and key order are therefore preserved exactly, on the first delivery
+        // and on redelivery.
+        const string payload = """{  "total" : 21,  "b":1, "a":2  }""";
+        var blobStore = new FakeSnapshotBlobStore();
+        var handler = CreateHandler(blobStore, new FakeSnapshotTrackingStore());
+
+        await handler.HandleAsync(CreateMessage(payload: payload), CancellationToken.None);
+        await handler.HandleAsync(CreateMessage(payload: payload), CancellationToken.None);
+
+        Assert.Equal(2, blobStore.Written.Count);
+        Assert.All(blobStore.Written, written => Assert.Equal(payload, written.Message.Payload));
+    }
+
+    private static SnapshotMessage CreateMessageWithNullField(string nullField)
+        => new()
         {
             SnapshotId = nullField == "SnapshotId" ? null! : "corr98765",
             AccountId = nullField == "AccountId" ? null! : "00675442A",
             SnapshotType = nullField == "SnapshotType" ? null! : "portfolio",
-            PayloadType = nullField == "PayloadType" ? null! : "instruments",
-            Stage = "PreTrade",
-            PublishedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            PayloadType = nullField == "PayloadType" ? null! : "orders",
+            PublishedAt = "2026-05-22T06:10:14Z",
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = payloadDocument.RootElement.Clone(),
+            Payload = nullField == "Payload" ? null! : """{"total":21}""",
         };
-    }
 
     private static SnapshotMessageHandler CreateHandler(
         FakeSnapshotBlobStore blobStore,
@@ -328,20 +370,15 @@ public class SnapshotMessageHandlerTests
             logger ?? new CapturingLogger<SnapshotMessageHandler>());
     }
 
-    private static SnapshotMessage CreateMessage(string payloadType = "instruments", string payload = """{"total":21}""")
-    {
-        using var payloadDocument = JsonDocument.Parse(payload);
-        return new SnapshotMessage
+    private static SnapshotMessage CreateMessage(string payloadType = "orders", string payload = """{"total":21}""")
+        => new()
         {
             SnapshotId = "corr98765",
             AccountId = "00675442A",
             SnapshotType = "portfolio",
             PayloadType = payloadType,
-            Stage = "PreTrade",
-            PublishedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            PublishedAt = "2026-05-22T06:10:14Z",
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = payloadDocument.RootElement.Clone(),
+            Payload = payload,
         };
-    }
 }

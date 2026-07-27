@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
@@ -26,7 +26,7 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     // Fresh account id — IT-ACC-001..007 are used by Groups A/B/C/F/G.
     private const string AccountId = "IT-ACC-008";
 
-    private const string InstrumentsJson = """{"positions":[{"isin":"CH0038863350","qty":250}]}""";
+    private const string OrdersJson = """{"positions":[{"isin":"CH0038863350","qty":250}]}""";
     private const string CalculationsJson = """{"nav":5555.55,"ccy":"CHF"}""";
     private const string SettingsJson = """{"tolerance":0.05}""";
 
@@ -65,7 +65,7 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         // and retries — no index row, snapshot never COMPLETE.
         Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 17, 0, 0, TimeSpan.Zero);
         var snapshotId = NewSnapshotId("tc24");
-        var message = CreateMessage(snapshotId, "instruments", InstrumentsJson, snapshotType: "mystery");
+        var message = CreateMessage(snapshotId, "orders", OrdersJson, snapshotType: "mystery");
 
         var exception = await Record.ExceptionAsync(
             () => Fixture.Handler.HandleAsync(message, CancellationToken.None));
@@ -76,12 +76,12 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         // Blob and tracking row were written before the failing completeness step.
         var tracking = await GetTrackingAsync(snapshotId);
         Assert.Equal(SnapshotTrackingStatus.Receiving, tracking.Status);
-        Assert.Equal(new[] { "instruments.json" }, tracking.ReceivedFiles);
+        Assert.Equal(new[] { "orders.json" }, tracking.ReceivedFiles);
         Assert.Null(tracking.CompletedAt);
         Assert.StartsWith("mystery_snapshots/", tracking.AdlsRootPath);
         Assert.True(
-            await Fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/instruments.json").ExistsAsync(),
-            "Expected the instruments blob to have been written before the completeness check failed.");
+            await Fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/orders.json").ExistsAsync(),
+            "Expected the orders blob to have been written before the completeness check failed.");
 
         // Never reaches the index.
         Assert.False(await IndexRowExistsAsync(snapshotId));
@@ -98,7 +98,7 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 20, 0, 0, TimeSpan.Zero);
         var snapshotId = NewSnapshotId("tc26");
 
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "instruments", InstrumentsJson), CancellationToken.None);
+        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "orders", OrdersJson), CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "calculations", CalculationsJson), CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "settings", SettingsJson), CancellationToken.None);
 
@@ -133,22 +133,16 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         string payloadType,
         string payloadJson,
         string snapshotType = "portfolio")
-    {
-        using var document = JsonDocument.Parse(payloadJson);
-
-        return new SnapshotMessage
+        => new()
         {
             SnapshotId = snapshotId,
             AccountId = AccountId,
             SnapshotType = snapshotType,
             PayloadType = payloadType,
-            Stage = "PreTrade",
-            PublishedAt = Fixture.CurrentTime.UtcDateTime,
+            PublishedAt = Fixture.CurrentTime.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = document.RootElement.Clone(),
+            Payload = payloadJson,
         };
-    }
 
     private async Task<SnapshotTrackingEntity> GetTrackingAsync(string snapshotId)
     {

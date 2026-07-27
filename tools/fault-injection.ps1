@@ -83,7 +83,7 @@
     - Producer:
         dotnet run --project tools/UBS.AM.PLT.Snapshot.TestProducer -- \
           --snapshots 1 --message-delay 00:00:05
-      (4 payload messages per snapshot: header, instruments, calculations, settings;
+      (4 payload messages per snapshot: header, orders, calculations, settings;
       fresh snapshotId per run: corr<timestamp>-0001 — see SnapshotGenerator.cs)
     - Consumer-group offset/lag inspection (adjust bin path only if the image
       layout differs — verified against apache/kafka:3.9.1 as used by
