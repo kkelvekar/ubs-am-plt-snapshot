@@ -36,7 +36,10 @@ strings stay verbatim. Do not announce the mode.
      from the single library-owned `SnapshotConfigDefinition` map (the sanctioned home,
      since the org config layer cannot carry custom appsettings keys) — an entry there is
      not a violation; scattering the list through processing logic is.
-   - Payloads treated as opaque `JsonElement` except `header` at completion time.
+   - Payloads treated as opaque JSON text written to blob verbatim, except `header` at
+     completion time. The handler's syntax-only well-formedness check before the first
+     write (`JsonDocument.Parse`, disposed immediately, no field inspected) is sanctioned;
+     inspecting payload structure, or re-serialising a parsed payload into the blob, is not.
 2. **Clean Architecture** — dependencies inward only; no infrastructure types leaking
    into `Application`/`Domain`; ports in `Application`, adapters in `Infrastructure`;
    `Worker` is composition root only.

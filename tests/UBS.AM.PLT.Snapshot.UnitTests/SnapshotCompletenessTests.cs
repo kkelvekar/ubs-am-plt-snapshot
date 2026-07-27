@@ -8,8 +8,8 @@ public class SnapshotCompletenessTests
     [Fact]
     public void IsComplete_is_false_when_received_files_are_a_strict_subset_of_required()
     {
-        var required = new HashSet<string> { "header.json", "instruments.json", "calculations.json", "settings.json" };
-        var received = new List<string> { "header.json", "instruments.json" };
+        var required = new HashSet<string> { "header.json", "orders.json", "calculations.json", "settings.json" };
+        var received = new List<string> { "header.json", "orders.json" };
 
         Assert.False(SnapshotCompleteness.IsComplete(received, required));
     }
@@ -17,8 +17,8 @@ public class SnapshotCompletenessTests
     [Fact]
     public void IsComplete_is_true_on_exact_match()
     {
-        var required = new HashSet<string> { "header.json", "instruments.json" };
-        var received = new List<string> { "header.json", "instruments.json" };
+        var required = new HashSet<string> { "header.json", "orders.json" };
+        var received = new List<string> { "header.json", "orders.json" };
 
         Assert.True(SnapshotCompleteness.IsComplete(received, required));
     }
@@ -26,8 +26,8 @@ public class SnapshotCompletenessTests
     [Fact]
     public void IsComplete_is_true_when_received_files_are_a_superset_of_required()
     {
-        var required = new HashSet<string> { "header.json", "instruments.json" };
-        var received = new List<string> { "header.json", "instruments.json", "stray-extra.json" };
+        var required = new HashSet<string> { "header.json", "orders.json" };
+        var received = new List<string> { "header.json", "orders.json", "stray-extra.json" };
 
         Assert.True(SnapshotCompleteness.IsComplete(received, required));
     }

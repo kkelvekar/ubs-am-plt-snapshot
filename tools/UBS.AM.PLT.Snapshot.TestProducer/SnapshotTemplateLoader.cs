@@ -23,13 +23,8 @@ public static class SnapshotTemplateLoader
             throw new InvalidOperationException($"Simulation data file '{path}' must contain at least one accountId.");
         }
 
-        if (template.Stages.Count == 0)
-        {
-            throw new InvalidOperationException($"Simulation data file '{path}' must contain at least one stage.");
-        }
-
         var payloadTypes = template.Payloads.Select(payload => payload.PayloadType).ToArray();
-        var expected = new[] { "header", "instruments", "calculations", "settings" };
+        var expected = new[] { "header", "orders", "calculations", "settings" };
         if (!payloadTypes.SequenceEqual(expected))
         {
             throw new InvalidOperationException(

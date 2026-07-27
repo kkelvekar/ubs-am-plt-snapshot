@@ -26,6 +26,9 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 /// </summary>
 public sealed class KafkaSnapshotConsumer : BackgroundService
 {
+    // JsonSerializerDefaults.Web sets PropertyNameCaseInsensitive = true, which is what
+    // binds the PascalCase org wire contract (docs/snapshot-request.schema.json) onto
+    // SnapshotMessage — and camelCase equally. Do not drop it.
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IKafkaConsumerFactory _consumerFactory;

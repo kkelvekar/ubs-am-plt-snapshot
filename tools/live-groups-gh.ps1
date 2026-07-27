@@ -55,14 +55,14 @@
   TC-21 — redelivery of a NON-header payload after the snapshot is COMPLETE
   --------------------------------------------------------------------------
     1. ./live-groups-gh.ps1 -Scenario TC21a
-       Publishes a full 4-payload snapshot (header, instruments, calculations,
+       Publishes a full 4-payload snapshot (header, orders, calculations,
        settings) for a fresh snapshotId, waits for it to complete, then
-       redelivers the exact same instruments.json message.
+       redelivers the exact same orders.json message.
     2. Verify:
          - exactly one snapshot_tracking row, status COMPLETE, completed_at
            UNCHANGED after the redelivery
          - exactly one snapshot_index row, created_at UNCHANGED
-         - instruments.json blob overwritten (Last-Modified advances,
+         - orders.json blob overwritten (Last-Modified advances,
            content byte-identical) not duplicated
          - kafka-consumer-groups.sh --describe shows lag 0 for the partition
            (the duplicate's offset WAS committed — a harmless redelivery must
@@ -120,7 +120,7 @@
   TC-24 — unconfigured snapshotType (no SnapshotConfig entry)
   --------------------------------------------------------------------------
     1. ./live-groups-gh.ps1 -Scenario TC24
-       Publishes one instruments.json payload with snapshotType "mystery"
+       Publishes one orders.json payload with snapshotType "mystery"
        (absent from the library-owned SnapshotConfigDefinition map).
     2. Verify:
          - blob IS written to the real ADLS container at
@@ -194,8 +194,11 @@ function New-Envelope {
         [string]$PayloadJson
     )
     $publishedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    # Payload travels as a JSON *string* per the org schema (docs/snapshot-request.schema.json):
+    # compact the payload object, then embed it as an escaped string value.
+    $payloadString = ($PayloadJson | ConvertFrom-Json | ConvertTo-Json -Depth 20 -Compress) | ConvertTo-Json
     return @"
-{"snapshotId":"$SnapshotId","accountId":"$AccountIdValue","snapshotType":"$SnapshotType","payloadType":"$PayloadType","stage":"PreTrade","publishedAt":"$publishedAt","publishedBy":"LiveGroupGH","schemaVersion":"1.0","payload":$PayloadJson}
+{"SnapshotId":"$SnapshotId","AccountId":"$AccountIdValue","SnapshotType":"$SnapshotType","PayloadType":"$PayloadType","PublishedAt":"$publishedAt","PublishedBy":"LiveGroupGH","Payload":$payloadString}
 "@
 }
 
@@ -204,20 +207,20 @@ function Invoke-TC21a {
     $AccountId = $AccountIdTc21
     Write-Host "TC-21: snapshotId=$snapshotId accountId=$AccountId"
     $header = '{"eventType":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","orderSentAt":"2026-05-15T06:14:22Z","programId":"123456","batchId":"15884","numOrders":4,"ptcAlerts":0}'
-    $instruments = '{"positions":[{"isin":"CH0038863350","qty":250}]}'
+    $orders = '{"positions":[{"isin":"CH0038863350","qty":250}]}'
     $calculations = '{"nav":5555.55,"ccy":"CHF"}'
     $settings = '{"tolerance":0.05}'
 
-    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'instruments' -PayloadJson $instruments)
+    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'orders' -PayloadJson $orders)
     Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'calculations' -PayloadJson $calculations)
     Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'settings' -PayloadJson $settings)
     Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'header' -PayloadJson $header)
 
-    Write-Host 'Waiting 15s for the snapshot to complete before redelivering instruments.json...'
+    Write-Host 'Waiting 15s for the snapshot to complete before redelivering orders.json...'
     Start-Sleep -Seconds 15
 
-    Write-Host 'Redelivering the SAME instruments.json message (duplicate, post-completion):'
-    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'instruments' -PayloadJson $instruments)
+    Write-Host 'Redelivering the SAME orders.json message (duplicate, post-completion):'
+    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -PayloadType 'orders' -PayloadJson $orders)
     Write-Host "TC-21 snapshotId for verification: $snapshotId"
 }
 
@@ -226,7 +229,9 @@ function Invoke-TC23a {
     $AccountId = $AccountIdTc23a
     Write-Host "TC-23a: envelope missing snapshotId entirely (poison message)"
     $publishedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-    $json = "{`"accountId`":`"$AccountId`",`"snapshotType`":`"portfolio`",`"payloadType`":`"instruments`",`"stage`":`"PreTrade`",`"publishedAt`":`"$publishedAt`",`"publishedBy`":`"LiveGroupGH`",`"schemaVersion`":`"1.0`",`"payload`":{`"positions`":[]}}"
+    # Deliberately malformed: SnapshotId omitted entirely. Payload is a JSON string per the
+    # org schema, so only the missing identity field makes this a poison message.
+    $json = "{`"AccountId`":`"$AccountId`",`"SnapshotType`":`"portfolio`",`"PayloadType`":`"orders`",`"PublishedAt`":`"$publishedAt`",`"PublishedBy`":`"LiveGroupGH`",`"Payload`":`"{\`"positions\`":[]}`"}"
     Send-RawMessage -Key $AccountId -Json $json
     Write-Host 'TC-23a published — this is a poison message; check kafka-consumer-groups.sh --describe for LAG > 0 and worker log for repeated retry/alert lines.'
 }
@@ -235,7 +240,9 @@ function Invoke-TC23b {
     $snapshotId = "livegh-tc23b-$SnapshotIdSuffix"
     Write-Host "TC-23b: explicit null accountId (present-but-null identity field)"
     $publishedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-    $json = "{`"snapshotId`":`"$snapshotId`",`"accountId`":null,`"snapshotType`":`"portfolio`",`"payloadType`":`"instruments`",`"stage`":`"PreTrade`",`"publishedAt`":`"$publishedAt`",`"publishedBy`":`"LiveGroupGH`",`"schemaVersion`":`"1.0`",`"payload`":{`"positions`":[]}}"
+    # Deliberately malformed: AccountId present but explicitly null. Payload is a JSON string
+    # per the org schema, so only the null identity field makes this a poison message.
+    $json = "{`"SnapshotId`":`"$snapshotId`",`"AccountId`":null,`"SnapshotType`":`"portfolio`",`"PayloadType`":`"orders`",`"PublishedAt`":`"$publishedAt`",`"PublishedBy`":`"LiveGroupGH`",`"Payload`":`"{\`"positions\`":[]}`"}"
     # Key intentionally left as the null-marker string so this message can still be
     # located; a null AccountId means the PRODUCER key below is a literal empty key
     # (round-robin partition) rather than the SnapshotMessage.AccountId (which is null).
@@ -247,8 +254,8 @@ function Invoke-TC24 {
     $snapshotId = "livegh-tc24-$SnapshotIdSuffix"
     $AccountId = $AccountIdTc24
     Write-Host "TC-24: unconfigured snapshotType 'mystery'"
-    $instruments = '{"positions":[{"isin":"CH0038863350","qty":250}]}'
-    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -SnapshotType 'mystery' -PayloadType 'instruments' -PayloadJson $instruments)
+    $orders = '{"positions":[{"isin":"CH0038863350","qty":250}]}'
+    Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -SnapshotType 'mystery' -PayloadType 'orders' -PayloadJson $orders)
     Write-Host "TC-24 snapshotId for verification: $snapshotId (expect blob + tracking RECEIVING, no index row, offset never committed)"
 }
 

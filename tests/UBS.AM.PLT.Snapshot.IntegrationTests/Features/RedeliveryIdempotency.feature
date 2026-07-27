@@ -13,28 +13,28 @@ Feature: Redelivery and idempotency
 
 Scenario: Redelivering a non-header payload after completion leaves everything but last-updated intact
     Given a redelivery snapshot for account "IT-ACC-007"
-    When an instruments payload is delivered
+    When an orders payload is delivered
     And a calculations payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE and captured as the redelivery baseline
     When the redelivery clock advances by 4 minutes
-    And the same "instruments" payload is redelivered
+    And the same "orders" payload is redelivered
     Then the redelivery completes without error
     And exactly one tracking row remains, COMPLETE, with only its last-updated time advanced
     And exactly one index row remains, unchanged from the redelivery baseline
-    And the redelivered "instruments" blob is byte-identical to the originally sent payload
+    And the redelivered "orders" blob is byte-identical to the originally sent payload
 
 Scenario: A same-payload duplicate before completion is counted once and still completes
     Given a redelivery snapshot for account "IT-ACC-007"
-    When an instruments payload is delivered
+    When an orders payload is delivered
     And the redelivery clock advances by 2 minutes
-    And the same instruments payload is delivered again
-    Then the pre-completion snapshot is RECEIVING with received files "instruments.json"
+    And the same orders payload is delivered again
+    Then the pre-completion snapshot is RECEIVING with received files "orders.json"
     And no index row exists yet for the snapshot
     When a calculations payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE with a completed time
-    And "instruments.json" appears exactly once among the 4 received files
+    And "orders.json" appears exactly once among the 4 received files
     And an index row now exists for the snapshot

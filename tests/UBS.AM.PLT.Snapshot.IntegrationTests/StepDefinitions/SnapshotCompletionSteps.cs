@@ -43,9 +43,9 @@ public sealed class SnapshotCompletionSteps
         _snapshotId = _scenario.NewSnapshotId("completion");
     }
 
-    [When("the instruments payload is received")]
-    public Task WhenTheInstrumentsPayloadIsReceived() =>
-        SendPayloadAsync("instruments", TestPayloads.InstrumentsJson);
+    [When("the orders payload is received")]
+    public Task WhenTheOrdersPayloadIsReceived() =>
+        SendPayloadAsync("orders", TestPayloads.OrdersJson);
 
     [When("the calculations payload is received")]
     public Task WhenTheCalculationsPayloadIsReceived() =>
@@ -80,7 +80,7 @@ public sealed class SnapshotCompletionSteps
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var expectedBody = (_lastMessage ?? throw new InvalidOperationException("No payload has been sent yet."))
-            .Payload.GetRawText();
+            .Payload;
         var blobText = await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/{fileName}");
         Assert.Equal(expectedBody, blobText);
     }
@@ -115,7 +115,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
         Assert.NotNull(tracking.CompletedAt);
 
-        foreach (var fileName in new[] { "header.json", "instruments.json", "calculations.json", "settings.json" })
+        foreach (var fileName in new[] { "header.json", "orders.json", "calculations.json", "settings.json" })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/{fileName}").ExistsAsync(),

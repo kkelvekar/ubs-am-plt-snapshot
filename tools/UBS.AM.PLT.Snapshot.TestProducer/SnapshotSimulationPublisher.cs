@@ -5,7 +5,9 @@ namespace UBS.AM.PLT.Snapshot.TestProducer;
 
 public static class SnapshotSimulationPublisher
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    // Default naming policy (PascalCase) — NOT JsonSerializerDefaults.Web — so the produced
+    // JSON matches the org-approved wire schema (docs/snapshot-request.schema.json) exactly.
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
     };

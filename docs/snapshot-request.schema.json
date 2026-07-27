@@ -1,0 +1,29 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Snapshot Request",
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+        "SnapshotId": {
+            "type": "string"
+        },
+        "AccountId": {
+            "type": "string"
+        },
+        "SnapshotType": {
+            "type": "string"
+        },
+        "PayloadType": {
+            "type": "string"
+        },
+        "PublishedAt": {
+            "type": "string"
+        },
+        "PublishedBy": {
+            "type": "string"
+        },
+        "Payload": {
+            "type": "string"
+        }
+    }
+}

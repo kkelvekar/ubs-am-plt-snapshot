@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
@@ -19,22 +19,16 @@ internal static class SnapshotTestHelpers
         string accountId,
         string payloadType,
         string payloadJson)
-    {
-        using var document = JsonDocument.Parse(payloadJson);
-
-        return new SnapshotMessage
+        => new()
         {
             SnapshotId = snapshotId,
             AccountId = accountId,
             SnapshotType = "portfolio",
             PayloadType = payloadType,
-            Stage = "PreTrade",
-            PublishedAt = fixture.CurrentTime.UtcDateTime,
+            PublishedAt = fixture.CurrentTime.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             PublishedBy = "PortfolioCalculation",
-            SchemaVersion = "1.0",
-            Payload = document.RootElement.Clone(),
+            Payload = payloadJson,
         };
-    }
 
     public static async Task<string> DownloadBlobTextAsync(SnapshotFixture fixture, string blobName)
     {
