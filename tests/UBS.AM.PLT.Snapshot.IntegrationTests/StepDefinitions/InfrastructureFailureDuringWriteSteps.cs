@@ -98,14 +98,14 @@ public sealed class InfrastructureFailureDuringWriteSteps
         _snapshotId = _scenario.NewSnapshotId("infra-fail");
     }
 
-    [When("the instruments payload is handled against the fault-injected graph")]
-    public async Task WhenTheInstrumentsPayloadIsHandledAgainstTheFaultInjectedGraph()
+    [When("the orders payload is handled against the fault-injected graph")]
+    public async Task WhenTheOrdersPayloadIsHandledAgainstTheFaultInjectedGraph()
     {
         var provider = _faultProvider ?? throw new InvalidOperationException("The fault-injected graph has not been built yet.");
         var handler = provider.GetRequiredService<ISnapshotMessageHandler>();
 
         _handledAt = _fixture.CurrentTime;
-        _message = SnapshotTestHelpers.CreateMessage(_fixture, _snapshotId, _accountId, "instruments", TestPayloads.InstrumentsJson);
+        _message = SnapshotTestHelpers.CreateMessage(_fixture, _snapshotId, _accountId, "orders", TestPayloads.OrdersJson);
         _handlerException = await Record.ExceptionAsync(() => handler.HandleAsync(_message, CancellationToken.None));
     }
 

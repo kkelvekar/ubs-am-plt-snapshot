@@ -3,7 +3,7 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 /// <summary>
 /// Deserialised shape of the <c>header</c> payload, per solution design §4. This is the
 /// only payload ever deserialised, and only at completion time when building the
-/// snapshot_index row (design §7). All other payloads stay opaque <see cref="System.Text.Json.JsonElement"/>.
+/// snapshot_index row (design §7). All other payloads stay opaque JSON text.
 /// <see cref="OrderApprovedAt"/> and <see cref="OrderSentAt"/> are deliberately nullable —
 /// unlike the design doc's literal (non-nullable) C# contract — because the doc's own
 /// wire-format example omits <c>orderSentAt</c>; nullable + tolerate-absence avoids

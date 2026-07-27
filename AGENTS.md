@@ -30,9 +30,13 @@ signed off — do not redesign it.
 - **Database**: Azure SQL (local SQL Server for development). EF Core mapped to
   hand-written schema in `db/scripts/` — never add EF migrations; a schema change means
   updating the `.sql` script and the EF mapping together
-- **Serialization**: `System.Text.Json`, camelCase on the wire. Message payloads stay as
-  opaque `JsonElement` and are written to blob via `GetRawText()` without parsing — only
-  the `header` payload is ever deserialised, and only at completion time
+- **Serialization**: `System.Text.Json`. The wire contract is the org-approved JSON schema
+  (`docs/snapshot-request.schema.json`): seven string properties, **PascalCase** on the
+  wire. `JsonSerializerDefaults.Web` (case-insensitive) binds it, and camelCase and unknown
+  extra properties keep binding too. Message payloads arrive as opaque JSON **text** in a
+  `string` and are written to blob verbatim — never re-serialised from anything parsed, so
+  every delivery is byte-identical. Only the `header` payload is ever deserialised, and
+  only at completion time, re-read from blob
 
 ## Architecture
 
@@ -65,8 +69,12 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
    because the org configuration layer cannot carry custom appsettings keys. Adding a new
    payload type is one entry in that constant plus a library rebuild (previously an
    appsettings edit) — never a change to the write pipeline or consumer processing logic.
-5. **Payloads are opaque**: never parse a payload's internal structure, except `header`
-   at completion time when building the index row.
+5. **Payloads are opaque**: the payload is JSON text, written to blob verbatim. Never parse
+   a payload's internal structure, except `header` at completion time when building the
+   index row. The single sanctioned touch is the handler's syntax-only well-formedness
+   check before the first write (`JsonDocument.Parse`, disposed immediately, no field ever
+   inspected, result never written) — it exists so a broken payload cannot land as an
+   invalid `.json` blob.
 
 ## Repository layout
 

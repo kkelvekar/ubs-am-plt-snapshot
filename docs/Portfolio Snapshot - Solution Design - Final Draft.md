@@ -30,7 +30,7 @@ The **Load snapshots grid** needs fast filtered queries on thin metadata. This i
 
 The **View a snapshot detail** needs one large document fetched by key with no cross-row querying. This is served by **ADLS Gen2 blob files** fetched directly using the path stored in the index row.
 
-Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, instruments, calculations, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
+Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, orders, calculations, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
 
 **Key principles:**
 
@@ -74,7 +74,7 @@ Offset commit:   manual (EnableAutoCommit = false)
 
 ### Message Contract
 
-Every message uses the same envelope regardless of which service publishes it or which payload type it carries. The payload field is opaque -- the consumer writes it directly to ADLS without parsing its internal structure. Only the header payload is deserialised, and only at completion time when building the SQL index row.
+Every message uses the same envelope regardless of which service publishes it or which payload type it carries. The envelope is defined by the org-approved JSON Schema (draft-04, `additionalProperties: true`) committed at `docs/snapshot-request.schema.json`: exactly seven string properties, **PascalCase on the wire**. The payload field is opaque -- it carries already-serialised JSON as a **string**, and the consumer writes that string to ADLS verbatim, without parsing its internal structure. The only touch of the payload before the write is a syntax-only well-formedness check (parse-and-discard), so a broken payload can never land as an invalid `.json` blob. Only the header payload is deserialised, and only at completion time when building the SQL index row, re-read from blob.
 
 **C# contract (.NET 10):**
 
@@ -82,19 +82,17 @@ Every message uses the same envelope regardless of which service publishes it or
 public class SnapshotMessage
 {
     // Envelope -- fixed, always present
-    public string      SnapshotId     { get; set; }  // correlationId
-    public string      AccountId      { get; set; }
-    public string      SnapshotType   { get; set; }  // "portfolio"
-    public string      PayloadType    { get; set; }  // "header" / "instruments" etc
-    public string      Stage          { get; set; }  // "PreTrade" etc
-    public DateTime    PublishedAt    { get; set; }
-    public string      PublishedBy    { get; set; }  // "PortfolioCalculation"
-    public string      SchemaVersion  { get; set; }  // "1.0"
+    public string SnapshotId   { get; set; }  // correlationId
+    public string AccountId    { get; set; }
+    public string SnapshotType { get; set; }  // "portfolio"
+    public string PayloadType  { get; set; }  // "header" / "orders" etc
+    public string PublishedAt  { get; set; }  // log-only, never used in logic
+    public string PublishedBy  { get; set; }  // "PortfolioCalculation"
 
-    // Payload -- opaque, variable per payloadType
-    // JsonElement (System.Text.Json, .NET 10 built-in)
-    // Written to ADLS via GetRawText() without deserialising
-    public JsonElement Payload        { get; set; }
+    // Payload -- opaque JSON text, variable per payloadType
+    // Written to ADLS verbatim; never re-serialised from anything parsed,
+    // so every delivery produces byte-identical blob content
+    public string Payload      { get; set; }
 }
 
 public class HeaderPayload
@@ -115,63 +113,44 @@ public class HeaderPayload
 }
 ```
 
-**Wire format example -- instruments payload:**
+**Wire format example -- orders payload:**
 
 ```json
 {
-  "snapshotId":    "corr98765",
-  "accountId":     "00675442A",
-  "snapshotType":  "portfolio",
-  "payloadType":   "instruments",
-  "stage":         "PreTrade",
-  "publishedAt":   "2026-05-22T06:10:14Z",
-  "publishedBy":   "PortfolioCalculation",
-  "schemaVersion": "1.0",
-  "payload": {
-    "total": 21,
-    "equities": [
-      {
-        "assetName":     "APPLE LTD",
-        "sedol":         "BPBAJ01",
-        "ccy":           "CHF",
-        "region":        "EMEA",
-        "targetPct":     1.52,
-        "prevTargetPct": 1.52
-      }
-    ],
-    "futures": [],
-    "cash":    []
-  }
+  "SnapshotId":   "corr98765",
+  "AccountId":    "00675442A",
+  "SnapshotType": "portfolio",
+  "PayloadType":  "orders",
+  "PublishedAt":  "2026-05-22T06:10:14Z",
+  "PublishedBy":  "PortfolioCalculation",
+  "Payload":      "{\"total\":21,\"equities\":[{\"assetName\":\"APPLE LTD\",\"sedol\":\"BPBAJ01\",\"ccy\":\"CHF\",\"region\":\"EMEA\",\"targetPct\":1.52,\"prevTargetPct\":1.52}],\"futures\":[],\"cash\":[]}"
 }
+```
+
+The `Payload` value above is a JSON **string**, not a nested object. Unescaped, it is the exact byte sequence written to `orders.json`:
+
+```json
+{"total":21,"equities":[{"assetName":"APPLE LTD","sedol":"BPBAJ01","ccy":"CHF","region":"EMEA","targetPct":1.52,"prevTargetPct":1.52}],"futures":[],"cash":[]}
 ```
 
 **Wire format example -- header payload:**
 
 ```json
 {
-  "snapshotId":    "corr98765",
-  "accountId":     "00675442A",
-  "snapshotType":  "portfolio",
-  "payloadType":   "header",
-  "stage":         "PreTrade",
-  "publishedAt":   "2026-05-22T06:14:22Z",
-  "publishedBy":   "Portal",
-  "schemaVersion": "1.0",
-  "payload": {
-    "eventType":       "ModelChange",
-    "portfolioStatus": "ReadyToSend",
-    "orderStatus":     "ReadyToSend",
-    "benchmark":       "MCCHM2EQ",
-    "baseCcy":         "CHF",
-    "orderApprovedBy": "Anna Miller",
-    "orderApprovedAt": "2026-05-15T06:10:14Z",
-    "orderSentBy":     "James Smith",
-    "numOrders":       4,
-    "ptcAlerts":       0,
-    "programId":       "123456",
-    "batchId":         "15884"
-  }
+  "SnapshotId":   "corr98765",
+  "AccountId":    "00675442A",
+  "SnapshotType": "portfolio",
+  "PayloadType":  "header",
+  "PublishedAt":  "2026-05-22T06:14:22Z",
+  "PublishedBy":  "Portal",
+  "Payload":      "{\"eventType\":\"ModelChange\",\"portfolioStatus\":\"ReadyToSend\",\"orderStatus\":\"ReadyToSend\",\"benchmark\":\"MCCHM2EQ\",\"baseCcy\":\"CHF\",\"orderApprovedBy\":\"Anna Miller\",\"orderApprovedAt\":\"2026-05-15T06:10:14Z\",\"orderSentBy\":\"James Smith\",\"numOrders\":4,\"ptcAlerts\":0,\"programId\":\"123456\",\"batchId\":\"15884\"}"
 }
+```
+
+Unescaped, that `Payload` string is the exact content written to `header.json` — and the only payload the writer ever deserialises, re-read from blob at completion time:
+
+```json
+{"eventType":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","numOrders":4,"ptcAlerts":0,"programId":"123456","batchId":"15884"}
 ```
 
 **Required file list** (illustrative shape below).
@@ -186,7 +165,7 @@ public class HeaderPayload
   "portfolio": {
     "requiredFiles": [
       "header.json",
-      "instruments.json",
+      "orders.json",
       "calculations.json",
       "settings.json"
     ]
@@ -212,18 +191,18 @@ ubsadvsnapshots/
             ├── accountId=00675442A/
             │   ├── snapshotId=corr98765/
             │   │   ├── header.json
-            │   │   ├── instruments.json
+            │   │   ├── orders.json
             │   │   ├── calculations.json
             │   │   └── settings.json
             │   └── snapshotId=corr98766/
             │       ├── header.json
-            │       ├── instruments.json
+            │       ├── orders.json
             │       ├── calculations.json
             │       └── settings.json
             └── accountId=03485732S/
                 └── snapshotId=corr98770/
                     ├── header.json
-                    ├── instruments.json
+                    ├── orders.json
                     ├── calculations.json
                     └── settings.json
 ```
@@ -379,7 +358,7 @@ Responsibility 2 -- 30-day purge
 
 ## 7. Index Table Design -- Azure SQL
 
-The Azure SQL index table holds exactly one thin row per snapshot containing the filterable grid columns, a single JSON display column for all non-filterable display fields, and the ADLS folder path. Fat payload data stays entirely in blob. The `stage` wire field is deliberately not persisted here — it is emitted in the structured application logs instead.
+The Azure SQL index table holds exactly one thin row per snapshot containing the filterable grid columns, a single JSON display column for all non-filterable display fields, and the ADLS folder path. Fat payload data stays entirely in blob.
 
 This table is created in a **new database on an existing Azure SQL server**, shared with the snapshot_tracking table described above, for clean separation from existing application databases.
 
@@ -591,7 +570,7 @@ Clicking a grid row reads the adls_path column already in the grid result. No se
 
 On row click -- fetch header.json. Summary header bar and cash section render immediately.
 
-After header renders -- fetch instruments.json page 1 (first 50 rows). Further pages load on scroll. Tab switching between All, Draft orders, PTC, and Trading is client-side filtering on already-loaded data with no additional API call.
+After header renders -- fetch orders.json page 1 (first 50 rows). Further pages load on scroll. Tab switching between All, Draft orders, PTC, and Trading is client-side filtering on already-loaded data with no additional API call.
 
 On Orders tab click -- fetch orders.json.
 

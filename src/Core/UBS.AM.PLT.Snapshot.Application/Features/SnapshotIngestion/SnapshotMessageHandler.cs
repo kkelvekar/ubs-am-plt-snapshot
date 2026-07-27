@@ -46,9 +46,9 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         // "snapshotId": null passes deserialisation with a null value). A null identity
         // field would corrupt the blob path (e.g. ".../snapshotId=/...") and the tracking
         // row, so reject it before the first write. Throwing routes it through the
-        // existing no-commit / seek-back / retry / alert path, identical to a
-        // malformed envelope - recovery is forward, never a silent skip.
-        ValidateIdentity(message);
+        // consumer's existing no-commit / seek-back / retry / alert path, identical to a
+        // malformed envelope — recovery is forward, never a silent skip.
+        ValidateEnvelope(message);
 
         // The root folder is pinned to the FIRST payload arrival time for this
         // snapshotId and reused by every subsequent (or redelivered) payload, so a
@@ -94,16 +94,15 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         }
 
         _logger.LogInformation(
-            "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} stage={Stage} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
+            "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
             message.SnapshotId,
             message.AccountId,
             message.PayloadType,
-            message.Stage,
             rootPath,
             tracking.ReceivedFiles.Count);
     }
 
-    private static void ValidateIdentity(SnapshotMessage message)
+    private static void ValidateEnvelope(SnapshotMessage message)
     {
         // Only the fields that form the blob path and tracking identity are checked -
         // a null in any of them corrupts a write. Deserialisation guarantees presence;
@@ -113,6 +112,23 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         ThrowIfNull(message.AccountId, nameof(message.AccountId));
         ThrowIfNull(message.SnapshotType, nameof(message.SnapshotType));
         ThrowIfNull(message.PayloadType, nameof(message.PayloadType));
+
+        // The payload now arrives as a string of already-serialised JSON, so an empty or
+        // syntactically broken payload would otherwise be written to blob as an invalid
+        // .json file. Reject it here, before the first write.
+        if (string.IsNullOrWhiteSpace(message.Payload))
+        {
+            throw new ArgumentException(
+                $"Snapshot message envelope has a null or empty '{nameof(message.Payload)}'; rejecting before any write.",
+                nameof(message));
+        }
+
+        // SYNTAX-ONLY well-formedness check. The document is disposed immediately and no
+        // field inside it is ever read: the payload stays opaque (invariant #5), and the
+        // string written to blob is always `message.Payload` verbatim, never anything
+        // re-serialised from this parse. A JsonException here propagates like any other
+        // failure — no write has happened yet.
+        using var syntaxCheckOnly = JsonDocument.Parse(message.Payload);
 
         static void ThrowIfNull(string? value, string fieldName)
         {

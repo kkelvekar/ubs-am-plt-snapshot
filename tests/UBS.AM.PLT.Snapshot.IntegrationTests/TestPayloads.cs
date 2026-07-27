@@ -50,13 +50,13 @@ internal static class TestPayloads
     // (payloads stay opaque and are only compared byte-for-byte against what was sent), so a
     // single canonical body per required payloadType is sufficient — the feature files name the
     // payloadType, the step definitions supply the body from here.
-    public const string InstrumentsJson = """
+    public const string OrdersJson = """
         {"positions":[{"isin":"CH0038863350","qty":250}]}
         """;
 
-    // A second, deliberately DIFFERENT instruments body. Used only where a scenario must prove
-    // two snapshots never cross-contaminate, so their instruments blobs must differ.
-    public const string InstrumentsJsonAlt = """
+    // A second, deliberately DIFFERENT orders body. Used only where a scenario must prove
+    // two snapshots never cross-contaminate, so their orders blobs must differ.
+    public const string OrdersJsonAlt = """
         {"positions":[{"isin":"US5949181045","qty":400}]}
         """;
 

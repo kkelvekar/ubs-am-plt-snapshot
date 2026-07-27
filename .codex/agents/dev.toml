@@ -31,8 +31,11 @@ design-level question back instead of improvising.\r
   failure path.\r
 - Every write idempotent. Redelivery of any message at any point must be harmless.\r
 - Required-files list comes from the single library-owned `SnapshotConfigDefinition` map (`Infrastructure.Sql`), never scattered through processing logic. That constant is the sanctioned home (org config layer cannot carry custom appsettings keys) — an entry there is not a violation.\r
-- Payloads stay opaque `JsonElement`, written via `GetRawText()`; only `header` is\r
-  deserialised, at completion time.\r
+- Wire contract is `docs/snapshot-request.schema.json`: seven string properties, PascalCase.\r
+  Payloads stay opaque JSON *text* in a `string`, written to blob verbatim (never\r
+  re-serialised from anything parsed). Only `header` is deserialised, at completion time.\r
+  The one sanctioned touch is the handler's syntax-only well-formedness check before the\r
+  first write — parse, dispose immediately, never inspect a field.\r
 - Kafka bootstrap servers and all connection strings configurable via environment\r
   variable overrides (standard .NET config binding, e.g. `Kafka__BootstrapServers`).\r
   No environment-specific code.\r

@@ -14,7 +14,7 @@ public class SnapshotTrackingEntity
     public required string SnapshotType { get; set; }
     public required string AdlsRootPath { get; set; }
 
-    /// <summary>Received filenames (e.g. "instruments.json"), built via <see cref="SnapshotBlobPath.FileName"/>.</summary>
+    /// <summary>Received filenames (e.g. "orders.json"), built via <see cref="SnapshotBlobPath.FileName"/>.</summary>
     public List<string> ReceivedFiles { get; set; } = [];
 
     /// <summary>Populated only when <see cref="Status"/> is <see cref="SnapshotTrackingStatus.Failed"/>.</summary>

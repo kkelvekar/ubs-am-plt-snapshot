@@ -37,7 +37,7 @@ public sealed class RedeliveryIdempotencySteps
     // Baseline captured after the snapshot first reaches COMPLETE, before the redelivery.
     private SnapshotTrackingEntity? _trackingBaseline;
     private SnapshotIndexEntity? _indexBaseline;
-    private string? _instrumentsBlobBaseline;
+    private string? _ordersBlobBaseline;
 
     private Exception? _redeliveryException;
 
@@ -55,10 +55,10 @@ public sealed class RedeliveryIdempotencySteps
         _snapshotId = _scenario.NewSnapshotId("redelivery");
     }
 
-    [When("an instruments payload is delivered")]
-    [When("the same instruments payload is delivered again")]
-    public Task WhenAnInstrumentsPayloadIsDelivered() =>
-        DeliverAsync("instruments", TestPayloads.InstrumentsJson);
+    [When("an orders payload is delivered")]
+    [When("the same orders payload is delivered again")]
+    public Task WhenAnOrdersPayloadIsDelivered() =>
+        DeliverAsync("orders", TestPayloads.OrdersJson);
 
     [When("a calculations payload is delivered")]
     public Task WhenACalculationsPayloadIsDelivered() =>
@@ -88,8 +88,8 @@ public sealed class RedeliveryIdempotencySteps
 
         _trackingBaseline = tracking;
         _indexBaseline = await SnapshotTestHelpers.GetIndexAsync(_fixture, _snapshotId);
-        _instrumentsBlobBaseline =
-            await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/instruments.json");
+        _ordersBlobBaseline =
+            await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/orders.json");
     }
 
     [When("the same \"(.*)\" payload is redelivered")]
@@ -151,13 +151,13 @@ public sealed class RedeliveryIdempotencySteps
     [Then("the redelivered \"(.*)\" blob is byte-identical to the originally sent payload")]
     public async Task ThenTheRedeliveredBlobIsByteIdentical(string payloadType)
     {
-        var baselineBlob = _instrumentsBlobBaseline ?? throw new InvalidOperationException("No blob baseline has been recorded.");
+        var baselineBlob = _ordersBlobBaseline ?? throw new InvalidOperationException("No blob baseline has been recorded.");
         var message = SentMessage(payloadType);
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
 
         var current = await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/{payloadType}.json");
         Assert.Equal(baselineBlob, current);
-        Assert.Equal(message.Payload.GetRawText(), current);
+        Assert.Equal(message.Payload, current);
     }
 
     [Then("the pre-completion snapshot is RECEIVING with received files \"(.*)\"")]

@@ -55,9 +55,9 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
         _snapshotId = _scenario.NewSnapshotId("offset-fail");
     }
 
-    [When("the snapshot receives an instruments payload")]
-    public Task WhenTheSnapshotReceivesAnInstrumentsPayload() =>
-        DeliverAsync("instruments", TestPayloads.InstrumentsJson);
+    [When("the snapshot receives an orders payload")]
+    public Task WhenTheSnapshotReceivesAnOrdersPayload() =>
+        DeliverAsync("orders", TestPayloads.OrdersJson);
 
     [When("the snapshot receives a calculations payload")]
     public Task WhenTheSnapshotReceivesACalculationsPayload() =>
@@ -162,7 +162,7 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
 
         var current = await SnapshotTestHelpers.DownloadBlobTextAsync(_fixture, $"{tracking.AdlsRootPath}/header.json");
         Assert.Equal(baselineBlob, current);
-        Assert.Equal(header.Payload.GetRawText(), current);
+        Assert.Equal(header.Payload, current);
     }
 
     private async Task DeliverAsync(string payloadType, string payloadJson)

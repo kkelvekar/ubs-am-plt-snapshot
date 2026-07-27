@@ -22,7 +22,7 @@ Feature: Infrastructure failure during the write order
 Scenario: SQL unreachable during the tracking write fails forward and leaves no durable state
     Given a fault-injected graph with SQL repointed to an unreachable endpoint
     And an infra-unavailability snapshot for account "IT-ACC-009"
-    When the instruments payload is handled against the fault-injected graph
+    When the orders payload is handled against the fault-injected graph
     Then the handler surfaces an infrastructure error
     And no tracking row exists for the infra-unavailability snapshot
     And no index row exists for the infra-unavailability snapshot
@@ -31,7 +31,7 @@ Scenario: ADLS unreachable during the blob write fails forward and writes nothin
     Given the infra-unavailability clock starts
     And a fault-injected graph with blob storage repointed to an unreachable endpoint
     And an infra-unavailability snapshot for account "IT-ACC-009"
-    When the instruments payload is handled against the fault-injected graph
+    When the orders payload is handled against the fault-injected graph
     Then the handler surfaces an infrastructure error
     And no blob exists under the infra-unavailability snapshot root
     And no tracking row exists for the infra-unavailability snapshot

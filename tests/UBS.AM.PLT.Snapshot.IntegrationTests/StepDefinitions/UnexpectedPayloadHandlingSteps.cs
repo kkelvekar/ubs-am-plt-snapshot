@@ -51,9 +51,9 @@ public sealed class UnexpectedPayloadHandlingSteps
     public Task WhenAnUnexpectedAuditLogPayloadIsStored() =>
         DeliverAsync("auditlog", TestPayloads.AuditLogJson);
 
-    [When("a required instruments payload is stored")]
-    public Task WhenARequiredInstrumentsPayloadIsStored() =>
-        DeliverAsync("instruments", TestPayloads.InstrumentsJson);
+    [When("a required orders payload is stored")]
+    public Task WhenARequiredOrdersPayloadIsStored() =>
+        DeliverAsync("orders", TestPayloads.OrdersJson);
 
     [When("a required calculations payload is stored")]
     public Task WhenARequiredCalculationsPayloadIsStored() =>
