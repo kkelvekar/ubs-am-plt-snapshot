@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using UBS.AM.PLT.Snapshot.Infrastructure.Adls;
-using UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
 using Xunit;
 
@@ -16,9 +15,6 @@ namespace UBS.AM.PLT.Snapshot.UnitTests;
 public class InfrastructureOptionsValidationTests
 {
     [Theory]
-    [InlineData("Kafka:BootstrapServers", "Kafka:BootstrapServers")]
-    [InlineData("Kafka:Topic", "Kafka:Topic")]
-    [InlineData("Kafka:ConsumerGroup", "Kafka:ConsumerGroup")]
     [InlineData("Database:ConnectionString", "Database:ConnectionString")]
     [InlineData("BlobStorage:ContainerName", "BlobStorage:ContainerName")]
     public void Blank_required_key_fails_startup_validation_with_key_in_message(string blankKey, string expectedInMessage)
@@ -71,7 +67,6 @@ public class InfrastructureOptionsValidationTests
             configuration["BlobStorage:ServiceUri"] ?? string.Empty,
             configuration["BlobStorage:ContainerName"] ?? string.Empty,
             configuration["BlobStorage:ConnectionString"]);
-        services.AddKafkaInfrastructure(configuration);
         services.AddSnapshotConfigInfrastructure();
 
         return services.BuildServiceProvider().GetRequiredService<IStartupValidator>();
@@ -79,9 +74,6 @@ public class InfrastructureOptionsValidationTests
 
     private static Dictionary<string, string?> ValidBaseSettings() => new()
     {
-        ["Kafka:BootstrapServers"] = "localhost:9092",
-        ["Kafka:Topic"] = "ubs-advantage-snapshots",
-        ["Kafka:ConsumerGroup"] = "snapshot-writer-api",
         ["BlobStorage:ServiceUri"] = "https://example.blob.core.windows.net",
         ["BlobStorage:ConnectionString"] = string.Empty,
         ["BlobStorage:ContainerName"] = "ubsadvsnapshots",
