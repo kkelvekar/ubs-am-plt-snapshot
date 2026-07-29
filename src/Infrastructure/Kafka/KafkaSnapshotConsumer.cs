@@ -3,6 +3,7 @@ using Confluent.Kafka;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Domain;
 
@@ -28,7 +29,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 {
     // JsonSerializerDefaults.Web sets PropertyNameCaseInsensitive = true, which is what
     // binds the PascalCase org wire contract (docs/snapshot-request.schema.json) onto
-    // SnapshotMessage — and camelCase equally. Do not drop it.
+    // SnapshotRequest — and camelCase equally. Do not drop it.
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IKafkaConsumerFactory _consumerFactory;
@@ -115,8 +116,9 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                 SnapshotMessage? message = null;
                 try
                 {
-                    message = JsonSerializer.Deserialize<SnapshotMessage>(result.Message.Value, SerializerOptions)
+                    var request = JsonSerializer.Deserialize<SnapshotRequest>(result.Message.Value, SerializerOptions)
                         ?? throw new JsonException("Message envelope deserialised to null.");
+                    message = SnapshotRequestMapper.ToDomain(request);
 
                     await _handler.HandleAsync(message, stoppingToken);
 
