@@ -1,10 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <InternalsVisibleTo Include="UBS.AM.PLT.Snapshot.UnitTests" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\Core\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
   </ItemGroup>
 
