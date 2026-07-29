@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
@@ -14,17 +12,9 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
 /// </summary>
 internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguration<SnapshotIndexEntity>
 {
-    // display_data travels as a single camelCase JSON object string (design §7) so the
-    // persisted keys match the wire/header naming convention (benchmark, baseCcy, ...).
-    private static readonly JsonSerializerOptions DisplayDataJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
-    private static readonly ValueConverter<SnapshotIndexDisplayData, string> DisplayDataConverter = new(
-        v => JsonSerializer.Serialize(v, DisplayDataJsonOptions),
-        v => JsonSerializer.Deserialize<SnapshotIndexDisplayData>(v, DisplayDataJsonOptions)!);
-
+    // display_data (design §7) is the header.json text itself, already a string on the
+    // entity — stored verbatim, with no conversion, renaming or re-serialisation, so the
+    // column is byte-identical to the blob and new header fields need no code change.
     public void Configure(EntityTypeBuilder<SnapshotIndexEntity> indexEntity)
     {
         indexEntity.ToTable("SnapshotIndex", "dbo");
@@ -52,8 +42,7 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
 
         indexEntity.Property(e => e.DisplayData)
             .HasColumnName("DisplayData")
-            .HasColumnType("nvarchar(max)")
-            .HasConversion(DisplayDataConverter);
+            .HasColumnType("nvarchar(max)");
 
         indexEntity.Property(e => e.CreatedAt)
             .HasColumnName("CreatedAt")

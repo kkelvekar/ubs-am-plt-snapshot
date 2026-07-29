@@ -35,8 +35,10 @@ signed off — do not redesign it.
   wire. `JsonSerializerDefaults.Web` (case-insensitive) binds it, and camelCase and unknown
   extra properties keep binding too. Message payloads arrive as opaque JSON **text** in a
   `string` and are written to blob verbatim — never re-serialised from anything parsed, so
-  every delivery is byte-identical. Only the `header` payload is ever deserialised, and
-  only at completion time, re-read from blob
+  every delivery is byte-identical. No payload is ever deserialised into a DTO — not even
+  `header`: at completion time the header is re-read from blob, a single `eventType`
+  property is extracted for its filterable SQL column, and the header text itself is
+  persisted verbatim to `display_data`, so a new header field needs no code change here
 
 ## Architecture
 
@@ -69,12 +71,15 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
    because the org configuration layer cannot carry custom appsettings keys. Adding a new
    payload type is one entry in that constant plus a library rebuild (previously an
    appsettings edit) — never a change to the write pipeline or consumer processing logic.
-5. **Payloads are opaque**: the payload is JSON text, written to blob verbatim. Never parse
-   a payload's internal structure, except `header` at completion time when building the
-   index row. The single sanctioned touch is the handler's syntax-only well-formedness
-   check before the first write (`JsonDocument.Parse`, disposed immediately, no field ever
-   inspected, result never written) — it exists so a broken payload cannot land as an
-   invalid `.json` blob.
+5. **Payloads are opaque**: the payload is JSON text, written to blob verbatim, and is
+   never deserialised into a DTO. Exactly two sanctioned touches exist, both a scoped
+   `JsonDocument.Parse` disposed immediately, with nothing ever re-serialised from the
+   parse:
+   - the handler's **syntax-only well-formedness check** before the first write — no field
+     is ever inspected, so a broken payload cannot land as an invalid `.json` blob;
+   - the **`eventType` extraction** from `header` at completion time — that one value has
+     its own filterable column on `snapshot_index`. No other header field may be read; the
+     header text is persisted to `display_data` verbatim, byte-identical to the blob.
 
 ## Repository layout
 
