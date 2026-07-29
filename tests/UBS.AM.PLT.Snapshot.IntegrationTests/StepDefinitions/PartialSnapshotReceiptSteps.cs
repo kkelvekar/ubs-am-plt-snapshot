@@ -164,23 +164,13 @@ public sealed class PartialSnapshotReceiptSteps
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var index = await SnapshotTestHelpers.GetIndexAsync(_fixture, _snapshotId);
-        var expected = TestPayloads.ExpectedHeader;
 
         Assert.Equal(_snapshotId, index.SnapshotId);
         Assert.Equal(_accountId, index.AccountId);
         Assert.Equal(tracking.FirstReceivedAt, index.SnapshotDate);
-        Assert.Equal(expected.EventType, index.EventType);
+        Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
-        Assert.Equal(expected.Benchmark, index.DisplayData.Benchmark);
-        Assert.Equal(expected.BaseCcy, index.DisplayData.BaseCcy);
-        Assert.Equal(expected.ProgramId, index.DisplayData.ProgramId);
-        Assert.Equal(expected.BatchId, index.DisplayData.BatchId);
-        Assert.Equal(expected.NumOrders, index.DisplayData.NumOrders);
-        Assert.Equal(expected.PtcAlerts, index.DisplayData.PtcAlerts);
-        Assert.Equal(expected.OrderApprovedBy, index.DisplayData.OrderApprovedBy);
-        Assert.Equal(expected.OrderApprovedAt, index.DisplayData.OrderApprovedAt);
-        Assert.Equal(expected.OrderSentBy, index.DisplayData.OrderSentBy);
-        Assert.Equal(expected.OrderSentAt, index.DisplayData.OrderSentAt);
+        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
     }
 
     private async Task SendPayloadAsync(string payloadType, string payloadJson)

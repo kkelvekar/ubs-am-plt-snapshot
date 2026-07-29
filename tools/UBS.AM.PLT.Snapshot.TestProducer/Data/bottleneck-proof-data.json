@@ -1,0 +1,42 @@
+{
+  "accountIds": [
+    "99900001Z"
+  ],
+  "payloads": [
+    {
+      "payloadType": "header",
+      "publishedBy": "Portal",
+      "payload": {
+        "eventType": "ModelChange",
+        "portfolioStatus": "ReadyToSend",
+        "orderStatus": "ReadyToSend",
+        "benchmark": "MCCHM2EQ",
+        "baseCcy": "CHF",
+        "programId": "999999",
+        "batchId": "99999",
+        "numOrders": 1,
+        "ptcAlerts": 0,
+        "aFieldNoCSharpTypeHasEverHeardOf": "bottleneck-proof-value",
+        "riskFlags": {
+          "escalationTier": "amber",
+          "reviewers": ["alice", "bob"]
+        }
+      }
+    },
+    {
+      "payloadType": "orders",
+      "publishedBy": "PortfolioCalculation",
+      "payload": { "total": 1 }
+    },
+    {
+      "payloadType": "calculations",
+      "publishedBy": "PortfolioCalculation",
+      "payload": { "nav": 1.0 }
+    },
+    {
+      "payloadType": "settings",
+      "publishedBy": "PortfolioCalculation",
+      "payload": { "tolerance": 0.1 }
+    }
+  ]
+}
