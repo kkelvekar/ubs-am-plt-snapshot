@@ -98,6 +98,37 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
     }
 
+    [Then("a receiving response was published listing the outstanding files")]
+    public void ThenAReceivingResponseWasPublishedListingTheOutstandingFiles()
+    {
+        var notification = Assert.Single(
+            _fixture.ResponsePublisher.PublishedFor(_snapshotId),
+            n => n.Status == SnapshotTrackingStatus.Receiving);
+
+        Assert.Equal(_accountId, notification.AccountId);
+        Assert.Equal(["orders.json"], notification.ReceivedFiles);
+        Assert.Equal(["calculations.json", "header.json", "settings.json"], notification.MissingFiles);
+        Assert.Null(notification.CompletedAt);
+    }
+
+    [Then("exactly one completion response was published for the snapshot")]
+    public async Task ThenExactlyOneCompletionResponseWasPublishedForTheSnapshot()
+    {
+        var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
+        var notification = Assert.Single(
+            _fixture.ResponsePublisher.PublishedFor(_snapshotId),
+            n => n.Status == SnapshotTrackingStatus.Complete);
+
+        Assert.Equal(_accountId, notification.AccountId);
+        Assert.Empty(notification.MissingFiles);
+        Assert.Equal(
+            new[] { "calculations.json", "header.json", "orders.json", "settings.json" },
+            notification.ReceivedFiles.Order());
+        Assert.Equal(tracking.FirstReceivedAt, notification.FirstReceivedAt);
+        Assert.NotNull(notification.CompletedAt);
+        Assert.Null(notification.DeclaredFailedAt);
+    }
+
     [Then("the snapshot end state is a well-formed completed snapshot")]
     public async Task ThenTheSnapshotEndStateIsAWellFormedCompletedSnapshot()
     {

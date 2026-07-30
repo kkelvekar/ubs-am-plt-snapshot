@@ -5,8 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using UBS.AM.PLT.Snapshot.Application;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
+using UBS.AM.PLT.Snapshot.IntegrationTests.Support;
 
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 
@@ -38,9 +40,14 @@ public sealed class SnapshotFixture : IDisposable
         MockTime = new Mock<TimeProvider> { CallBase = true };
         MockTime.Setup(t => t.GetUtcNow()).Returns(() => CurrentTime);
 
+        ResponsePublisher = new RecordingSnapshotResponsePublisher();
+
         var services = new ServiceCollection();
         services.AddLogging(); // AddApplication/AddInfrastructure assume the host registered logging.
         services.AddSingleton(MockTime.Object);
+        // Kafka is bypassed on the way out as well as on the way in — AddKafkaInfrastructure
+        // is never called here, so the publisher port is filled by the recorder instead.
+        services.AddSingleton<ISnapshotResponsePublisher>(ResponsePublisher);
         services.AddApplication()
             .AddSqlInfrastructure(Configuration["Database:ConnectionString"] ?? string.Empty)
             .AddAdlsInfrastructure(
@@ -68,6 +75,9 @@ public sealed class SnapshotFixture : IDisposable
     public ISnapshotMessageHandler Handler { get; }
 
     public Mock<TimeProvider> MockTime { get; }
+
+    /// <summary>Records the status notifications the handler publishes, for assertions.</summary>
+    public RecordingSnapshotResponsePublisher ResponsePublisher { get; }
 
     public BlobContainerClient BlobContainer { get; }
 

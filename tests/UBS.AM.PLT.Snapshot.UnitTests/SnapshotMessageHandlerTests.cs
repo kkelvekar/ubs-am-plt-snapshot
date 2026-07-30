@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using UBS.AM.PLT.Snapshot.Application;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
+using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.UnitTests.Fakes;
@@ -122,7 +123,9 @@ public class SnapshotMessageHandlerTests
 
         await handler.HandleAsync(CreateMessage(), CancellationToken.None);
 
-        var entry = Assert.Single(logger.Entries);
+        // The per-payload line specifically — the same message also emits the receiving
+        // response line, since this is the snapshot's first payload.
+        var entry = Assert.Single(logger.Entries, e => e.Message.StartsWith("Wrote snapshot payload blob", StringComparison.Ordinal));
         Assert.Equal(LogLevel.Information, entry.Level);
         Assert.Equal("corr98765", entry.State["SnapshotId"]);
         Assert.Equal("00675442A", entry.State["AccountId"]);
@@ -164,6 +167,7 @@ public class SnapshotMessageHandlerTests
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
         var indexStore = new FakeSnapshotIndexStore { CallOrderLog = callOrderLog };
+        var responsePublisher = new FakeSnapshotResponsePublisher { CallOrderLog = callOrderLog };
 
         const string headerJson = """
             {
@@ -188,7 +192,13 @@ public class SnapshotMessageHandlerTests
         var message = CreateMessage(payloadType: "header", payload: """{"eventType":"ShouldNeverBeUsed"}""");
 
         var timeProvider = new RecordingTimeProvider();
-        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore, timeProvider: timeProvider);
+        var handler = CreateHandler(
+            blobStore,
+            trackingStore,
+            requiredFilesProvider,
+            indexStore,
+            timeProvider: timeProvider,
+            responsePublisher: responsePublisher);
 
         await handler.HandleAsync(message, CancellationToken.None);
 
@@ -204,7 +214,188 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(headerJson, indexEntry.DisplayData);
 
         Assert.Equal([message.SnapshotId], trackingStore.MarkedComplete);
-        Assert.Equal([nameof(FakeSnapshotIndexStore.UpsertAsync), nameof(FakeSnapshotTrackingStore.MarkCompleteAsync)], callOrderLog);
+
+        // Both the index write and the response publish must precede the status flip: once
+        // the row reads COMPLETE the completeness branch stops firing, so anything after the
+        // flip could never be retried by a redelivery.
+        Assert.Equal(
+            [
+                nameof(FakeSnapshotIndexStore.UpsertAsync),
+                nameof(FakeSnapshotResponsePublisher.PublishAsync),
+                nameof(FakeSnapshotTrackingStore.MarkCompleteAsync),
+            ],
+            callOrderLog);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_a_completion_response_carrying_the_tracking_state()
+    {
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            StatusToReturn = SnapshotTrackingStatus.Receiving,
+            ReceivedFilesToReturn = ["header.json", "orders.json", "calculations.json", "settings.json"],
+        };
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
+        var blobStore = new FakeSnapshotBlobStore { HeaderJson = """{"eventType":"ModelChange"}""" };
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var timeProvider = new RecordingTimeProvider();
+        var message = CreateMessage(payloadType: "settings");
+
+        var handler = CreateHandler(
+            blobStore,
+            trackingStore,
+            requiredFilesProvider,
+            timeProvider: timeProvider,
+            responsePublisher: responsePublisher);
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(message.SnapshotId, notification.SnapshotId);
+        Assert.Equal(message.AccountId, notification.AccountId);
+        Assert.Equal(SnapshotTrackingStatus.Complete, notification.Status);
+        Assert.Equal(
+            ["header.json", "orders.json", "calculations.json", "settings.json"],
+            notification.ReceivedFiles);
+        Assert.Empty(notification.MissingFiles);
+        Assert.Equal(new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc), notification.FirstReceivedAt);
+        Assert.Equal(new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc), notification.LastUpdatedAt);
+        Assert.Equal(timeProvider.UtcNow.UtcDateTime, notification.CompletedAt);
+        Assert.Null(notification.DeclaredFailedAt);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_a_receiving_response_for_the_snapshots_first_payload()
+    {
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            StatusToReturn = SnapshotTrackingStatus.Receiving,
+            ReceivedFilesToReturn = ["orders.json"],
+        };
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var message = CreateMessage();
+
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            requiredFilesProvider,
+            responsePublisher: responsePublisher);
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(message.SnapshotId, notification.SnapshotId);
+        Assert.Equal(message.AccountId, notification.AccountId);
+        Assert.Equal(SnapshotTrackingStatus.Receiving, notification.Status);
+        Assert.Equal(["orders.json"], notification.ReceivedFiles);
+
+        // Sorted, so the same snapshot state always renders the same wire value.
+        Assert.Equal(["calculations.json", "header.json", "settings.json"], notification.MissingFiles);
+        Assert.Null(notification.CompletedAt);
+        Assert.Null(notification.DeclaredFailedAt);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_no_response_for_a_later_payload_that_does_not_complete()
+    {
+        // Second of four: the snapshot was already announced on its first payload, and it is
+        // not complete yet, so this message says nothing.
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            StatusToReturn = SnapshotTrackingStatus.Receiving,
+            ReceivedFilesToReturn = ["header.json", "orders.json"],
+        };
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            requiredFilesProvider,
+            responsePublisher: responsePublisher);
+
+        await handler.HandleAsync(CreateMessage(), CancellationToken.None);
+
+        Assert.Empty(responsePublisher.Published);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_only_completion_when_a_single_required_file_both_starts_and_completes()
+    {
+        // A snapshot type requiring one file: that payload is both the first and the
+        // completing one, and must produce exactly one response — Complete, not Receiving.
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            StatusToReturn = SnapshotTrackingStatus.Receiving,
+            ReceivedFilesToReturn = ["header.json"],
+        };
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType["portfolio"] = new HashSet<string> { "header.json" };
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore { HeaderJson = """{"eventType":"ModelChange"}""" },
+            trackingStore,
+            requiredFilesProvider,
+            responsePublisher: responsePublisher);
+
+        await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(SnapshotTrackingStatus.Complete, notification.Status);
+        Assert.Empty(notification.MissingFiles);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_no_second_response_when_tracking_already_complete()
+    {
+        // Stray redelivery after completion: the publisher was already told, and the
+        // completeness branch must stay skipped.
+        var trackingStore = new FakeSnapshotTrackingStore { StatusToReturn = SnapshotTrackingStatus.Complete };
+        trackingStore.RootPathsBySnapshotId["corr98765"] =
+            "portfolio_snapshots/year=2026/month=04/accountId=00675442A/snapshotId=corr98765";
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        await handler.HandleAsync(CreateMessage(), CancellationToken.None);
+
+        Assert.Empty(responsePublisher.Published);
+    }
+
+    [Fact]
+    public async Task HandleAsync_propagates_publisher_exception_unchanged_and_leaves_tracking_receiving()
+    {
+        // No offset commit and no status flip, so the redelivery re-enters the completeness
+        // branch and re-publishes: the notification is at-least-once, never lost.
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            StatusToReturn = SnapshotTrackingStatus.Receiving,
+            ReceivedFilesToReturn = ["header.json", "orders.json", "calculations.json", "settings.json"],
+        };
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
+        var boom = new InvalidOperationException("broker unreachable");
+        var responsePublisher = new FakeSnapshotResponsePublisher { ThrowOnPublish = boom };
+
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore { HeaderJson = """{"eventType":"ModelChange"}""" },
+            trackingStore,
+            requiredFilesProvider,
+            responsePublisher: responsePublisher);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(CreateMessage(), CancellationToken.None));
+
+        Assert.Same(boom, thrown);
+        Assert.Empty(trackingStore.MarkedComplete);
     }
 
     [Fact]
@@ -226,7 +417,10 @@ public class SnapshotMessageHandlerTests
 
         var written = Assert.Single(blobStore.Written);
         Assert.Equal(pinnedRootPath, written.RootPath);
-        Assert.Empty(requiredFilesProvider.Calls);
+
+        // One lookup only — the pre-write payload-type check. The completeness branch is
+        // skipped entirely, so the list is never resolved a second time for it.
+        Assert.Single(requiredFilesProvider.Calls);
         Assert.Empty(blobStore.HeaderReadsFor);
         Assert.Empty(indexStore.Upserts);
         Assert.Empty(trackingStore.MarkedComplete);
@@ -264,20 +458,82 @@ public class SnapshotMessageHandlerTests
     {
         // TC-23b: a present-but-null envelope field passes JSON `required` deserialisation
         // but would corrupt the blob path / tracking row (or write an empty .json blob).
-        // The handler must reject it before the first (blob) write, throwing so the
-        // consumer's retry/alert path handles it.
+        // The handler must reject it before the first (blob) write, throwing a rejection so
+        // the consumer commits past it instead of redelivering it forever.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, logger: logger);
         var message = CreateMessageWithNullField(nullField);
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
             () => handler.HandleAsync(message, CancellationToken.None));
+
+        var expectedReason = nullField == "Payload"
+            ? InvalidSnapshotEnvelopeException.EmptyPayloadReason
+            : InvalidSnapshotEnvelopeException.NullRequiredFieldReason;
+        Assert.Equal(expectedReason, thrown.ReasonCode);
+        Assert.Contains(nullField == "Payload" ? "Payload" : nullField, thrown.Message, StringComparison.Ordinal);
 
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_rejects_a_payload_type_outside_the_snapshot_types_file_contract()
+    {
+        // Expected payloads are exactly the required files, so an out-of-contract payload is
+        // refused before it can reach blob storage or received_files.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var indexStore = new FakeSnapshotIndexStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, thrown.ReasonCode);
+        Assert.Contains("auditlog", thrown.Message, StringComparison.Ordinal);
+
+        // The producer needs to know what it should have sent.
+        Assert.Contains("header.json", thrown.Message, StringComparison.Ordinal);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(indexStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_does_not_reject_a_payload_type_when_the_snapshot_type_is_unknown()
+    {
+        // No expected-file list exists to check against, and it is not the publisher's fault,
+        // so this keeps its existing behaviour: blob and tracking are written and the
+        // completeness step then fails to resolve the list.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var requiredFilesProvider = new FakeRequiredFilesProvider(); // "portfolio" deliberately unconfigured
+
+        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Single(blobStore.Written);
+        Assert.Single(trackingStore.Upserts);
+    }
+
+    [Fact]
+    public async Task HandleAsync_rejections_are_catchable_as_the_non_retryable_category()
+    {
+        // The consumer branches on the base type, not on the concrete reason — that is what
+        // keeps a future non-retryable case working without touching the consumer.
+        var handler = CreateHandler(new FakeSnapshotBlobStore(), new FakeSnapshotTrackingStore());
+
+        await Assert.ThrowsAnyAsync<SnapshotMessageRejectedException>(
+            () => handler.HandleAsync(CreateMessageWithNullField("SnapshotId"), CancellationToken.None));
     }
 
     [Theory]
@@ -298,8 +554,20 @@ public class SnapshotMessageHandlerTests
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
 
-        await Assert.ThrowsAnyAsync<Exception>(
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
             () => handler.HandleAsync(CreateMessage(payload: payload), CancellationToken.None));
+
+        // Blank payloads are caught by the emptiness guard; the rest fail the JSON parse and
+        // carry the underlying JsonException as the inner exception.
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            Assert.Equal(InvalidSnapshotEnvelopeException.EmptyPayloadReason, thrown.ReasonCode);
+        }
+        else
+        {
+            Assert.Equal(InvalidSnapshotEnvelopeException.MalformedPayloadJsonReason, thrown.ReasonCode);
+            Assert.IsAssignableFrom<JsonException>(thrown.InnerException);
+        }
 
         Assert.Empty(blobStore.Written);
         Assert.Empty(blobStore.HeaderReadsFor);
@@ -530,7 +798,8 @@ public class SnapshotMessageHandlerTests
         FakeRequiredFilesProvider? requiredFilesProvider = null,
         FakeSnapshotIndexStore? indexStore = null,
         TimeProvider? timeProvider = null,
-        CapturingLogger<SnapshotMessageHandler>? logger = null)
+        CapturingLogger<SnapshotMessageHandler>? logger = null,
+        FakeSnapshotResponsePublisher? responsePublisher = null)
     {
         if (requiredFilesProvider is null)
         {
@@ -543,6 +812,7 @@ public class SnapshotMessageHandlerTests
             trackingStore,
             requiredFilesProvider,
             indexStore ?? new FakeSnapshotIndexStore(),
+            responsePublisher ?? new FakeSnapshotResponsePublisher(),
             timeProvider ?? new RecordingTimeProvider(),
             logger ?? new CapturingLogger<SnapshotMessageHandler>());
     }

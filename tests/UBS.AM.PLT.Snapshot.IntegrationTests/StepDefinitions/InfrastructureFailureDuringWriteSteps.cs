@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Reqnroll;
 using UBS.AM.PLT.Snapshot.Application;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
@@ -172,6 +173,9 @@ public sealed class InfrastructureFailureDuringWriteSteps
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(_fixture.MockTime.Object);
+        // Kafka is bypassed here as in the fixture, so the publisher port needs the same
+        // stand-in. These scenarios never reach completion, so nothing is ever published.
+        services.AddSingleton<ISnapshotResponsePublisher>(_fixture.ResponsePublisher);
         services.AddApplication()
             .AddSqlInfrastructure(configuration["Database:ConnectionString"] ?? string.Empty)
             .AddAdlsInfrastructure(
