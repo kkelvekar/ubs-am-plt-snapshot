@@ -148,6 +148,16 @@ public sealed class RedeliveryIdempotencySteps
         Assert.Equal(baseline.SnapshotDate, current.SnapshotDate);
     }
 
+    [Then("exactly one completion response was published across the redelivery")]
+    public void ThenExactlyOneCompletionResponseWasPublishedAcrossTheRedelivery()
+    {
+        // The post-completion redelivery never re-enters the completeness branch, so the
+        // publishing application is told once and only once.
+        Assert.Single(
+            _fixture.ResponsePublisher.PublishedFor(_snapshotId),
+            n => n.Status == SnapshotTrackingStatus.Complete);
+    }
+
     [Then("the redelivered \"(.*)\" blob is byte-identical to the originally sent payload")]
     public async Task ThenTheRedeliveredBlobIsByteIdentical(string payloadType)
     {
