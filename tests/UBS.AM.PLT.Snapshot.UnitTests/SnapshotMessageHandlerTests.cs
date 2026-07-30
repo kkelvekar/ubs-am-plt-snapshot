@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.UnitTests.Fakes;
@@ -416,7 +417,10 @@ public class SnapshotMessageHandlerTests
 
         var written = Assert.Single(blobStore.Written);
         Assert.Equal(pinnedRootPath, written.RootPath);
-        Assert.Empty(requiredFilesProvider.Calls);
+
+        // One lookup only — the pre-write payload-type check. The completeness branch is
+        // skipped entirely, so the list is never resolved a second time for it.
+        Assert.Single(requiredFilesProvider.Calls);
         Assert.Empty(blobStore.HeaderReadsFor);
         Assert.Empty(indexStore.Upserts);
         Assert.Empty(trackingStore.MarkedComplete);
@@ -454,20 +458,82 @@ public class SnapshotMessageHandlerTests
     {
         // TC-23b: a present-but-null envelope field passes JSON `required` deserialisation
         // but would corrupt the blob path / tracking row (or write an empty .json blob).
-        // The handler must reject it before the first (blob) write, throwing so the
-        // consumer's retry/alert path handles it.
+        // The handler must reject it before the first (blob) write, throwing a rejection so
+        // the consumer commits past it instead of redelivering it forever.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, logger: logger);
         var message = CreateMessageWithNullField(nullField);
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
             () => handler.HandleAsync(message, CancellationToken.None));
+
+        var expectedReason = nullField == "Payload"
+            ? InvalidSnapshotEnvelopeException.EmptyPayloadReason
+            : InvalidSnapshotEnvelopeException.NullRequiredFieldReason;
+        Assert.Equal(expectedReason, thrown.ReasonCode);
+        Assert.Contains(nullField == "Payload" ? "Payload" : nullField, thrown.Message, StringComparison.Ordinal);
 
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_rejects_a_payload_type_outside_the_snapshot_types_file_contract()
+    {
+        // Expected payloads are exactly the required files, so an out-of-contract payload is
+        // refused before it can reach blob storage or received_files.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var indexStore = new FakeSnapshotIndexStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, thrown.ReasonCode);
+        Assert.Contains("auditlog", thrown.Message, StringComparison.Ordinal);
+
+        // The producer needs to know what it should have sent.
+        Assert.Contains("header.json", thrown.Message, StringComparison.Ordinal);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(indexStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_does_not_reject_a_payload_type_when_the_snapshot_type_is_unknown()
+    {
+        // No expected-file list exists to check against, and it is not the publisher's fault,
+        // so this keeps its existing behaviour: blob and tracking are written and the
+        // completeness step then fails to resolve the list.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var requiredFilesProvider = new FakeRequiredFilesProvider(); // "portfolio" deliberately unconfigured
+
+        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Single(blobStore.Written);
+        Assert.Single(trackingStore.Upserts);
+    }
+
+    [Fact]
+    public async Task HandleAsync_rejections_are_catchable_as_the_non_retryable_category()
+    {
+        // The consumer branches on the base type, not on the concrete reason — that is what
+        // keeps a future non-retryable case working without touching the consumer.
+        var handler = CreateHandler(new FakeSnapshotBlobStore(), new FakeSnapshotTrackingStore());
+
+        await Assert.ThrowsAnyAsync<SnapshotMessageRejectedException>(
+            () => handler.HandleAsync(CreateMessageWithNullField("SnapshotId"), CancellationToken.None));
     }
 
     [Theory]
@@ -488,8 +554,20 @@ public class SnapshotMessageHandlerTests
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
 
-        await Assert.ThrowsAnyAsync<Exception>(
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
             () => handler.HandleAsync(CreateMessage(payload: payload), CancellationToken.None));
+
+        // Blank payloads are caught by the emptiness guard; the rest fail the JSON parse and
+        // carry the underlying JsonException as the inner exception.
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            Assert.Equal(InvalidSnapshotEnvelopeException.EmptyPayloadReason, thrown.ReasonCode);
+        }
+        else
+        {
+            Assert.Equal(InvalidSnapshotEnvelopeException.MalformedPayloadJsonReason, thrown.ReasonCode);
+            Assert.IsAssignableFrom<JsonException>(thrown.InnerException);
+        }
 
         Assert.Empty(blobStore.Written);
         Assert.Empty(blobStore.HeaderReadsFor);

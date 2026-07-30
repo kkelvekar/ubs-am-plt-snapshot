@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
@@ -140,6 +141,31 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
                     break;
+                }
+                catch (SnapshotMessageRejectedException ex)
+                {
+                    // Non-retryable: the same bytes redelivered fail identically, so seeking
+                    // back would block this partition forever. Commit past it instead and let
+                    // the partition keep moving. Nothing durable was written — the rejection
+                    // is raised before the first write.
+                    //
+                    // Error, not Warning: a rejected message is dropped, and today the
+                    // publishing application is not told. Notifying it over the response
+                    // topic is a later slice; until then this log is the only record.
+                    _logger.LogError(
+                        ex,
+                        "Rejected snapshot message, committing past it reasonCode={ReasonCode} offset={TopicPartitionOffset} snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
+                        ex.ReasonCode,
+                        result.TopicPartitionOffset,
+                        message?.SnapshotId,
+                        message?.AccountId,
+                        message?.PayloadType);
+
+                    consumer.Commit(result);
+
+                    // The partition is unblocked, so any retry/alert cadence it had built up
+                    // against an earlier message no longer applies.
+                    failures.Remove(result.TopicPartition);
                 }
                 catch (Exception ex)
                 {

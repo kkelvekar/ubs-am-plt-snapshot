@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
@@ -47,10 +48,12 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         // was present in the message — not that it was non-null (an explicit
         // "snapshotId": null passes deserialisation with a null value). A null identity
         // field would corrupt the blob path (e.g. ".../snapshotId=/...") and the tracking
-        // row, so reject it before the first write. Throwing routes it through the
-        // consumer's existing no-commit / seek-back / retry / alert path, identical to a
-        // malformed envelope — recovery is forward, never a silent skip.
+        // row, so reject it before the first write. This throws
+        // SnapshotMessageRejectedException rather than a generic failure: retrying the same
+        // bytes can never succeed, so the consumer commits past it instead of seeking back
+        // and blocking the partition forever.
         ValidateEnvelope(message);
+        ValidatePayloadType(message);
 
         // The root folder is pinned to the FIRST payload's arrival time for this
         // snapshotId and reused by every subsequent (or redelivered) payload, so a
@@ -195,6 +198,42 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             tracking.ReceivedFiles.Count);
     }
 
+    /// <summary>
+    /// Rejects a payload that is not part of the snapshot type's file contract — the expected
+    /// payloads are exactly the required files.
+    /// </summary>
+    /// <remarks>
+    /// Runs before the first write on purpose: an out-of-contract file that reached the blob
+    /// store would sit in the snapshot folder forever, and once its name entered
+    /// received_files it would appear in every response for the rest of the snapshot's life.
+    ///
+    /// An unknown snapshotType cannot be checked here — there is no expected-file list to
+    /// check against. That case keeps its existing behaviour unchanged (design decision: no
+    /// pre-write config check): the blob and tracking row are written, and the completeness
+    /// step then fails to resolve the list. It is not the publisher's fault and is not
+    /// rejected.
+    /// </remarks>
+    private void ValidatePayloadType(SnapshotMessage message)
+    {
+        IReadOnlySet<string> expectedFiles;
+        try
+        {
+            expectedFiles = _requiredFilesProvider.GetRequiredFiles(message.SnapshotType);
+        }
+        catch (KeyNotFoundException)
+        {
+            return;
+        }
+
+        if (!expectedFiles.Contains(SnapshotBlobPath.FileName(message.PayloadType)))
+        {
+            throw InvalidSnapshotEnvelopeException.UnexpectedPayloadType(
+                message.PayloadType,
+                message.SnapshotType,
+                expectedFiles);
+        }
+    }
+
     private static void ValidateEnvelope(SnapshotMessage message)
     {
         // Only the fields that form the blob path and tracking identity are checked —
@@ -211,25 +250,29 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         // .json file. Reject it here, before the first write.
         if (string.IsNullOrWhiteSpace(message.Payload))
         {
-            throw new ArgumentException(
-                $"Snapshot message envelope has a null or empty '{nameof(message.Payload)}'; rejecting before any write.",
-                nameof(message));
+            throw InvalidSnapshotEnvelopeException.EmptyPayload();
         }
 
         // SYNTAX-ONLY well-formedness check. The document is disposed immediately and no
         // field inside it is ever read: the payload stays opaque (invariant #5), and the
         // string written to blob is always `message.Payload` verbatim, never anything
-        // re-serialised from this parse. A JsonException here propagates like any other
-        // failure — no write has happened yet.
-        using var syntaxCheckOnly = JsonDocument.Parse(message.Payload);
+        // re-serialised from this parse.
+        try
+        {
+            using var syntaxCheckOnly = JsonDocument.Parse(message.Payload);
+        }
+        catch (JsonException ex)
+        {
+            // Re-raised as a rejection so the consumer commits past it: the same bytes
+            // redelivered parse identically, so retrying only blocks the partition.
+            throw InvalidSnapshotEnvelopeException.MalformedPayloadJson(ex);
+        }
 
         static void ThrowIfNull(string? value, string fieldName)
         {
             if (value is null)
             {
-                throw new ArgumentException(
-                    $"Snapshot message envelope has a null required field '{fieldName}'; rejecting before any write.",
-                    nameof(message));
+                throw InvalidSnapshotEnvelopeException.NullRequiredField(fieldName);
             }
         }
     }

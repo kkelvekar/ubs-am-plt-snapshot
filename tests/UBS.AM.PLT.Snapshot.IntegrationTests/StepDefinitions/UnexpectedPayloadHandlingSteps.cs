@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Reqnroll;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.IntegrationTests.Support;
@@ -8,10 +9,11 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 
 /// <summary>
 /// Step definitions for <c>Features/UnexpectedPayloadHandling.feature</c>. An unexpected
-/// payloadType (auditlog.json) that is not in the required-files set is stored opaquely and
-/// recorded in received_files, but the completeness check (required subset of received) still
-/// drives the four required files to COMPLETE, and an extra file arriving after completion neither
-/// re-completes the snapshot nor re-runs the index UPSERT. The clock is anchored to a
+/// payloadType (auditlog.json) that is not in the required-files set is rejected before the first
+/// write, so it never reaches blob storage or received_files — whether it arrives before the
+/// required files or after the snapshot has already completed. Either way the four required files
+/// alone drive the snapshot to COMPLETE and the index row is written exactly once. The clock is
+/// anchored to a
 /// fixed-but-arbitrary instant inside the "out-of-contract snapshot" step. The run-scoped
 /// <see cref="SnapshotFixture"/> and scenario-scoped <see cref="ScenarioFixtureContext"/> are
 /// constructor-injected by Reqnroll, which creates one instance of this class per scenario, so
@@ -33,6 +35,8 @@ public sealed class UnexpectedPayloadHandlingSteps
     private SnapshotTrackingEntity? _trackingBaseline;
     private SnapshotIndexEntity? _indexBaseline;
 
+    private Exception? _rejection;
+
     public UnexpectedPayloadHandlingSteps(SnapshotFixture fixture, ScenarioFixtureContext scenario)
     {
         _fixture = fixture;
@@ -47,9 +51,11 @@ public sealed class UnexpectedPayloadHandlingSteps
         _snapshotId = _scenario.NewSnapshotId("unexpected");
     }
 
-    [When("an unexpected auditlog payload is stored")]
-    public Task WhenAnUnexpectedAuditLogPayloadIsStored() =>
-        DeliverAsync("auditlog", TestPayloads.AuditLogJson);
+    [When("an unexpected auditlog payload is delivered")]
+    public async Task WhenAnUnexpectedAuditLogPayloadIsDelivered()
+    {
+        _rejection = await Record.ExceptionAsync(() => DeliverAsync("auditlog", TestPayloads.AuditLogJson));
+    }
 
     [When("a required orders payload is stored")]
     public Task WhenARequiredOrdersPayloadIsStored() =>
@@ -74,17 +80,26 @@ public sealed class UnexpectedPayloadHandlingSteps
         _fixture.CurrentTime = _fixture.CurrentTime.AddMinutes(minutes);
     }
 
-    [Then("the snapshot remains RECEIVING and its received files include \"(.*)\"")]
-    public async Task ThenTheSnapshotRemainsReceivingAndReceivedFilesInclude(string fileName)
+    [Then("the delivery is rejected as an unexpected payload type")]
+    public void ThenTheDeliveryIsRejectedAsAnUnexpectedPayloadType()
     {
-        var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Receiving, tracking.Status);
-        Assert.Contains(fileName, tracking.ReceivedFiles);
+        // The base type is what the consumer branches on to commit rather than redeliver.
+        var rejection = Assert.IsAssignableFrom<SnapshotMessageRejectedException>(_rejection);
+        Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, rejection.ReasonCode);
     }
 
-    [Then("no index row has been written for the snapshot")]
-    public async Task ThenNoIndexRowHasBeenWrittenForTheSnapshot()
+    [Then("nothing has been stored for the snapshot")]
+    public async Task ThenNothingHasBeenStoredForTheSnapshot()
     {
+        // Rejected before the first write: no tracking row, no index row, no blob folder.
+        await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
+        {
+            var trackingRowCount = await context.SnapshotTracking
+                .AsNoTracking()
+                .CountAsync(e => e.SnapshotId == _snapshotId);
+            Assert.Equal(0, trackingRowCount);
+        }
+
         Assert.False(await SnapshotTestHelpers.IndexRowExistsAsync(_fixture, _snapshotId));
     }
 
@@ -107,22 +122,22 @@ public sealed class UnexpectedPayloadHandlingSteps
         _indexBaseline = await SnapshotTestHelpers.GetIndexAsync(_fixture, _snapshotId);
     }
 
-    [Then("the completed snapshot lists exactly (.*) received files including \"(.*)\"")]
-    public async Task ThenTheCompletedSnapshotListsExactlyReceivedFilesIncluding(int expectedCount, string fileName)
+    [Then("the completed snapshot lists exactly (.*) received files excluding \"(.*)\"")]
+    public async Task ThenTheCompletedSnapshotListsExactlyReceivedFilesExcluding(int expectedCount, string fileName)
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         Assert.Equal(expectedCount, tracking.ReceivedFiles.Count);
-        Assert.Contains(fileName, tracking.ReceivedFiles);
+        Assert.DoesNotContain(fileName, tracking.ReceivedFiles);
     }
 
-    [Then("the \"(.*)\" blob is present under the snapshot root")]
-    public async Task ThenTheBlobIsPresentUnderTheSnapshotRoot(string fileName)
+    [Then("the \"(.*)\" blob is absent under the snapshot root")]
+    public async Task ThenTheBlobIsAbsentUnderTheSnapshotRoot(string fileName)
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var exists = await _fixture.BlobContainer
             .GetBlobClient($"{tracking.AdlsRootPath}/{fileName}")
             .ExistsAsync();
-        Assert.True(exists, $"Expected the '{fileName}' blob to have been stored under '{tracking.AdlsRootPath}'.");
+        Assert.False(exists, $"Expected no '{fileName}' blob under '{tracking.AdlsRootPath}'; the payload was rejected.");
     }
 
     [Then("an index row has been written for the snapshot")]
