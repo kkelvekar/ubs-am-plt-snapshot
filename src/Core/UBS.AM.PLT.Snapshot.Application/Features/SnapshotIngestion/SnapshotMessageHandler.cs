@@ -1,12 +1,10 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
-using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
-namespace UBS.AM.PLT.Snapshot.Application;
+namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Orchestrates the strict write order per message:
@@ -52,8 +50,8 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         // SnapshotMessageRejectedException rather than a generic failure: retrying the same
         // bytes can never succeed, so the consumer commits past it instead of seeking back
         // and blocking the partition forever.
-        ValidateEnvelope(message);
-        ValidatePayloadType(message);
+        SnapshotEnvelopeValidator.ValidateEnvelope(message);
+        SnapshotEnvelopeValidator.ValidatePayloadType(message, _requiredFilesProvider);
 
         // The root folder is pinned to the FIRST payload's arrival time for this
         // snapshotId and reused by every subsequent (or redelivered) payload, so a
@@ -76,9 +74,17 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             if (SnapshotCompleteness.IsComplete(tracking.ReceivedFiles, required))
             {
                 var headerJson = await _blobStore.ReadHeaderAsync(tracking.AdlsRootPath, cancellationToken);
-                var eventType = ExtractEventType(headerJson, message);
+                var eventType = SnapshotIndexEntryBuilder.ExtractEventType(headerJson);
+                if (eventType.Length == 0)
+                {
+                    _logger.LogWarning(
+                        "Header has no usable eventType; writing the index row with an empty EventType snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
+                        message.SnapshotId,
+                        message.AccountId,
+                        message.PayloadType);
+                }
 
-                var indexEntry = BuildIndexEntry(message, tracking, headerJson, eventType);
+                var indexEntry = SnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
 
                 // Index UPSERT must precede the status flip: if the index write fails,
                 // tracking must still read RECEIVING on redelivery so this guard retries.
@@ -197,147 +203,4 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             message.PayloadType,
             tracking.ReceivedFiles.Count);
     }
-
-    /// <summary>
-    /// Rejects a payload that is not part of the snapshot type's file contract — the expected
-    /// payloads are exactly the required files.
-    /// </summary>
-    /// <remarks>
-    /// Runs before the first write on purpose: an out-of-contract file that reached the blob
-    /// store would sit in the snapshot folder forever, and once its name entered
-    /// received_files it would appear in every response for the rest of the snapshot's life.
-    ///
-    /// An unknown snapshotType cannot be checked here — there is no expected-file list to
-    /// check against. That case keeps its existing behaviour unchanged (design decision: no
-    /// pre-write config check): the blob and tracking row are written, and the completeness
-    /// step then fails to resolve the list. It is not the publisher's fault and is not
-    /// rejected.
-    /// </remarks>
-    private void ValidatePayloadType(SnapshotMessage message)
-    {
-        IReadOnlySet<string> expectedFiles;
-        try
-        {
-            expectedFiles = _requiredFilesProvider.GetRequiredFiles(message.SnapshotType);
-        }
-        catch (KeyNotFoundException)
-        {
-            return;
-        }
-
-        if (!expectedFiles.Contains(SnapshotBlobPath.FileName(message.PayloadType)))
-        {
-            throw InvalidSnapshotEnvelopeException.UnexpectedPayloadType(
-                message.PayloadType,
-                message.SnapshotType,
-                expectedFiles);
-        }
-    }
-
-    private static void ValidateEnvelope(SnapshotMessage message)
-    {
-        // Only the fields that form the blob path and tracking identity are checked —
-        // a null in any of them corrupts a write. Deserialisation guarantees presence;
-        // this guards against present-but-null. (Non-nullable reference-type annotations
-        // are not enforced at runtime, so this check is real, not redundant.)
-        ThrowIfNull(message.SnapshotId, nameof(message.SnapshotId));
-        ThrowIfNull(message.AccountId, nameof(message.AccountId));
-        ThrowIfNull(message.SnapshotType, nameof(message.SnapshotType));
-        ThrowIfNull(message.PayloadType, nameof(message.PayloadType));
-
-        // The payload now arrives as a string of already-serialised JSON, so an empty or
-        // syntactically broken payload would otherwise be written to blob as an invalid
-        // .json file. Reject it here, before the first write.
-        if (string.IsNullOrWhiteSpace(message.Payload))
-        {
-            throw InvalidSnapshotEnvelopeException.EmptyPayload();
-        }
-
-        // SYNTAX-ONLY well-formedness check. The document is disposed immediately and no
-        // field inside it is ever read: the payload stays opaque (invariant #5), and the
-        // string written to blob is always `message.Payload` verbatim, never anything
-        // re-serialised from this parse.
-        try
-        {
-            using var syntaxCheckOnly = JsonDocument.Parse(message.Payload);
-        }
-        catch (JsonException ex)
-        {
-            // Re-raised as a rejection so the consumer commits past it: the same bytes
-            // redelivered parse identically, so retrying only blocks the partition.
-            throw InvalidSnapshotEnvelopeException.MalformedPayloadJson(ex);
-        }
-
-        static void ThrowIfNull(string? value, string fieldName)
-        {
-            if (value is null)
-            {
-                throw InvalidSnapshotEnvelopeException.NullRequiredField(fieldName);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Reads the ONE header value this service needs: <c>eventType</c>, which has its own
-    /// filterable SQL column. The header otherwise stays opaque — the document is disposed
-    /// immediately, no other field is ever read, and nothing from this parse is written
-    /// (the persisted display data is always the header text verbatim).
-    /// </summary>
-    /// <remarks>
-    /// Malformed header JSON throws out of <see cref="JsonDocument.Parse(string, JsonDocumentOptions)"/>
-    /// and propagates: no index row, no MarkComplete, no offset commit, recovery by
-    /// redelivery. A well-formed header that simply lacks a usable <c>eventType</c> is an
-    /// upstream contract breach, not a transport failure — it is logged and the row is
-    /// still written, because retrying it forever would never fix it.
-    /// </remarks>
-    private string ExtractEventType(string headerJson, SnapshotMessage message)
-    {
-        using var header = JsonDocument.Parse(headerJson);
-
-        if (header.RootElement.ValueKind == JsonValueKind.Object)
-        {
-            // JsonSerializerDefaults.Web used to bind eventType and EventType alike;
-            // JsonDocument.TryGetProperty is case-SENSITIVE, so match explicitly or every
-            // PascalCase header silently regresses to an empty EventType. On duplicate keys
-            // differing only by case, document order decides — deterministic across redeliveries.
-            foreach (var property in header.RootElement.EnumerateObject())
-            {
-                if (!string.Equals(property.Name, "eventType", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (property.Value.ValueKind == JsonValueKind.String
-                    && property.Value.GetString() is { Length: > 0 } eventType)
-                {
-                    return eventType;
-                }
-
-                break;
-            }
-        }
-
-        _logger.LogWarning(
-            "Header has no usable eventType; writing the index row with an empty EventType snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
-            message.SnapshotId,
-            message.AccountId,
-            message.PayloadType);
-
-        return string.Empty;
-    }
-
-    private static SnapshotIndexEntity BuildIndexEntry(
-        SnapshotMessage message,
-        SnapshotTrackingEntity tracking,
-        string headerJson,
-        string eventType)
-        => new()
-        {
-            SnapshotId = message.SnapshotId,
-            AccountId = message.AccountId,
-            SnapshotDate = tracking.FirstReceivedAt,
-            EventType = eventType,
-            AdlsPath = tracking.AdlsRootPath,
-            DisplayData = headerJson,
-        };
 }
