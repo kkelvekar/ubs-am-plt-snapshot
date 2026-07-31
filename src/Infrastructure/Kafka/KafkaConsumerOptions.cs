@@ -16,21 +16,14 @@ public sealed record KafkaConsumerOptions
     public string ConsumerGroup { get; set; } = string.Empty;
 
     /// <summary>
-    /// Delay before retry attempt N after the Nth consecutive failure of the same
-    /// message, per solution design §9 (immediate / 5s / 30s, supplied by
-    /// appsettings.json). Once the last delay is reached the consumer keeps retrying at
-    /// that delay indefinitely; an operations alert is logged when the final attempt in
-    /// this list fails. The in-code default must stay empty: the configuration binder
-    /// appends configured entries onto a non-empty default array instead of replacing
-    /// it, doubling the list.
+    /// The in-process retry ladder for a failing message, per solution design §9
+    /// (immediate / 5s / 30s, supplied by appsettings.json): one attempt per entry, with
+    /// delay N preceding attempt N. When the last attempt fails with a non-rejection error
+    /// the worker logs Critical and exits non-zero — redelivery happens via pod restart,
+    /// not in-process retry — so the total must stay well under Kafka's
+    /// <c>max.poll.interval.ms</c>. The in-code default must stay empty: the configuration
+    /// binder appends configured entries onto a non-empty default array instead of
+    /// replacing it, doubling the list.
     /// </summary>
     public TimeSpan[] RetryDelays { get; set; } = [];
-
-    /// <summary>
-    /// While a partition stays blocked past the alert threshold
-    /// (<c>Max(RetryDelays.Length, 1)</c> failures of the same message), the operations
-    /// alert is repeated every this-many additional failures so a long-blocked partition
-    /// keeps surfacing. Zero or negative means the alert fires once only.
-    /// </summary>
-    public int AlertRepeatEveryFailures { get; set; } = 10;
 }

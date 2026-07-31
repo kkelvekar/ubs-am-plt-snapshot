@@ -440,7 +440,7 @@ True distributed atomicity spanning Azure SQL and ADLS Gen2 is not implemented a
 
 **Idempotency:** All writes at every layer are safe to repeat. ADLS blob overwrites are content-idempotent. The tracking table upsert is idempotent. The snapshot_index write uses UPSERT so re-delivery of a header message after partial failure produces no duplicate rows.
 
-**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. Any failure causes the message to be re-delivered and all steps retried from the beginning.
+**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. Any failure causes the message to be re-delivered and all steps retried from the beginning. Redelivery after exhausted in-process retries is achieved by the worker exiting non-zero and being restarted (see §9); the restarted consumer resumes from the last committed offset.
 
 The guarantee to users: a snapshot is either fully visible in the grid with all blob files present, or it is not visible at all. There is no intermediate state.
 
@@ -543,13 +543,15 @@ The system does not roll back on failure. Data that has been successfully writte
 
 Retry timings are configurable via appsettings.
 
+All three attempts run in-process inside the consumer (~35 seconds total, well under the Kafka max.poll.interval.ms). If the final attempt fails, the worker logs a Critical operations alert and terminates with a non-zero exit code without committing the offset. Kubernetes (restartPolicy: Always, CrashLoopBackOff on repeated failure) restarts the pod, and Kafka redelivers the message from the last committed offset — recovery is always forward via redelivery, never via in-process seek-back.
+
 **Failure summary:**
 
 |Failure point|Auto recovery|Human needed|User impact|Data lost|
 |---|---|---|---|---|
 |Blob write fails|Yes -- Kafka retry|No|None|No|
 |Tracking write fails (transient)|Yes -- Kafka retry|No|None|No|
-|SQL unavailable (tracking or index)|Partial, then alert|Yes|Snapshot delayed|No|
+|SQL unavailable (tracking or index)|In-process retries, then alert + pod restart|Yes|Snapshot delayed|No|
 |Consumer pod crashes|Yes -- Kafka re-delivery|No|None|No|
 |Daily job fails|Yes -- next scheduled run|No|None|No|
 |Files never arrive (stale)|Detected by daily job|Yes -- investigate|Snapshot never visible|No (blobs deleted, logged)|
