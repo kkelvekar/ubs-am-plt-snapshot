@@ -88,17 +88,15 @@ public sealed class UnexpectedPayloadHandlingSteps
         Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, rejection.ReasonCode);
     }
 
-    [Then("nothing has been stored for the snapshot")]
-    public async Task ThenNothingHasBeenStoredForTheSnapshot()
+    [Then("a FAILED tracking row is recorded and nothing else has been stored for the snapshot")]
+    public async Task ThenAFailedTrackingRowIsRecordedAndNothingElseHasBeenStoredForTheSnapshot()
     {
-        // Rejected before the first write: no tracking row, no index row, no blob folder.
-        await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
-        {
-            var trackingRowCount = await context.SnapshotTracking
-                .AsNoTracking()
-                .CountAsync(e => e.SnapshotId == _snapshotId);
-            Assert.Equal(0, trackingRowCount);
-        }
+        // Rejected before the first write, but SnapshotId itself is storable here, so
+        // MarkRejectedAsync records a FAILED row (status + reason only) — no blob, no index row.
+        var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
+        Assert.Equal(SnapshotTrackingStatus.Failed, tracking.Status);
+        Assert.NotNull(tracking.Reason);
+        Assert.Contains(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, tracking.Reason);
 
         Assert.False(await SnapshotTestHelpers.IndexRowExistsAsync(_fixture, _snapshotId));
     }
@@ -153,6 +151,12 @@ public sealed class UnexpectedPayloadHandlingSteps
         var current = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         Assert.Equal(SnapshotTrackingStatus.Complete, current.Status);
         Assert.Equal(baseline.CompletedAt, current.CompletedAt);
+
+        // Highest-risk regression point: MarkRejectedAsync must leave a COMPLETE row entirely
+        // untouched — a rejection arriving after completion must not write a Reason or
+        // DeclaredFailedAt onto a snapshot that already succeeded.
+        Assert.Null(current.Reason);
+        Assert.Null(current.DeclaredFailedAt);
     }
 
     [Then("exactly one index row exists, identical to the extra-file baseline")]

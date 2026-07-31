@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Reqnroll;
 using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
@@ -77,17 +76,15 @@ public sealed class EnvelopeFieldValidationSteps
         Assert.Equal(InvalidSnapshotEnvelopeException.FieldTooLongReason, rejection.ReasonCode);
     }
 
-    [Then("the field-validation snapshot has nothing stored")]
-    public async Task ThenTheFieldValidationSnapshotHasNothingStored()
+    [Then("the field-validation snapshot has a FAILED tracking row and nothing else stored")]
+    public async Task ThenTheFieldValidationSnapshotHasAFailedTrackingRowAndNothingElseStored()
     {
-        // Rejected before the first write: no tracking row, no index row, no blob folder.
-        await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
-        {
-            var trackingRowCount = await context.SnapshotTracking
-                .AsNoTracking()
-                .CountAsync(e => e.SnapshotId == _snapshotId);
-            Assert.Equal(0, trackingRowCount);
-        }
+        // Rejected before the first write, but SnapshotId itself is storable here, so
+        // MarkRejectedAsync records a FAILED row (status + reason only) — no blob, no index row.
+        var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
+        Assert.Equal(SnapshotTrackingStatus.Failed, tracking.Status);
+        Assert.NotNull(tracking.Reason);
+        Assert.Contains(InvalidSnapshotEnvelopeException.FieldTooLongReason, tracking.Reason);
 
         Assert.False(await SnapshotTestHelpers.IndexRowExistsAsync(_fixture, _snapshotId));
     }

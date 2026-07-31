@@ -11,13 +11,15 @@ Feature: Envelope field validation
     # A violation raises InvalidSnapshotEnvelopeException (FIELD_TOO_LONG / INVALID_FIELD_CHARACTERS),
     # the same non-retryable SnapshotMessageRejectedException category as the existing
     # unexpected-payload-type rejection: the consumer commits past it rather than redelivering
-    # forever, and nothing durable is ever written for the rejected message.
+    # forever. No blob and no index row is ever written for the rejected message, but a FAILED
+    # tracking row IS recorded (status + reason) whenever SnapshotId itself is storable — it is
+    # the one durable trace a rejection leaves, and it is recoverable by a later valid message.
 
-Scenario: An over-long AccountId is rejected before any write, then the snapshot completes normally
+Scenario: An over-long AccountId is rejected before any payload is written, then the snapshot completes normally
     Given a field-validation snapshot with a well-formed account id
     When a payload arrives naming a 101-character account id
     Then the field-validation delivery is rejected for an over-long field
-    And the field-validation snapshot has nothing stored
+    And the field-validation snapshot has a FAILED tracking row and nothing else stored
     When the field-validation orders payload arrives
     And the field-validation calculations payload arrives
     And the field-validation settings payload arrives

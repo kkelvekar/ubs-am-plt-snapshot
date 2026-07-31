@@ -12,17 +12,15 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
 /// </summary>
 internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguration<SnapshotIndexEntity>
 {
-    // display_data (design §7) is the header.json text itself, already a string on the
-    // entity — stored verbatim, with no conversion, renaming or re-serialisation, so the
-    // column is byte-identical to the blob and new header fields need no code change.
+    // DisplayData carries no value conversion on purpose: it holds the header.json text and
+    // must stay byte-identical to the blob.
     public void Configure(EntityTypeBuilder<SnapshotIndexEntity> indexEntity)
     {
         indexEntity.ToTable("SnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
 
-        // The widths below mirror db/scripts/002 and SnapshotFieldLimits (Application), which
-        // bounds SnapshotId/AccountId pre-write and makes ExtractEventType fall back to an
-        // empty EventType rather than an over-long one. Change all three together.
+        // The widths below mirror db/scripts/002 and SnapshotFieldLimits; change all three
+        // together.
         indexEntity.Property(e => e.SnapshotId)
             .HasColumnName("SnapshotId")
             .HasColumnType("varchar(100)"); // SnapshotFieldLimits.SnapshotIdMaxLength

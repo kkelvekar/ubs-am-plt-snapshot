@@ -11,26 +11,24 @@ using UBS.AM.PLT.Snapshot.Domain;
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
 /// <summary>
-/// Deliberately thin, disposable Kafka adapter: deserialise the envelope, call the
-/// Application-layer handler, commit the offset on success — nothing else. No business
-/// logic, no branching on payloadType. Replaced wholesale by the org-provided consumer
-/// library at lift-and-shift time; that swap must touch only the Infrastructure layer.
-///
-/// Failure semantics per solution design §8/§9: no commit on any failure path. A failing
-/// message is retried in-process, one attempt per <see cref="KafkaConsumerOptions.RetryDelays"/>
-/// entry, with delay N preceding attempt N. When the last attempt still fails with anything
-/// other than a rejection, the consumer logs a single Critical operations alert, sets a
-/// non-zero exit code and stops the host: Kubernetes restarts the pod and Kafka redelivers
-/// from the last committed offset. Recovery is always forward via redelivery — the consumer
-/// never seeks back. The total ladder duration must therefore stay well under Kafka's
-/// <c>max.poll.interval.ms</c>. These are the org consumer wrapper's semantics (it has no
-/// Seek capability), so local Mode B testing exercises production behaviour.
+/// Thin Kafka adapter: deserialise the envelope, call the Application-layer handler, commit
+/// the offset on success. It holds no business logic and does not branch on payload type,
+/// because it is replaced wholesale by the org-provided consumer library and that swap must
+/// touch only the Infrastructure layer.
 /// </summary>
+/// <remarks>
+/// Failure semantics per solution design §8/§9: the offset is never committed on a failure
+/// path. A failing message is retried in-process, one attempt per
+/// <see cref="KafkaConsumerOptions.RetryDelays"/> entry. When the last attempt still fails
+/// with anything other than a rejection, the consumer logs a single Critical alert, sets a
+/// non-zero exit code and stops the host, so the pod restarts and Kafka redelivers from the
+/// last committed offset. Recovery is always forward — the consumer never seeks back, which
+/// matches the org consumer wrapper, which has no seek capability.
+/// </remarks>
 public sealed class KafkaSnapshotConsumer : BackgroundService
 {
-    // JsonSerializerDefaults.Web sets PropertyNameCaseInsensitive = true, which is what
-    // binds the PascalCase org wire contract (docs/snapshot-request.schema.json) onto
-    // SnapshotRequest — and camelCase equally. Do not drop it.
+    // Web defaults enable case-insensitive binding, which is what maps the PascalCase wire
+    // contract (docs/snapshot-request.schema.json) onto SnapshotRequest.
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IKafkaConsumerFactory _consumerFactory;
@@ -63,9 +61,8 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     private async Task ConsumeLoopAsync(CancellationToken stoppingToken)
     {
-        // Create()/Subscribe() sit inside the guarded region so a bad bootstrap config or
-        // subscribe throw is caught by the outer catch and logged Critical, not surfaced as
-        // a bare "BackgroundService failed" without our context.
+        // Create() and Subscribe() sit inside the guarded region so a bad bootstrap config is
+        // caught by the outer catch and logged with context.
         IConsumer<string, string>? consumer = null;
 
         try
@@ -94,8 +91,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                     _logger.LogError(ex, "Kafka consume error: {Reason}", ex.Error.Reason);
 
                     // Broker-level errors are not tied to a message, so back off at the
-                    // largest configured retry delay rather than hot-spinning while the
-                    // broker keeps erroring.
+                    // largest configured retry delay rather than hot-spinning.
                     if (!await TryDelayAsync(ConsumeErrorBackoff(), stoppingToken))
                     {
                         break;
@@ -123,17 +119,10 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         }
         catch (Exception ex)
         {
-            // The consume loop terminated unexpectedly (bad bootstrap config, a bug). Emit
-            // exactly ONE Critical with our context, then trigger host shutdown and return
-            // cleanly rather than rethrowing.
-            //
-            // Why not rethrow: with BackgroundServiceExceptionBehavior.StopHost a rethrow
-            // faults the BackgroundService task, and Host.TryExecuteBackgroundServiceAsync
-            // then independently logs the SAME exception again (a second Critical plus a
-            // BackgroundServiceFaulted Error) under its own category — ops would see 2-3
-            // alerts for one incident. Returning cleanly after StopApplication() reaches the
-            // same outcome (host stops, pod restarts) with a single Critical: the Host's
-            // duplicate-log path only runs when the task actually faults, which it now won't.
+            // The loop terminated unexpectedly. Log once, stop the host and return cleanly
+            // rather than rethrowing: a rethrow faults the BackgroundService task, and the
+            // host then logs the same exception again under its own category, so operations
+            // would see two or three alerts for one incident.
             _logger.LogCritical(
                 ex,
                 "Kafka consume loop terminated unexpectedly; worker will stop and the pod will restart. topic={Topic} consumerGroup={ConsumerGroup}",
@@ -144,8 +133,8 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         }
         finally
         {
-            // Close commits nothing (auto-commit disabled) but leaves the group cleanly;
-            // Dispose releases the native handle. Both null-guarded: Create() may have thrown.
+            // Close commits nothing (auto-commit is disabled) but leaves the consumer group
+            // cleanly. Both calls are null-guarded because Create() may have thrown.
             consumer?.Close();
             consumer?.Dispose();
         }
@@ -153,9 +142,9 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     /// <summary>
     /// Runs the in-process retry ladder for one message: one attempt per configured retry
-    /// delay, delay N preceding attempt N. Returns false when the consume loop must stop —
-    /// either shutdown was requested during a delay, or the ladder was exhausted and the
-    /// worker is exiting non-zero so the pod restarts and Kafka redelivers.
+    /// delay, delay N preceding attempt N. Returns false when the consume loop must stop,
+    /// either because shutdown was requested during a delay or because the ladder was
+    /// exhausted and the worker is exiting for a pod restart.
     /// </summary>
     private async Task<bool> ProcessWithRetriesAsync(
         IConsumer<string, string> consumer,
@@ -174,17 +163,15 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
             SnapshotMessage? message = null;
             try
             {
-                // Deserialisation stays inside the retried block: a deterministic envelope
-                // failure simply burns through the ladder and lands on the crash path, like
-                // any other non-rejection failure.
+                // Deserialisation stays inside the retried block so an envelope failure takes
+                // the same ladder-then-crash path as any other non-rejection failure.
                 var request = JsonSerializer.Deserialize<SnapshotRequest>(result.Message.Value, SerializerOptions)
                     ?? throw new JsonException("Message envelope deserialised to null.");
                 message = SnapshotRequestMapper.ToDomain(request);
 
                 await _handler.HandleAsync(message, stoppingToken);
 
-                // Offset committed only after the handler fully succeeded — never on
-                // any failure path.
+                // Committed only after the handler fully succeeded, never on a failure path.
                 consumer.Commit(result);
 
                 _logger.LogInformation(
@@ -202,14 +189,10 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
             }
             catch (SnapshotMessageRejectedException ex)
             {
-                // Non-retryable: the same bytes redelivered fail identically, so retrying
-                // (or crashing for redelivery) would block this partition forever. Commit
-                // past it instead and let the partition keep moving. Nothing durable was
-                // written — the rejection is raised before the first write.
-                //
-                // Error, not Warning: a rejected message is dropped, and today the
-                // publishing application is not told. Notifying it over the response
-                // topic is a later slice; until then this log is the only record.
+                // Non-retryable: the same bytes fail identically, so retrying would block the
+                // partition forever. Commit past it instead. Logged as an Error because the
+                // message's data is dropped; the handler has already recorded the FAILED
+                // tracking row and notified the publishing application.
                 _logger.LogError(
                     ex,
                     "Rejected snapshot message, committing past it reasonCode={ReasonCode} offset={TopicPartitionOffset} snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
@@ -231,10 +214,9 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
             {
                 LogFailure(ex, result, message, attempt);
 
-                // Ladder exhausted. The offset is NOT committed: the org consumer wrapper
-                // has no Seek, so redelivery is achieved by the process exiting non-zero,
-                // Kubernetes restarting the pod, and the new consumer resuming from the
-                // last committed offset. One Critical only, so operations see one alert.
+                // Ladder exhausted and the offset stays uncommitted: with no seek available,
+                // redelivery comes from the process exiting non-zero and the restarted pod
+                // resuming from the last committed offset. One Critical, so one alert.
                 _logger.LogCritical(
                     ex,
                     "Operations alert: message at {TopicPartitionOffset} failed all {Attempts} in-process attempts; worker exiting non-zero so the pod restarts and Kafka redelivers from the last committed offset. snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} messageKey={MessageKey}",
@@ -255,9 +237,9 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
     }
 
     /// <summary>
-    /// Stops the host with a non-zero exit code. <c>StopApplication()</c> alone unwinds
-    /// <c>host.Run()</c> to a normal exit 0, which k8s would treat as a clean stop and not a
-    /// crash; exit 1 makes the pod restart as intended.
+    /// Stops the host with a non-zero exit code. <c>StopApplication()</c> on its own unwinds
+    /// <c>host.Run()</c> to exit code 0, which Kubernetes treats as a clean stop rather than a
+    /// crash; exit 1 is what makes the pod restart.
     /// </summary>
     private void StopWorkerForPodRestart()
     {

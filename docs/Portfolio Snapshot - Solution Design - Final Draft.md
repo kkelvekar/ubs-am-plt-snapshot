@@ -555,6 +555,11 @@ All three attempts run in-process inside the consumer (~35 seconds total, well u
 |Consumer pod crashes|Yes -- Kafka re-delivery|No|None|No|
 |Daily job fails|Yes -- next scheduled run|No|None|No|
 |Files never arrive (stale)|Detected by daily job|Yes -- investigate|Snapshot never visible|No (blobs deleted, logged)|
+|Message rejected (bad envelope)|Not retryable -- producer must resend|Yes -- producer fixes the message|Snapshot delayed, still recoverable|No (nothing was written)|
+
+**Rejected message.** A message whose envelope is unusable (null, over-long or path-unsafe identity field; empty or syntactically invalid payload; payload type outside the snapshot type's file contract) is non-retryable: the same bytes would fail identically forever and block the partition. It is refused before any payload is written -- no blob, no index row -- and handled as follows: the snapshot's tracking row is set to FAILED with the reason (`{reasonCode}: {detail}`) and declared_failed_at, a Failed response carrying reasonCode and reasonDetail is published to the producer on the response topic, and only then is the offset committed past the message. If the snapshot has no tracking row yet, a minimal FAILED row is inserted so the rejection is visible in SQL; if it is already COMPLETE, the row is left untouched.
+
+FAILED is not terminal here. A later valid message for the same snapshot returns the row to RECEIVING, clears the reason and declared_failed_at, and the snapshot completes normally once all required files have arrived -- so a producer that resends a corrected message needs no intervention.
 
 In no failure scenario is permanent audit data deleted or corrupted. The worst outcome is a snapshot delayed until the issue is resolved and the message re-processed, or a snapshot eventually declared failed and logged for investigation with full traceability of what was received and what was missing.
 

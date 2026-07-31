@@ -1,15 +1,12 @@
--- SnapshotIndex (solution design §7) — permanent audit-UI grid data source, one thin
--- row per snapshot, written once all required files for the snapshot are received. This
--- script is the source of truth for the schema: EF Core maps to it by hand and never
--- generates migrations. Idempotent in schema shape (safe to re-run at any time, always
--- ends in the same state) — NOT data-preserving, since it drops and recreates the table.
+-- SnapshotIndex (solution design §7) — permanent audit-UI grid data source, one thin row per
+-- snapshot, written once all required files for the snapshot are received. This script is the
+-- source of truth for the schema: EF Core maps to it by hand and never generates migrations.
+-- Safe to re-run, but not data-preserving: it drops and recreates the table.
 --
--- Year-based partitioning (design §7). The 11 boundaries below (RANGE RIGHT) create 12
--- partitions: dedicated partitions for 2026 through 2035 (10 years), with everything
--- before 2026-01-01 falling into the leftmost catch-all and everything from 2036-01-01
--- onward into the rightmost catch-all. This is a static dev-local window; ongoing
--- production boundary maintenance (adding future years, sliding-window merges) is out of
--- scope for this repository.
+-- Year-based partitioning (design §7). The 11 RANGE RIGHT boundaries below create 12
+-- partitions: one per year for 2026 through 2035, plus a catch-all at each end. This is a
+-- static dev-local window; production boundary maintenance is out of scope for this
+-- repository.
 
 DROP TABLE IF EXISTS dbo.SnapshotIndex;
 
@@ -28,18 +25,17 @@ AS RANGE RIGHT FOR VALUES
 CREATE PARTITION SCHEME PS_SnapshotIndex_Year
 AS PARTITION PF_SnapshotIndex_Year ALL TO ([PRIMARY]);
 
--- PK_SnapshotIndex is NONCLUSTERED on SnapshotId alone: it preserves the exact
--- index-UPSERT uniqueness guarantee the completeness invariant relies on. SQL Server
--- requires the partition column in every *aligned* unique index, and SnapshotId must
--- stay independently unique without SnapshotDate baked into the key — so the clustered
--- (partition-aligned) index lives separately on SnapshotDate below.
+-- PK_SnapshotIndex is NONCLUSTERED on SnapshotId alone so that SnapshotId stays
+-- independently unique, which the index UPSERT relies on. SQL Server requires the partition
+-- column in every aligned unique index, so the partition-aligned clustered index lives
+-- separately on SnapshotDate below.
 CREATE TABLE dbo.SnapshotIndex
 (
-    -- SnapshotId/AccountId widths are mirrored by SnapshotFieldLimits (Application) and
-    -- enforced pre-write by SnapshotEnvelopeValidator; EventType comes from the header blob
-    -- instead, so SnapshotIndexEntryBuilder.ExtractEventType falls back to an empty string
-    -- rather than handing this column an over-long value. Changing a width means changing
-    -- this script, SnapshotFieldLimits and SnapshotIndexEntityConfiguration together.
+    -- SnapshotId and AccountId widths are mirrored by SnapshotFieldLimits and enforced before
+    -- the first write. EventType comes from the header blob instead, so
+    -- SnapshotIndexEntryBuilder.ExtractEventType falls back to an empty string rather than
+    -- handing this column an over-long value. Change this script, SnapshotFieldLimits and
+    -- SnapshotIndexEntityConfiguration together.
     SnapshotId   VARCHAR(100)  NOT NULL CONSTRAINT PK_SnapshotIndex PRIMARY KEY NONCLUSTERED,
     AccountId    VARCHAR(100)  NOT NULL,
     SnapshotDate DATETIME2     NOT NULL,

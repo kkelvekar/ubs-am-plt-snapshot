@@ -34,8 +34,8 @@ internal sealed class SnapshotTrackingEntityConfiguration : IEntityTypeConfigura
         entity.ToTable("SnapshotTracking", "dbo");
         entity.HasKey(e => e.SnapshotId);
 
-        // The three widths below mirror db/scripts/001 and SnapshotFieldLimits (Application),
-        // which rejects an over-long value before the first write. Change all three together.
+        // The widths below mirror db/scripts/001 and SnapshotFieldLimits; change all three
+        // together.
         entity.Property(e => e.SnapshotId)
             .HasColumnName("SnapshotId")
             .HasColumnType("varchar(100)"); // SnapshotFieldLimits.SnapshotIdMaxLength
@@ -66,6 +66,10 @@ internal sealed class SnapshotTrackingEntityConfiguration : IEntityTypeConfigura
             .HasColumnName("Status")
             .HasColumnType("varchar(20)")
             .HasConversion(StatusConverter);
+
+        entity.Property(e => e.Reason)
+            .HasColumnName("Reason")
+            .HasColumnType("nvarchar(max)");
 
         entity.Property(e => e.FirstReceivedAt)
             .HasColumnName("FirstReceivedAt")

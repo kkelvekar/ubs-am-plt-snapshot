@@ -477,7 +477,22 @@ public class SnapshotMessageHandlerTests
 
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
-        Assert.Empty(logger.Entries);
+
+        // The rejection IS recorded against the tracking row — unless the null field is the
+        // snapshotId itself, which is the row's primary key and so has nothing to record against.
+        if (nullField == "SnapshotId")
+        {
+            Assert.Empty(trackingStore.MarkedRejected);
+        }
+        else
+        {
+            Assert.Single(trackingStore.MarkedRejected);
+        }
+
+        // Only the rejection-response line: no payload was written, so no per-payload line.
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.StartsWith("Published snapshot rejection response", entry.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -503,7 +518,8 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(indexStore.Upserts);
-        Assert.Empty(logger.Entries);
+        Assert.Single(trackingStore.MarkedRejected);
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -574,7 +590,8 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(trackingStore.MarkedComplete);
         Assert.Empty(indexStore.Upserts);
-        Assert.Empty(logger.Entries);
+        Assert.Single(trackingStore.MarkedRejected);
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -787,7 +804,11 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(indexStore.Upserts);
-        Assert.Empty(logger.Entries);
+
+        // An over-long snapshotId does not fit its primary-key column, so that one rejection
+        // cannot be recorded; the rest are.
+        Assert.Equal(field == "SnapshotId" ? 0 : 1, trackingStore.MarkedRejected.Count);
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -827,7 +848,192 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(blobStore.Written);
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(indexStore.Upserts);
-        Assert.Empty(logger.Entries);
+
+        // A snapshotId with unusable characters still FITS its column, so every one of these
+        // rejections is recorded — only the blob path could not have been formed from it.
+        Assert.Single(trackingStore.MarkedRejected);
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_records_and_publishes_a_rejection_before_rethrowing_it()
+    {
+        // The producer is told why its message was refused, and the refusal is visible in SQL
+        // as a FAILED row — while blob and index stay untouched and the consumer still sees
+        // the rejection so it commits past the message.
+        var callOrderLog = new List<string>();
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore { CallOrderLog = callOrderLog };
+        var indexStore = new FakeSnapshotIndexStore();
+        var responsePublisher = new FakeSnapshotResponsePublisher { CallOrderLog = callOrderLog };
+        var handler = CreateHandler(
+            blobStore,
+            trackingStore,
+            indexStore: indexStore,
+            responsePublisher: responsePublisher);
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        var rejection = Assert.Single(trackingStore.MarkedRejected);
+        Assert.Equal("corr98765", rejection.SnapshotId);
+        Assert.Equal("00675442A", rejection.AccountId);
+        Assert.Equal("portfolio", rejection.SnapshotType);
+        Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, rejection.ReasonCode);
+        Assert.Equal(thrown.Message, rejection.ReasonDetail);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal("corr98765", notification.SnapshotId);
+        Assert.Equal("00675442A", notification.AccountId);
+        Assert.Equal(SnapshotTrackingStatus.Failed, notification.Status);
+        Assert.Equal(InvalidSnapshotEnvelopeException.UnexpectedPayloadTypeReason, notification.ReasonCode);
+        Assert.Equal(thrown.Message, notification.ReasonDetail);
+        Assert.NotNull(notification.DeclaredFailedAt);
+        Assert.Null(notification.CompletedAt);
+        Assert.Empty(notification.MissingFiles);
+
+        // Record first, publish second: a failed recording must never leave the rejection
+        // reported-but-unrecorded.
+        Assert.Equal(
+            [
+                nameof(FakeSnapshotTrackingStore.MarkRejectedAsync),
+                nameof(FakeSnapshotResponsePublisher.PublishAsync),
+            ],
+            callOrderLog);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(indexStore.Upserts);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_a_rejection_carrying_the_recorded_rows_state()
+    {
+        // A snapshot already part-received when a bad message arrives: the response reports
+        // the files that DID arrive, read back from the row the rejection wrote.
+        var trackingStore = new FakeSnapshotTrackingStore
+        {
+            RejectedRowToReturn = new SnapshotTrackingEntity
+            {
+                SnapshotId = "corr98765",
+                AccountId = "00675442A",
+                SnapshotType = "portfolio",
+                AdlsRootPath = "portfolio_snapshots/year=2026/month=05/accountId=00675442A/snapshotId=corr98765",
+                ReceivedFiles = ["header.json", "orders.json"],
+                Status = SnapshotTrackingStatus.Failed,
+                Reason = "UNEXPECTED_PAYLOAD_TYPE: whatever",
+                FirstReceivedAt = new DateTime(2026, 5, 22, 6, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt = new DateTime(2026, 5, 22, 6, 5, 0, DateTimeKind.Utc),
+                DeclaredFailedAt = new DateTime(2026, 5, 22, 6, 5, 0, DateTimeKind.Utc),
+            },
+        };
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(["header.json", "orders.json"], notification.ReceivedFiles);
+        Assert.Equal(new DateTime(2026, 5, 22, 6, 0, 0, DateTimeKind.Utc), notification.FirstReceivedAt);
+        Assert.Equal(new DateTime(2026, 5, 22, 6, 5, 0, DateTimeKind.Utc), notification.LastUpdatedAt);
+        Assert.Equal(new DateTime(2026, 5, 22, 6, 5, 0, DateTimeKind.Utc), notification.DeclaredFailedAt);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_a_rejection_without_recording_it_when_the_snapshotId_is_unstorable()
+    {
+        // The snapshotId is the tracking primary key, so an over-long one has nothing to
+        // record against — but the producer is still told, with its own raw value echoed back
+        // so it can tell which message this is about.
+        var overlong = new string('a', SnapshotFieldLimits.SnapshotIdMaxLength + 1);
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var timeProvider = new RecordingTimeProvider();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            timeProvider: timeProvider,
+            responsePublisher: responsePublisher);
+
+        await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessage(snapshotId: overlong), CancellationToken.None));
+
+        Assert.Empty(trackingStore.MarkedRejected);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(overlong, notification.SnapshotId);
+        Assert.Equal("00675442A", notification.AccountId);
+        Assert.Equal(SnapshotTrackingStatus.Failed, notification.Status);
+        Assert.Equal(InvalidSnapshotEnvelopeException.FieldTooLongReason, notification.ReasonCode);
+        Assert.Empty(notification.ReceivedFiles);
+        Assert.Equal(timeProvider.UtcNow.UtcDateTime, notification.FirstReceivedAt);
+        Assert.Equal(timeProvider.UtcNow.UtcDateTime, notification.LastUpdatedAt);
+        Assert.Equal(timeProvider.UtcNow.UtcDateTime, notification.DeclaredFailedAt);
+    }
+
+    [Fact]
+    public async Task HandleAsync_publishes_a_rejection_without_recording_it_when_the_snapshotId_is_null()
+    {
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessageWithNullField("SnapshotId"), CancellationToken.None));
+
+        Assert.Empty(trackingStore.MarkedRejected);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(string.Empty, notification.SnapshotId);
+        Assert.Equal(SnapshotTrackingStatus.Failed, notification.Status);
+        Assert.Equal(InvalidSnapshotEnvelopeException.NullRequiredFieldReason, notification.ReasonCode);
+    }
+
+    [Fact]
+    public async Task HandleAsync_propagates_a_publisher_failure_during_rejection_reporting_unchanged()
+    {
+        // Not swallowed and not converted into the rejection: the offset is then never
+        // committed, the retry ladder runs, and redelivery re-reports the rejection.
+        var boom = new InvalidOperationException("broker unreachable");
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var responsePublisher = new FakeSnapshotResponsePublisher { ThrowOnPublish = boom };
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Same(boom, thrown);
+        Assert.Single(trackingStore.MarkedRejected);
+    }
+
+    [Fact]
+    public async Task HandleAsync_propagates_a_tracking_failure_during_rejection_recording_and_publishes_nothing()
+    {
+        // Recording comes first precisely so this failure is loud: the offset is not
+        // committed and redelivery retries both steps, rather than the rejection being
+        // reported to the producer and then silently lost from SQL.
+        var boom = new InvalidOperationException("sql unavailable");
+        var trackingStore = new FakeSnapshotTrackingStore { ThrowOnMarkRejected = boom };
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(CreateMessage(payloadType: "auditlog"), CancellationToken.None));
+
+        Assert.Same(boom, thrown);
+        Assert.Empty(responsePublisher.Published);
     }
 
     [Fact]

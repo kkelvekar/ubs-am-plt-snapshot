@@ -6,20 +6,22 @@ Feature: Unexpected payload handling
     # Mode A (this project) drives real messages straight through the production
     # ISnapshotMessageHandler with Kafka bypassed. The expected payloads for a snapshotType are
     # exactly its required files, so a payloadType outside that set (auditlog.json) is refused before
-    # the first write: no blob, no tracking row, no entry in received_files. The rejection is a
+    # the first write: no blob, no entry in received_files. The rejection is a
     # SnapshotMessageRejectedException, which the consumer commits past rather than redelivering
-    # forever — only the publishing application can fix it by sending a corrected message.
+    # forever — only the publishing application can fix it by sending a corrected message. A FAILED
+    # tracking row IS recorded for the rejection (status + reason only), since SnapshotId itself is
+    # storable here; that row is recoverable by a later valid message (FAILED -> RECEIVING -> COMPLETE).
     #
     # The missing/null required envelope field case is covered by unit tests against fakes in the
     # Application and Infrastructure layers, not as a Mode A integration scenario. The
     # unconfigured-snapshotType and header-missing-required-index-fields cases remain open design
     # questions and keep their existing xUnit coverage in MalformedInputTests until resolved.
 
-Scenario: An unexpected file arriving before the required files is rejected and stores nothing
+Scenario: An unexpected file arriving before the required files is rejected and recovers to COMPLETE
     Given an out-of-contract snapshot for account "IT-ACC-008"
     When an unexpected auditlog payload is delivered
     Then the delivery is rejected as an unexpected payload type
-    And nothing has been stored for the snapshot
+    And a FAILED tracking row is recorded and nothing else has been stored for the snapshot
     When a required orders payload is stored
     And a required calculations payload is stored
     And a required settings payload is stored
