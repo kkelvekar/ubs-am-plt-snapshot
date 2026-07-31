@@ -35,10 +35,15 @@ AS PARTITION PF_SnapshotIndex_Year ALL TO ([PRIMARY]);
 -- (partition-aligned) index lives separately on SnapshotDate below.
 CREATE TABLE dbo.SnapshotIndex
 (
-    SnapshotId   VARCHAR(50)   NOT NULL CONSTRAINT PK_SnapshotIndex PRIMARY KEY NONCLUSTERED,
-    AccountId    VARCHAR(20)   NOT NULL,
+    -- SnapshotId/AccountId widths are mirrored by SnapshotFieldLimits (Application) and
+    -- enforced pre-write by SnapshotEnvelopeValidator; EventType comes from the header blob
+    -- instead, so SnapshotIndexEntryBuilder.ExtractEventType falls back to an empty string
+    -- rather than handing this column an over-long value. Changing a width means changing
+    -- this script, SnapshotFieldLimits and SnapshotIndexEntityConfiguration together.
+    SnapshotId   VARCHAR(100)  NOT NULL CONSTRAINT PK_SnapshotIndex PRIMARY KEY NONCLUSTERED,
+    AccountId    VARCHAR(100)  NOT NULL,
     SnapshotDate DATETIME2     NOT NULL,
-    EventType    VARCHAR(50)   NOT NULL,
+    EventType    VARCHAR(100)  NOT NULL,
     AdlsPath     VARCHAR(MAX)  NOT NULL,
     DisplayData  NVARCHAR(MAX) NOT NULL,
     CreatedAt    DATETIME2     NOT NULL

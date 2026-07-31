@@ -20,13 +20,16 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
         indexEntity.ToTable("SnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
 
+        // The widths below mirror db/scripts/002 and SnapshotFieldLimits (Application), which
+        // bounds SnapshotId/AccountId pre-write and makes ExtractEventType fall back to an
+        // empty EventType rather than an over-long one. Change all three together.
         indexEntity.Property(e => e.SnapshotId)
             .HasColumnName("SnapshotId")
-            .HasColumnType("varchar(50)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.SnapshotIdMaxLength
 
         indexEntity.Property(e => e.AccountId)
             .HasColumnName("AccountId")
-            .HasColumnType("varchar(20)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.AccountIdMaxLength
 
         indexEntity.Property(e => e.SnapshotDate)
             .HasColumnName("SnapshotDate")
@@ -34,7 +37,7 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
 
         indexEntity.Property(e => e.EventType)
             .HasColumnName("EventType")
-            .HasColumnType("varchar(50)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.EventTypeMaxLength
 
         indexEntity.Property(e => e.AdlsPath)
             .HasColumnName("AdlsPath")

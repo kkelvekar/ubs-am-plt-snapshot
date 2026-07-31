@@ -1,0 +1,54 @@
+{
+  "accountIds": [
+    "../etc/passwd"
+  ],
+  "payloads": [
+    {
+      "payloadType": "header",
+      "publishedBy": "Portal",
+      "payload": {
+        "eventType": "ModelChange",
+        "portfolioStatus": "ReadyToSend",
+        "orderStatus": "ReadyToSend",
+        "benchmark": "MCCHM2EQ",
+        "baseCcy": "CHF",
+        "orderApprovedBy": "Anna Miller",
+        "orderApprovedAt": "2026-05-15T06:10:14Z",
+        "orderSentBy": "James Smith",
+        "orderSentAt": "2026-05-15T06:14:22Z",
+        "programId": "123456",
+        "batchId": "15884",
+        "numOrders": 4,
+        "ptcAlerts": 0
+      }
+    },
+    {
+      "payloadType": "orders",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "total": 21,
+        "equities": [],
+        "futures": [],
+        "cash": []
+      }
+    },
+    {
+      "payloadType": "calculations",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "totals": { "marketValue": 1250000.50, "cash": 32000.00 },
+        "risk": { "trackingError": 0.84, "activeShare": 0.21 },
+        "rows": []
+      }
+    },
+    {
+      "payloadType": "settings",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "tolerance": 0.25,
+        "rebalanceMode": "Full",
+        "restrictions": []
+      }
+    }
+  ]
+}

@@ -10,9 +10,14 @@ DROP TABLE IF EXISTS dbo.SnapshotTracking;
 
 CREATE TABLE dbo.SnapshotTracking
 (
-    SnapshotId       VARCHAR(50)   NOT NULL CONSTRAINT PK_SnapshotTracking PRIMARY KEY,
-    AccountId        VARCHAR(20)   NOT NULL,
-    SnapshotType     VARCHAR(50)   NOT NULL,
+    -- Widths of the three message-derived identity columns are mirrored by
+    -- SnapshotFieldLimits (Application) and enforced pre-write by SnapshotEnvelopeValidator,
+    -- so an over-long value is rejected as a bad message instead of failing this INSERT.
+    -- Changing a width means changing this script, SnapshotFieldLimits and the EF mapping
+    -- in SnapshotTrackingEntityConfiguration together.
+    SnapshotId       VARCHAR(100)  NOT NULL CONSTRAINT PK_SnapshotTracking PRIMARY KEY,
+    AccountId        VARCHAR(100)  NOT NULL,
+    SnapshotType     VARCHAR(100)  NOT NULL,
     AdlsRootPath     VARCHAR(MAX)  NOT NULL,
     ReceivedFiles    NVARCHAR(MAX) NOT NULL,  -- JSON array of received filenames
     MissingFiles     NVARCHAR(MAX) NULL,      -- JSON array, populated only when status = FAILED

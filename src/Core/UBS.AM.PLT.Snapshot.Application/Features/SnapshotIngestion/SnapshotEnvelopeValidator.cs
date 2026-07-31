@@ -22,6 +22,25 @@ public static class SnapshotEnvelopeValidator
         ThrowIfNull(message.SnapshotType, nameof(message.SnapshotType));
         ThrowIfNull(message.PayloadType, nameof(message.PayloadType));
 
+        // The same four fields are the only message-derived values that land in a bounded
+        // (fixed-width VARCHAR) column or in a blob path segment. Bounding them here is what
+        // keeps every POST-write failure uniformly retryable: an over-long or unusable value
+        // would otherwise surface as a SQL truncation or blob-naming error on a write that
+        // redelivery could never make succeed, and the consumer would crash-loop on it.
+        ThrowIfTooLong(message.SnapshotId, nameof(message.SnapshotId), SnapshotFieldLimits.SnapshotIdMaxLength);
+        ThrowIfTooLong(message.AccountId, nameof(message.AccountId), SnapshotFieldLimits.AccountIdMaxLength);
+        ThrowIfTooLong(message.SnapshotType, nameof(message.SnapshotType), SnapshotFieldLimits.SnapshotTypeMaxLength);
+        ThrowIfTooLong(message.PayloadType, nameof(message.PayloadType), SnapshotFieldLimits.PayloadTypeMaxLength);
+
+        // All four also compose the blob path (see SnapshotBlobPath): snapshotType names the
+        // top-level folder, accountId and snapshotId their own segments, payloadType the
+        // filename. A separator, a traversal sequence or an exotic character in any of them
+        // would land the blob somewhere other than its snapshot folder.
+        ThrowIfNotPathSafe(message.SnapshotId, nameof(message.SnapshotId));
+        ThrowIfNotPathSafe(message.AccountId, nameof(message.AccountId));
+        ThrowIfNotPathSafe(message.SnapshotType, nameof(message.SnapshotType));
+        ThrowIfNotPathSafe(message.PayloadType, nameof(message.PayloadType));
+
         // The payload now arrives as a string of already-serialised JSON, so an empty or
         // syntactically broken payload would otherwise be written to blob as an invalid
         // .json file. Reject it here, before the first write.
@@ -50,6 +69,36 @@ public static class SnapshotEnvelopeValidator
             if (value is null)
             {
                 throw InvalidSnapshotEnvelopeException.NullRequiredField(fieldName);
+            }
+        }
+
+        static void ThrowIfTooLong(string value, string fieldName, int maxLength)
+        {
+            if (value.Length > maxLength)
+            {
+                throw InvalidSnapshotEnvelopeException.FieldTooLong(fieldName, value.Length, maxLength);
+            }
+        }
+
+        static void ThrowIfNotPathSafe(string value, string fieldName)
+        {
+            foreach (var character in value)
+            {
+                // ASCII letters and digits only — char.IsLetterOrDigit would accept the whole
+                // Unicode letter range, which the VARCHAR columns cannot round-trip anyway.
+                var accepted = character is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')
+                    or '-' or '_' or '.';
+                if (!accepted)
+                {
+                    throw InvalidSnapshotEnvelopeException.InvalidFieldCharacters(fieldName, value);
+                }
+            }
+
+            // '.' is accepted above (payload types and account ids may legitimately carry one),
+            // which on its own would let a traversal sequence through the character loop.
+            if (value.Contains("..", StringComparison.Ordinal))
+            {
+                throw InvalidSnapshotEnvelopeException.InvalidFieldCharacters(fieldName, value);
             }
         }
     }

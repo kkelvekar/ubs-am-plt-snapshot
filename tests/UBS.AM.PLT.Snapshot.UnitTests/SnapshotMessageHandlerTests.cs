@@ -739,6 +739,142 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(trackingStore.MarkedComplete);
     }
 
+    [Theory]
+    [InlineData("SnapshotId", SnapshotFieldLimits.SnapshotIdMaxLength)]
+    [InlineData("AccountId", SnapshotFieldLimits.AccountIdMaxLength)]
+    [InlineData("SnapshotType", SnapshotFieldLimits.SnapshotTypeMaxLength)]
+    [InlineData("PayloadType", SnapshotFieldLimits.PayloadTypeMaxLength)]
+    public async Task HandleAsync_accepts_an_identity_field_at_exactly_its_maximum_length(string field, int maxLength)
+    {
+        var message = CreateMessageWithFieldValue(field, new string('a', maxLength));
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var requiredFilesProvider = new FakeRequiredFilesProvider();
+        requiredFilesProvider.RequiredFilesByType[message.SnapshotType] =
+            new HashSet<string>(PortfolioRequiredFiles) { SnapshotBlobPath.FileName(message.PayloadType) };
+        var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider);
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        Assert.Single(blobStore.Written);
+    }
+
+    [Theory]
+    [InlineData("SnapshotId", SnapshotFieldLimits.SnapshotIdMaxLength)]
+    [InlineData("AccountId", SnapshotFieldLimits.AccountIdMaxLength)]
+    [InlineData("SnapshotType", SnapshotFieldLimits.SnapshotTypeMaxLength)]
+    [InlineData("PayloadType", SnapshotFieldLimits.PayloadTypeMaxLength)]
+    public async Task HandleAsync_rejects_an_identity_field_one_character_over_its_maximum_length(
+        string field,
+        int maxLength)
+    {
+        // A value too long for its column would fail the SQL write with a truncation error on
+        // every redelivery forever. Bounded here instead, before the first write, so it is a
+        // rejection the consumer commits past — and every post-write failure stays retryable.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var indexStore = new FakeSnapshotIndexStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
+        var message = CreateMessageWithFieldValue(field, new string('a', maxLength + 1));
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(message, CancellationToken.None));
+
+        Assert.Equal(InvalidSnapshotEnvelopeException.FieldTooLongReason, thrown.ReasonCode);
+        Assert.Contains(field, thrown.Message, StringComparison.Ordinal);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(indexStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Theory]
+    [InlineData("SnapshotId", "corr/98765")]        // path separator
+    [InlineData("SnapshotId", "corr 98765")]        // space
+    [InlineData("SnapshotId", "..")]                // traversal
+    [InlineData("SnapshotId", "corré98765")]   // non-ASCII
+    [InlineData("AccountId", "0067/5442A")]
+    [InlineData("AccountId", "0067 5442A")]
+    [InlineData("AccountId", "../00675442A")]
+    [InlineData("AccountId", "00675442Å")]
+    [InlineData("SnapshotType", "port/folio")]
+    [InlineData("SnapshotType", "port folio")]
+    [InlineData("SnapshotType", "..")]
+    [InlineData("SnapshotType", "portfölio")]
+    [InlineData("PayloadType", "or/ders")]
+    [InlineData("PayloadType", "or ders")]
+    [InlineData("PayloadType", "../orders")]
+    [InlineData("PayloadType", "ordèrs")]
+    public async Task HandleAsync_rejects_a_path_forming_field_carrying_unusable_characters(string field, string value)
+    {
+        // All four identity fields compose the blob path (see SnapshotBlobPath), so a
+        // separator, a traversal sequence or an exotic character would put the blob somewhere
+        // other than its snapshot folder — refused before the first write.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var indexStore = new FakeSnapshotIndexStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(CreateMessageWithFieldValue(field, value), CancellationToken.None));
+
+        Assert.Equal(InvalidSnapshotEnvelopeException.InvalidFieldCharactersReason, thrown.ReasonCode);
+        Assert.Contains(field, thrown.Message, StringComparison.Ordinal);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+        Assert.Empty(indexStore.Upserts);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public void ExtractEventType_returns_empty_for_a_value_longer_than_the_EventType_column()
+    {
+        var overlong = new string('x', SnapshotFieldLimits.EventTypeMaxLength + 1);
+
+        Assert.Equal(
+            string.Empty,
+            SnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{overlong}}"}"""));
+    }
+
+    [Fact]
+    public void ExtractEventType_returns_a_value_of_exactly_the_EventType_column_length()
+    {
+        var atLimit = new string('x', SnapshotFieldLimits.EventTypeMaxLength);
+
+        Assert.Equal(
+            atLimit,
+            SnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{atLimit}}"}"""));
+    }
+
+    [Fact]
+    public async Task HandleAsync_writes_an_empty_eventType_and_warns_when_the_header_eventType_is_too_long()
+    {
+        // The over-long value reuses the EXISTING "no usable eventType" path: the index row is
+        // still written (retrying could never fix an upstream contract breach), the header text
+        // still reaches display_data verbatim, and ops get the same WARN.
+        var overlong = new string('x', SnapshotFieldLimits.EventTypeMaxLength + 1);
+        var headerJson = $$"""{"eventType":"{{overlong}}"}""";
+        var (handler, indexStore, logger) = CreateCompletingHandler(headerJson);
+
+        await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
+
+        var indexEntry = Assert.Single(indexStore.Upserts);
+        Assert.Equal(string.Empty, indexEntry.EventType);
+        Assert.Equal(headerJson, indexEntry.DisplayData);
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Warning);
+    }
+
+    private static SnapshotMessage CreateMessageWithFieldValue(string field, string value)
+        => CreateMessage(
+            payloadType: field == "PayloadType" ? value : "orders",
+            snapshotId: field == "SnapshotId" ? value : "corr98765",
+            accountId: field == "AccountId" ? value : "00675442A",
+            snapshotType: field == "SnapshotType" ? value : "portfolio");
+
     private static (SnapshotMessageHandler Handler, FakeSnapshotIndexStore IndexStore, CapturingLogger<SnapshotMessageHandler> Logger)
         CreateCompletingHandler(string headerJson)
     {
@@ -817,12 +953,17 @@ public class SnapshotMessageHandlerTests
             logger ?? new CapturingLogger<SnapshotMessageHandler>());
     }
 
-    private static SnapshotMessage CreateMessage(string payloadType = "orders", string payload = """{"total":21}""")
+    private static SnapshotMessage CreateMessage(
+        string payloadType = "orders",
+        string payload = """{"total":21}""",
+        string snapshotId = "corr98765",
+        string accountId = "00675442A",
+        string snapshotType = "portfolio")
         => new()
         {
-            SnapshotId = "corr98765",
-            AccountId = "00675442A",
-            SnapshotType = "portfolio",
+            SnapshotId = snapshotId,
+            AccountId = accountId,
+            SnapshotType = snapshotType,
             PayloadType = payloadType,
             PublishedAt = "2026-05-22T06:10:14Z",
             PublishedBy = "PortfolioCalculation",

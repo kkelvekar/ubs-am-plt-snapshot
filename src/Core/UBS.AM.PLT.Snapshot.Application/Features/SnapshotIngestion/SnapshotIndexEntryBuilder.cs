@@ -23,6 +23,12 @@ public static class SnapshotIndexEntryBuilder
     /// redelivery. A well-formed header that simply lacks a usable <c>eventType</c> is an
     /// upstream contract breach, not a transport failure — an empty string is returned and
     /// the row is still written, because retrying it forever would never fix it.
+    ///
+    /// A value longer than <see cref="SnapshotFieldLimits.EventTypeMaxLength"/> takes that
+    /// exact same path. It cannot be caught by envelope validation (it comes from the header
+    /// blob, not the envelope), and writing it would fail the index UPSERT with a truncation
+    /// error on every redelivery forever. The header text still reaches display_data verbatim
+    /// — only the filterable column falls back to empty.
     /// </remarks>
     public static string ExtractEventType(string headerJson)
     {
@@ -42,7 +48,8 @@ public static class SnapshotIndexEntryBuilder
                 }
 
                 if (property.Value.ValueKind == JsonValueKind.String
-                    && property.Value.GetString() is { Length: > 0 } eventType)
+                    && property.Value.GetString() is { Length: > 0 } eventType
+                    && eventType.Length <= SnapshotFieldLimits.EventTypeMaxLength)
                 {
                     return eventType;
                 }
