@@ -15,14 +15,12 @@ public sealed class RecordingSnapshotResponsePublisher : ISnapshotResponsePublis
     private readonly Lock _gate = new();
     private readonly List<SnapshotStatusNotification> _published = [];
 
-    public Task PublishAsync(SnapshotStatusNotification notification)
+    public void Publish(SnapshotStatusNotification notification)
     {
         lock (_gate)
         {
             _published.Add(notification);
         }
-
-        return Task.CompletedTask;
     }
 
     public IReadOnlyList<SnapshotStatusNotification> PublishedFor(string snapshotId)

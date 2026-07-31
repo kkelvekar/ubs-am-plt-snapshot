@@ -221,7 +221,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(
             [
                 nameof(FakeSnapshotIndexStore.UpsertAsync),
-                nameof(FakeSnapshotResponsePublisher.PublishAsync),
+                nameof(FakeSnapshotResponsePublisher.Publish),
                 nameof(FakeSnapshotTrackingStore.MarkCompleteAsync),
             ],
             callOrderLog);
@@ -897,7 +897,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(
             [
                 nameof(FakeSnapshotTrackingStore.MarkRejectedAsync),
-                nameof(FakeSnapshotResponsePublisher.PublishAsync),
+                nameof(FakeSnapshotResponsePublisher.Publish),
             ],
             callOrderLog);
 

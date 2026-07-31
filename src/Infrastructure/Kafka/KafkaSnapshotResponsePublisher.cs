@@ -40,25 +40,46 @@ public sealed class KafkaSnapshotResponsePublisher : ISnapshotResponsePublisher,
         _logger = logger;
     }
 
-    public async Task PublishAsync(SnapshotStatusNotification notification)
+    public void Publish(SnapshotStatusNotification notification)
     {
         var response = SnapshotResponseMapper.ToOrgResponse(notification);
         var value = JsonSerializer.Serialize(response, SerializerOptions);
 
         // Keyed by accountId, the same basis the request topic is partitioned on, so a
-        // snapshot's responses stay ordered relative to each other.
-        var delivery = await _producer.ProduceAsync(
+        // snapshot's responses stay ordered relative to each other. Produce() queues the
+        // message and returns immediately; delivery is confirmed or failed asynchronously
+        // via the handler below, matching the org publisher's fire-and-forget contract.
+        _producer.Produce(
             _topic,
-            new Message<string, string> { Key = notification.AccountId, Value = value });
+            new Message<string, string> { Key = notification.AccountId, Value = value },
+            deliveryReport => LogDeliveryResult(notification, response.Status, deliveryReport));
+    }
+
+    private void LogDeliveryResult(
+        SnapshotStatusNotification notification,
+        string status,
+        DeliveryReport<string, string> deliveryReport)
+    {
+        if (deliveryReport.Error.IsError)
+        {
+            _logger.LogError(
+                "Failed to publish snapshot response snapshotId={SnapshotId} accountId={AccountId} status={Status} topic={Topic} reason={Reason}",
+                notification.SnapshotId,
+                notification.AccountId,
+                status,
+                deliveryReport.Topic,
+                deliveryReport.Error.Reason);
+            return;
+        }
 
         _logger.LogInformation(
             "Published snapshot response snapshotId={SnapshotId} accountId={AccountId} status={Status} topic={Topic} partition={Partition} offset={Offset}",
             notification.SnapshotId,
             notification.AccountId,
-            response.Status,
-            delivery.Topic,
-            delivery.Partition.Value,
-            delivery.Offset.Value);
+            status,
+            deliveryReport.Topic,
+            deliveryReport.Partition.Value,
+            deliveryReport.Offset.Value);
     }
 
     public void Dispose()

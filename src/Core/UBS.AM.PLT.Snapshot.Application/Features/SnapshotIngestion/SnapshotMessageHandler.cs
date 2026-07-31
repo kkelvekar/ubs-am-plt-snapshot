@@ -126,10 +126,11 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     /// application why the message was refused.
     /// </summary>
     /// <remarks>
-    /// Neither step is swallowed: a failure in either propagates, so the offset is not
-    /// committed and redelivery re-runs both. Both are idempotent, so the replay is harmless
-    /// and a failed record can never silently drop the rejection. The FAILED row is the only
-    /// durable write a rejection makes.
+    /// A tracking-store failure propagates, so the offset is not committed and redelivery
+    /// re-runs both steps; the upsert is idempotent, so the replay is harmless. Publishing is
+    /// fire-and-forget (see <see cref="ISnapshotResponsePublisher"/>) and cannot block or
+    /// retry the commit on delivery failure — the FAILED row is the durable record of the
+    /// rejection regardless of whether the notification is delivered.
     /// </remarks>
     private async Task RecordAndPublishRejectionAsync(
         SnapshotMessage message,
@@ -160,7 +161,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        await _responsePublisher.PublishAsync(new SnapshotStatusNotification
+        _responsePublisher.Publish(new SnapshotStatusNotification
         {
             // The message's own values, even when too broken to persist, so the publisher can
             // recognise which message this response is about.
@@ -205,7 +206,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     {
         var missingFiles = MissingFiles(tracking.ReceivedFiles, requiredFiles);
 
-        await _responsePublisher.PublishAsync(new SnapshotStatusNotification
+        _responsePublisher.Publish(new SnapshotStatusNotification
         {
             SnapshotId = tracking.SnapshotId,
             AccountId = tracking.AccountId,
@@ -243,7 +244,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     {
         var completedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
-        await _responsePublisher.PublishAsync(new SnapshotStatusNotification
+        _responsePublisher.Publish(new SnapshotStatusNotification
         {
             SnapshotId = tracking.SnapshotId,
             AccountId = tracking.AccountId,

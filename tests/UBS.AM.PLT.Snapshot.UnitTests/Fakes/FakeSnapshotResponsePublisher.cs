@@ -17,9 +17,9 @@ public sealed class FakeSnapshotResponsePublisher : ISnapshotResponsePublisher
     /// </summary>
     public List<string>? CallOrderLog { get; set; }
 
-    public Task PublishAsync(SnapshotStatusNotification notification)
+    public void Publish(SnapshotStatusNotification notification)
     {
-        CallOrderLog?.Add(nameof(PublishAsync));
+        CallOrderLog?.Add(nameof(Publish));
 
         if (ThrowOnPublish is not null)
         {
@@ -27,6 +27,5 @@ public sealed class FakeSnapshotResponsePublisher : ISnapshotResponsePublisher
         }
 
         _published.Add(notification);
-        return Task.CompletedTask;
     }
 }
