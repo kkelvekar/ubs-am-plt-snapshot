@@ -49,7 +49,7 @@
       "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
     },
     {
-      "_comment": "Explicit null AccountId - present but null, rejected by the handler's identity guard before any write.",
+      "_comment": "Explicit null AccountId - present but null, rejected by the handler's identity guard before any payload is written.",
       "SnapshotId": "corr20260727-0002",
       "AccountId": null,
       "SnapshotType": "portfolio",

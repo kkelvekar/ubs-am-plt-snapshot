@@ -71,6 +71,30 @@
   ================================================================================
   LIVE-TEST PROCEDURES (Mode B — TC-13 / TC-14 / TC-15)
   ================================================================================
+  CONSUMER FAILURE SEMANTICS (applies to every TC below — design doc §8/§9):
+    A failing message is retried IN-PROCESS, one attempt per configured
+    Kafka:RetryDelays entry (0s, 5s, 30s => 3 attempts, ~35s total). On the
+    final failure the worker logs ONE Critical "Operations alert ..." line,
+    does NOT commit the offset, and exits with a NON-ZERO exit code. There is
+    no seek-back and no retry-forever hold at max delay.
+    Consequences for these procedures:
+      - The window in which to observe "fault active" state is ~35 seconds
+        from the first failure. Have the verification queries ready before
+        publishing.
+      - Redelivery requires the PROCESS TO BE RESTARTED. In production that is
+        Kubernetes (restartPolicy: Always); locally nothing restarts it for
+        you — this script cannot restart the worker either. After removing a
+        fault you must start a new worker process yourself (or run the worker
+        under a supervisor / `while ($true) { dotnet run ... }` loop) before
+        the uncommitted message is redelivered.
+      - Check the exit code of the crashed worker: `$LASTEXITCODE` for a
+        foreground `dotnet run`, or `(Get-Process -Id $pid).ExitCode` /
+        `$proc.ExitCode` if you started it with Start-Process -PassThru.
+        Expect non-zero (1).
+      - A REJECTED message (SnapshotMessageRejectedException) is the one
+        exception: single LogError, offset committed past it, no retries, the
+        worker keeps running.
+
   Preconditions (all TCs):
     - Local Kafka broker up:            ./tools/kafka-local.ps1 -Up
     - Dev Azure SQL schema applied:     ./tools/apply-schema-azure.ps1
@@ -100,15 +124,22 @@
     3. Verify while the fault is active:
          - first payload's blob exists in ADLS at the expected path
          - no snapshot_tracking row for the snapshotId
-         - worker logs show "Failed to process message ... attempt N" + retry cadence
+         - worker logs show "Failed to process message ... (attempt N)" for
+           N = 1..3 at the configured delays (0s, 5s, 30s)
          - kafka-consumer-groups.sh --describe shows LAG > 0 / committed offset
            unchanged for the partition carrying this snapshotId
          - no "Committed offset" log line for that message
+         - after attempt 3: exactly ONE Critical "Operations alert ..." line and
+           the worker process exits non-zero
     4. ./fault-injection.ps1 -Remove -Target Tracking
-       Verify: retry succeeds without restarting the worker, tracking rows appear
-       for all 4 payloads, the index row is written on the 4th, lag returns to 0,
-       and "Committed offset" is logged per message only after the corresponding
-       SQL write is confirmed.
+       Then start a NEW worker process (the old one has exited — nothing restarts
+       it locally). Verify: the uncommitted message is redelivered from the last
+       committed offset, tracking rows appear for all 4 payloads, the index row
+       is written on the 4th, lag returns to 0, and "Committed offset" is logged
+       per message only after the corresponding SQL write is confirmed.
+       (Removing the fault within the ~35s retry window instead lets the running
+       worker succeed on a later attempt without any restart — either path is a
+       valid pass.)
 
   --------------------------------------------------------------------------
   TC-14 — fault between completeness check and index write
@@ -122,10 +153,15 @@
            RECEIVING (proves index-write-before-MarkComplete ordering)
          - no snapshot_index row for the snapshotId
          - offset for the completing message NOT committed (lag = 1)
-         - failure + retry-cadence logs for the completing message
-    4. ./fault-injection.ps1 -Remove -Target Index
-       Verify: retry completes — exactly one snapshot_index row, tracking
-       status COMPLETE, offset committed, lag back to 0.
+         - 3 "Failed to process message ... (attempt N)" logs for the
+           completing message, then one Critical "Operations alert ..." and a
+           non-zero process exit
+    4. ./fault-injection.ps1 -Remove -Target Index, then start a NEW worker
+       process (or remove the fault inside the ~35s retry window and let the
+       running worker recover).
+       Verify: the completing message redelivers and succeeds — exactly one
+       snapshot_index row, tracking status COMPLETE, offset committed, lag back
+       to 0.
 
   --------------------------------------------------------------------------
   TC-15 — restart / new consumer instance
@@ -187,15 +223,18 @@
          - no blob at the expected path in the real dev ADLS account
          - no snapshot_tracking row for the snapshotId
          - no snapshot_index row for the snapshotId
-         - worker logs show "Failed to process message ... attempt N"
+         - worker logs show "Failed to process message ... (attempt N)" for
+           N = 1..3, then one Critical "Operations alert ..."
          - kafka-consumer-groups.sh --describe shows lag > 0, committed offset
            unchanged for the partition carrying this message
          - no "Committed offset" log line for this message
-    4. Kill the worker (Stop-Process -Force). Restart it WITHOUT the override
-       (normal config — BlobStorage__ServiceUri unset or pointed at the real
-       account). Publish the remaining 3 payloads for the same snapshotId if
-       only 1 was sent, or just let the redelivered message retry if the
-       consumer is still up.
+         - the worker process has exited non-zero by itself (~35s after the
+           first failure) — no Stop-Process needed
+    4. Start a NEW worker process WITHOUT the override (normal config —
+       BlobStorage__ServiceUri unset or pointed at the real account); kill the
+       old one first with Stop-Process -Force only if it somehow survived.
+       Publish the remaining 3 payloads for the same snapshotId if only 1 was
+       sent; the uncommitted one redelivers on its own.
        Verify: full self-heal — blob written, tracking row appears, all 4
        payloads eventually COMPLETE, index row written, lag returns to 0. No
        manual SQL/blob intervention.
@@ -206,7 +245,11 @@
   Mechanism: use the existing Tracking/Index THROW triggers to park the
   worker at a well-defined partial/durable state, hard-kill it there
   (Stop-Process -Force, simulating a pod crash — NOT a graceful shutdown), then
-  remove the trigger and start a brand-new worker process. Two variants:
+  remove the trigger and start a brand-new worker process. Kill inside the ~35s
+  retry window (right after the first "attempt 1" failure log) so the kill, and
+  not the consumer's own crash-on-exhaustion path, is what ends the process;
+  if the worker beats you to it and exits non-zero on its own, the durable
+  state is identical and the rest of the procedure is unchanged. Two variants:
 
     Variant 1 — crash with blob-only durable state (no tracking row):
       1. ./fault-injection.ps1 -Install -Target Tracking
@@ -262,18 +305,20 @@
        connected to). The index INSERT then returns successfully (after its
        20s delay) and MarkCompleteAsync succeeds, so HandleAsync returns
        successfully — but the subsequent consumer.Commit(result) against the
-       paused broker fails/times out, which must land in the same
-       catch/Seek/retry path used for handler failures elsewhere in this
-       script's scenarios.
+       paused broker fails/times out, which must land in the same in-process
+       retry ladder used for handler failures elsewhere in this script's
+       scenarios (and, if all 3 attempts fail, the Critical + non-zero-exit
+       crash path).
     4. ./fault-injection.ps1 -Remove -Target Delay
        docker unpause snapshot-writer-kafka
-       Redelivery re-runs the handler against an already-COMPLETE snapshot —
-       an idempotent no-op per Part 1's proof (blob overwrite, tracking touch,
-       index UPSERT touch) — and commit succeeds on the retry.
+       If the worker already exited non-zero, start a new one. Redelivery
+       re-runs the handler against an already-COMPLETE snapshot — an idempotent
+       no-op per Part 1's proof (blob overwrite, tracking touch, index UPSERT
+       touch) — and commit succeeds on the retry.
     Verify: exactly one snapshot_index row, created_at from the FIRST attempt
     (unchanged by the redelivery); tracking COMPLETE; lag back to 0; no
-    unexpected errors beyond the expected retry/backoff logs around the
-    commit failure.
+    unexpected errors beyond the expected retry logs (and at most one Critical
+    operations alert) around the commit failure.
 
     FALLBACK (use only if the broker-pause step proves flaky — e.g.
     consumer.Commit() does not fail cleanly against a paused container, or
@@ -289,21 +334,19 @@
   ================================================================================
   Design doc §9. Both scenarios use the SAME env-var config-override mechanism as
   TC-16 (NOT SQL triggers, NOT RBAC revocation): point the worker at an
-  unreachable endpoint via a local config override, observe the §9 retry cadence
-  (0s, 5s, 30s, 30s...) and the Critical "Operations alert" at the 3rd
-  consecutive failure, prove the offset never commits, then restore config and
-  confirm forward recovery. Do NOT take down the shared dev Azure SQL server and
-  do NOT revoke RBAC — only local config overrides pointing at dead endpoints.
+  unreachable endpoint via a local config override, observe the §9 ladder of 3
+  in-process attempts (0s, 5s, 30s) followed by ONE Critical "Operations alert"
+  and a non-zero process exit, prove the offset never commits, then restore
+  config, start a new worker and confirm forward recovery. Do NOT take down the
+  shared dev Azure SQL server and do NOT revoke RBAC — only local config
+  overrides pointing at dead endpoints.
 
-  The deterministic halves of these scenarios are ALSO covered, faster, in
-  committed tests:
-    - retry cadence + Critical alert at attempt 3:
-        tests/UBS.AM.PLT.Snapshot.UnitTests/KafkaSnapshotConsumerTests.cs
-        (Retry_delay_sequence_follows_configured_cadence_and_then_holds_at_max)
-    - exception-propagates + no durable tracking/index row:
-        tests/UBS.AM.PLT.Snapshot.IntegrationTests/GroupIInfraUnavailabilityTests.cs
-  These live procedures add the one thing Mode A cannot: the real broker
-  offset-lag / no-commit proof and forward recovery on the live consume path.
+  The deterministic half of these scenarios (exception propagates + no durable
+  tracking/index row) is ALSO covered, faster, in the committed Mode A feature
+  tests/UBS.AM.PLT.Snapshot.IntegrationTests/Features/InfrastructureFailureDuringWrite.feature.
+  Mode A bypasses the consumer entirely, so these live procedures are the ONLY
+  coverage of the retry ladder, the Critical alert, the non-zero exit, the real
+  broker offset-lag / no-commit proof, and forward recovery after a restart.
 
   Config keys (standard .NET double-underscore env-var override binding):
     - SQL connection string:  Database__ConnectionString
@@ -330,17 +373,17 @@
          - blob MAY or MAY NOT exist (the write order does a SQL read
            (GetRootPathAsync) BEFORE the blob write, so the failure can surface
            before anything is written) — do NOT assert on blob presence
-         - worker logs show "Failed to process message ... attempt N" at the §9
-           cadence (0s, 5s, 30s, 30s...), and a Critical "Operations alert ..."
-           line at the 3rd consecutive failure, repeating every
-           AlertRepeatEveryFailures thereafter
+         - worker logs show "Failed to process message ... (attempt N)" for
+           N = 1..3 at the §9 delays (0s, 5s, 30s), then EXACTLY ONE Critical
+           "Operations alert ..." line — and the process exits non-zero
+           (~35s after the first failure), with no further retry logs
          - docker exec ... kafka-consumer-groups.sh --describe shows LAG > 0 /
            committed offset unchanged for the partition; no "Committed offset"
            log line for the message
-    4. Stop the worker (Stop-Process -Force). Restart WITHOUT the override
-       (normal config → the real dev Azure SQL). Republish the remaining
-       payloads if only some were sent, or let redelivery retry the
-       uncommitted one.
+    4. Start a NEW worker process WITHOUT the override (normal config → the real
+       dev Azure SQL); Stop-Process -Force the old one only if it somehow
+       survived. Republish the remaining payloads if only some were sent; the
+       uncommitted one redelivers on its own.
        Verify forward recovery: snapshot completes — exactly one
        snapshot_tracking row (COMPLETE) and exactly one snapshot_index row (no
        duplicates), lag returns to 0, "Committed offset" logged per message.
@@ -363,12 +406,12 @@
            (blob-first write order means a blob failure leaves ZERO tracking
            rows even though SQL is perfectly reachable) — and no snapshot_index
            row
-         - worker logs show the §9 retry cadence and the Critical "Operations
-           alert" at the 3rd consecutive failure
+         - worker logs show the §9 ladder (3 attempts at 0s/5s/30s), then
+           exactly one Critical "Operations alert" and a non-zero process exit
          - kafka-consumer-groups.sh --describe shows lag > 0 / offset
            uncommitted; no "Committed offset" line for the message
-    4. Stop the worker (Stop-Process -Force). Restart WITHOUT the override
-       (real ADLS). Let redelivery retry / republish remaining payloads.
+    4. Start a NEW worker process WITHOUT the override (real ADLS); the old one
+       has already exited. Let redelivery retry / republish remaining payloads.
        Verify forward recovery: blob written, tracking row appears, snapshot
        COMPLETEs, exactly one index row, lag back to 0 — no duplicates, no
        manual SQL/blob intervention.

@@ -5,24 +5,26 @@ using UBS.AM.PLT.Snapshot.Domain.Entities;
 namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
-/// Builds the permanent index row written once a snapshot is complete, per design §4.
-/// The header stays opaque: the only value read out of it is <c>eventType</c>, and the
-/// persisted display data is always the header text verbatim.
+/// Builds the permanent index row written once a snapshot is complete, per design §4. The
+/// only value read out of the header is <c>eventType</c>; the persisted display data is the
+/// header text verbatim.
 /// </summary>
 public static class SnapshotIndexEntryBuilder
 {
     /// <summary>
-    /// Reads the ONE header value this service needs: <c>eventType</c>, which has its own
-    /// filterable SQL column. The header otherwise stays opaque — the document is disposed
-    /// immediately, no other field is ever read, and nothing from this parse is written
-    /// (the persisted display data is always the header text verbatim).
+    /// Reads the one header value this service needs, <c>eventType</c>, which has its own
+    /// filterable SQL column. Returns an empty string when the header carries no usable value.
+    /// The document is disposed immediately and no other field is read.
     /// </summary>
     /// <remarks>
-    /// Malformed header JSON throws out of <see cref="JsonDocument.Parse(string, JsonDocumentOptions)"/>
-    /// and propagates: no index row, no MarkComplete, no offset commit, recovery by
-    /// redelivery. A well-formed header that simply lacks a usable <c>eventType</c> is an
-    /// upstream contract breach, not a transport failure — an empty string is returned and
-    /// the row is still written, because retrying it forever would never fix it.
+    /// Malformed header JSON propagates, so no index row is written, the tracking row stays
+    /// RECEIVING and the offset is not committed; redelivery retries.
+    ///
+    /// A missing, non-string or over-long <c>eventType</c> falls back to an empty string and
+    /// the row is still written: it is an upstream contract breach that retrying would never
+    /// fix, and an over-long value cannot be caught by envelope validation because it comes
+    /// from the header blob rather than the message. The header text still reaches
+    /// display_data verbatim; only the filterable column falls back.
     /// </remarks>
     public static string ExtractEventType(string headerJson)
     {
@@ -30,10 +32,9 @@ public static class SnapshotIndexEntryBuilder
 
         if (header.RootElement.ValueKind == JsonValueKind.Object)
         {
-            // JsonSerializerDefaults.Web used to bind eventType and EventType alike;
-            // JsonDocument.TryGetProperty is case-SENSITIVE, so match explicitly or every
-            // PascalCase header silently regresses to an empty EventType. On duplicate keys
-            // differing only by case, document order decides — deterministic across redeliveries.
+            // Matched case-insensitively by hand: TryGetProperty is case-sensitive and would
+            // miss the PascalCase headers the wire contract also allows. On keys differing
+            // only by case, document order decides, which is stable across redeliveries.
             foreach (var property in header.RootElement.EnumerateObject())
             {
                 if (!string.Equals(property.Name, "eventType", StringComparison.OrdinalIgnoreCase))
@@ -42,7 +43,8 @@ public static class SnapshotIndexEntryBuilder
                 }
 
                 if (property.Value.ValueKind == JsonValueKind.String
-                    && property.Value.GetString() is { Length: > 0 } eventType)
+                    && property.Value.GetString() is { Length: > 0 } eventType
+                    && eventType.Length <= SnapshotFieldLimits.EventTypeMaxLength)
                 {
                     return eventType;
                 }
@@ -54,6 +56,10 @@ public static class SnapshotIndexEntryBuilder
         return string.Empty;
     }
 
+    /// <summary>
+    /// Builds the index row for a completed snapshot. <paramref name="headerJson"/> is stored
+    /// verbatim as the display data.
+    /// </summary>
     public static SnapshotIndexEntity Build(
         SnapshotMessage message,
         SnapshotTrackingEntity tracking,

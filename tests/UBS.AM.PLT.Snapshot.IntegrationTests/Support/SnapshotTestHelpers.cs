@@ -59,4 +59,12 @@ internal static class SnapshotTestHelpers
             .AsNoTracking()
             .AnyAsync(e => e.SnapshotId == snapshotId);
     }
+
+    public static async Task<bool> TrackingRowExistsAsync(SnapshotFixture fixture, string snapshotId)
+    {
+        await using var context = await fixture.DbContextFactory.CreateDbContextAsync();
+        return await context.SnapshotTracking
+            .AsNoTracking()
+            .AnyAsync(e => e.SnapshotId == snapshotId);
+    }
 }

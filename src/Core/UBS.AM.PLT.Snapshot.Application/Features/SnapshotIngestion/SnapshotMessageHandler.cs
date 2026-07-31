@@ -1,17 +1,22 @@
 using Microsoft.Extensions.Logging;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
 namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
-/// Orchestrates the strict write order per message:
-/// blob write → tracking upsert → completeness check → index UPSERT. Any failure
-/// propagates unchanged so the consumer never commits the offset (recovery is forward,
-/// via redelivery).
+/// Orchestrates the write order for a single message: blob write, tracking upsert,
+/// completeness check, index UPSERT. Any failure propagates unchanged so the consumer never
+/// commits the offset and redelivery retries the message.
 /// </summary>
+/// <remarks>
+/// A message refused by the pre-write envelope guards never enters that order: it is recorded
+/// as a FAILED tracking row, reported to the publishing application, and the rejection is
+/// rethrown for the consumer to commit past. No blob and no index row is touched on that path.
+/// </remarks>
 public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 {
     private readonly ISnapshotBlobStore _blobStore;
@@ -42,32 +47,28 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
     public async Task HandleAsync(SnapshotMessage message, CancellationToken cancellationToken)
     {
-        // Guard: the JSON `required` check on the envelope only proves each identity field
-        // was present in the message — not that it was non-null (an explicit
-        // "snapshotId": null passes deserialisation with a null value). A null identity
-        // field would corrupt the blob path (e.g. ".../snapshotId=/...") and the tracking
-        // row, so reject it before the first write. This throws
-        // SnapshotMessageRejectedException rather than a generic failure: retrying the same
-        // bytes can never succeed, so the consumer commits past it instead of seeking back
-        // and blocking the partition forever.
-        SnapshotEnvelopeValidator.ValidateEnvelope(message);
-        SnapshotEnvelopeValidator.ValidatePayloadType(message, _requiredFilesProvider);
+        try
+        {
+            SnapshotEnvelopeValidator.ValidateEnvelope(message);
+            SnapshotEnvelopeValidator.ValidatePayloadType(message, _requiredFilesProvider);
+        }
+        catch (SnapshotMessageRejectedException ex)
+        {
+            await RecordAndPublishRejectionAsync(message, ex, cancellationToken);
+            throw; // the consumer must still see the rejection and commit past it
+        }
 
-        // The root folder is pinned to the FIRST payload's arrival time for this
-        // snapshotId and reused by every subsequent (or redelivered) payload, so a
-        // snapshot whose publish timestamps straddle a month/year boundary never splits
-        // across two folders. The lookup is read-only (mutates nothing) — the write order
-        // below still starts at the blob write. Kafka's accountId partitioning processes
-        // a snapshot's messages sequentially on one consumer (see SqlSnapshotTrackingStore),
-        // so no locking is needed around it.
+        // The root folder is pinned to the first payload's arrival time and reused by every
+        // later or redelivered payload, so a snapshot whose messages straddle a month or year
+        // boundary never splits across two folders. The lookup mutates nothing, so the write
+        // order still starts at the blob write below.
         var rootPath = await _trackingStore.GetRootPathAsync(message.SnapshotId, cancellationToken)
             ?? SnapshotBlobPath.RootFolder(message, _timeProvider.GetUtcNow());
         await _blobStore.WriteAsync(message, rootPath, cancellationToken);
         var tracking = await _trackingStore.UpsertReceivedAsync(message, rootPath, cancellationToken);
 
-        // Guard: stray redelivery of a file long after the snapshot already completed (or
-        // failed) must do nothing beyond steps 1-2 above — no re-fetch, re-upsert or
-        // re-touch of a row that is no longer RECEIVING.
+        // A redelivery arriving after the snapshot already completed or failed does nothing
+        // beyond the blob write and tracking upsert above.
         if (tracking.Status == SnapshotTrackingStatus.Receiving)
         {
             var required = _requiredFilesProvider.GetRequiredFiles(message.SnapshotType);
@@ -86,23 +87,17 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 
                 var indexEntry = SnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
 
-                // Index UPSERT must precede the status flip: if the index write fails,
-                // tracking must still read RECEIVING on redelivery so this guard retries.
+                // The index UPSERT must precede the status flip: if it fails, tracking must
+                // still read RECEIVING so redelivery retries this branch.
                 await _indexStore.UpsertAsync(indexEntry, cancellationToken);
 
-                // Publish must ALSO precede the status flip, for the same reason as the
-                // index UPSERT: once the row reads COMPLETE this guard stops firing, so a
-                // notification that failed after the flip could never be retried — the
-                // redelivery would sail through and commit the offset having told the
-                // publisher nothing. Publishing first makes the notification at-least-once
-                // (a failure between publish and flip re-publishes on redelivery) instead
-                // of silently at-most-once.
+                // Publishing must also precede the flip: once the row reads COMPLETE this
+                // branch stops firing, so a notification that failed after the flip could
+                // never be retried.
                 await PublishCompletedAsync(message, tracking);
 
                 await _trackingStore.MarkCompleteAsync(message.SnapshotId, cancellationToken);
 
-                // Distinct completion event: the business-critical moment the snapshot
-                // becomes visible in the audit UI. Answers "when did snapshot X complete".
                 _logger.LogInformation(
                     "Snapshot complete: index row upserted and tracking marked complete snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} adlsRootPath={AdlsRootPath} eventType={EventType}",
                     message.SnapshotId,
@@ -127,17 +122,81 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     }
 
     /// <summary>
-    /// Announces that a new snapshot has started arriving: emitted once, on the payload that
-    /// creates the tracking row, so the publisher learns the snapshot is being received and
-    /// which files are still outstanding without waiting for completion.
+    /// Records a rejected message as a FAILED tracking row and tells the publishing
+    /// application why the message was refused.
     /// </summary>
     /// <remarks>
-    /// "First" is keyed off the received-file count, not off "no tracking row existed before
-    /// this message". The count is stable under redelivery of that same first payload (the
-    /// upsert set-unions the filename), so a failed publish is retried on redelivery instead
-    /// of being lost the moment the row exists. The completing payload publishes
-    /// <c>Complete</c> instead, never both — so a snapshot type requiring a single file emits
-    /// one response, not two.
+    /// Neither step is swallowed: a failure in either propagates, so the offset is not
+    /// committed and redelivery re-runs both. Both are idempotent, so the replay is harmless
+    /// and a failed record can never silently drop the rejection. The FAILED row is the only
+    /// durable write a rejection makes.
+    /// </remarks>
+    private async Task RecordAndPublishRejectionAsync(
+        SnapshotMessage message,
+        SnapshotMessageRejectedException rejection,
+        CancellationToken cancellationToken)
+    {
+        // SnapshotId is the tracking primary key, so a null or over-long one has nothing to
+        // record against and only the response goes out. A snapshotId rejected for its
+        // characters still fits the column and is recorded: it is a usable key, just not a
+        // usable blob path segment.
+        var snapshotId = message.SnapshotId;
+        var storable = snapshotId is not null && snapshotId.Length <= SnapshotFieldLimits.SnapshotIdMaxLength;
+
+        SnapshotTrackingEntity? tracking = null;
+        if (storable)
+        {
+            tracking = await _trackingStore.MarkRejectedAsync(
+                new SnapshotRejectionRecord
+                {
+                    SnapshotId = snapshotId!,
+                    AccountId = message.AccountId,
+                    SnapshotType = message.SnapshotType,
+                    ReasonCode = rejection.ReasonCode,
+                    ReasonDetail = rejection.Message,
+                },
+                cancellationToken);
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        await _responsePublisher.PublishAsync(new SnapshotStatusNotification
+        {
+            // The message's own values, even when too broken to persist, so the publisher can
+            // recognise which message this response is about.
+            SnapshotId = snapshotId ?? string.Empty,
+            AccountId = message.AccountId ?? string.Empty,
+            ReceivedFiles = tracking?.ReceivedFiles ?? [],
+
+            // Empty by design: this response reports a refused message, and the required-file
+            // list may not be resolvable at all when snapshotType is itself the problem.
+            MissingFiles = [],
+            Status = SnapshotTrackingStatus.Failed,
+            FirstReceivedAt = tracking?.FirstReceivedAt ?? now,
+            LastUpdatedAt = tracking?.LastUpdatedAt ?? now,
+            DeclaredFailedAt = tracking?.DeclaredFailedAt ?? now,
+            ReasonCode = rejection.ReasonCode,
+            ReasonDetail = rejection.Message,
+        });
+
+        _logger.LogInformation(
+            "Published snapshot rejection response snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} reasonCode={ReasonCode} recorded={Recorded}",
+            message.SnapshotId,
+            message.AccountId,
+            message.PayloadType,
+            rejection.ReasonCode,
+            storable);
+    }
+
+    /// <summary>
+    /// Announces that a snapshot has started arriving, emitted once on its first payload, so
+    /// the publisher learns which files are still outstanding without waiting for completion.
+    /// </summary>
+    /// <remarks>
+    /// "First" is keyed off the received-file count rather than the absence of a tracking row,
+    /// because the count is stable under redelivery of that same payload and a failed publish
+    /// is therefore retried instead of lost. The completing payload publishes <c>Complete</c>
+    /// instead, never both.
     /// </remarks>
     private async Task PublishReceivingAsync(
         SnapshotMessage message,
@@ -175,10 +234,10 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         => [.. requiredFiles.Except(receivedFiles, StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
     /// <summary>
-    /// Tells the publishing application the snapshot is done. <c>CompletedAt</c> is stamped
-    /// from the same <see cref="TimeProvider"/> the tracking store flips the row with a
-    /// moment later, so the notification and the persisted <c>completed_at</c> agree to the
-    /// resolution anyone cares about. <c>MissingFiles</c> is empty by definition here.
+    /// Tells the publishing application the snapshot is complete. <c>CompletedAt</c> is stamped
+    /// from the same <see cref="TimeProvider"/> the tracking store uses a moment later, so the
+    /// notification and the persisted <c>completed_at</c> agree. <c>MissingFiles</c> is always
+    /// empty here.
     /// </summary>
     private async Task PublishCompletedAsync(SnapshotMessage message, SnapshotTrackingEntity tracking)
     {

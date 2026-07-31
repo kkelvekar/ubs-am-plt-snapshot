@@ -19,10 +19,12 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// than converted to Gherkin.
 /// TC-25 (an extra payloadType not in the required-files set) is covered by the Gherkin
 /// scenarios in <c>Features/UnexpectedPayloadHandling.feature</c>.
-/// TC-23 (missing / null required envelope field) is covered as unit tests — the
-/// deserialisation guard in <c>KafkaSnapshotConsumerTests</c> and the Application-layer
-/// null-identity guard in <c>SnapshotMessageHandlerTests</c> — because "no blob / no
-/// tracking / no commit" is asserted most rigorously against fakes.
+/// TC-23 (missing / null required envelope field) is covered by the Application-layer
+/// null-identity guard unit tests in <c>SnapshotMessageHandlerTests</c>, because "no blob /
+/// no tracking / no commit" is asserted most rigorously against fakes. The envelope
+/// deserialisation half sits in the Kafka adapter: a message that will not deserialise
+/// fails every in-process attempt and then takes the consumer's crash-for-restart path,
+/// so nothing is written and the offset is never committed.
 /// </summary>
 public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<SnapshotFixture>
 {

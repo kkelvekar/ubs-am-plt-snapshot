@@ -4,13 +4,15 @@ namespace UBS.AM.PLT.Snapshot.Domain;
 
 /// <summary>
 /// Outbound counterpart to <see cref="SnapshotMessage"/>: what this service tells the
-/// publishing application about a snapshot's progress. Emitted today only when a snapshot
-/// reaches COMPLETE; further statuses reuse the same shape.
-///
-/// Strongly typed on purpose — <see cref="Status"/> is the domain enum and the timestamps
-/// are <see cref="DateTime"/>. Rendering them as the strings the org wire contract wants is
-/// Infrastructure's job, so the transport format can change without touching the Domain.
+/// publishing application about a snapshot's progress. Emitted when a snapshot starts
+/// arriving (RECEIVING), when it reaches COMPLETE, and when a message is rejected (FAILED,
+/// carrying <see cref="ReasonCode"/> and <see cref="ReasonDetail"/>).
 /// </summary>
+/// <remarks>
+/// Strongly typed: <see cref="Status"/> is the domain enum and the timestamps are
+/// <see cref="DateTime"/>. Rendering them as the strings the wire contract expects is
+/// Infrastructure's job, so the transport format can change without touching the Domain.
+/// </remarks>
 public sealed record SnapshotStatusNotification
 {
     public required string SnapshotId { get; init; }
@@ -34,4 +36,10 @@ public sealed record SnapshotStatusNotification
 
     /// <summary>Null unless the snapshot was declared failed.</summary>
     public DateTime? DeclaredFailedAt { get; init; }
+
+    /// <summary>Machine-readable rejection cause (e.g. "FIELD_TOO_LONG"); empty unless Status is Failed due to a rejection.</summary>
+    public string ReasonCode { get; init; } = string.Empty;
+
+    /// <summary>Human-readable rejection detail; empty unless Status is Failed due to a rejection.</summary>
+    public string ReasonDetail { get; init; } = string.Empty;
 }
