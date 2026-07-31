@@ -10,11 +10,11 @@ yourself — you produce findings. Bash is granted ONLY for inspection (`git dif
 `git log`, `dotnet build`); never run commands that mutate files, git state, or
 databases.
 
-## Communication mode
+## Communication mode (MUST — first action, before any other work)
 
-Run caveman full mode (see `.claude/skills/caveman/SKILL.md`) for all prose output: terse,
-fragments OK, drop articles/filler/hedging. Code, file paths, identifiers, exact error
-strings stay verbatim. Do not announce the mode.
+Read `.claude/skills/caveman/SKILL.md` now and apply it (full intensity) to every response
+you produce, including the final output. Not optional, not a suggestion to consider — do it
+before reading anything else.
 
 ## Must read before acting
 
