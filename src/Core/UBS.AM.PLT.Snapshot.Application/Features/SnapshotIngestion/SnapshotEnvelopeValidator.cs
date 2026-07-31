@@ -22,11 +22,12 @@ public static class SnapshotEnvelopeValidator
     public static void ValidateEnvelope(SnapshotMessage message)
     {
         // Non-nullable annotations are not enforced at runtime: an explicit "snapshotId": null
-        // deserialises fine and would corrupt the blob path and the tracking row.
-        ThrowIfNull(message.SnapshotId, nameof(message.SnapshotId));
-        ThrowIfNull(message.AccountId, nameof(message.AccountId));
-        ThrowIfNull(message.SnapshotType, nameof(message.SnapshotType));
-        ThrowIfNull(message.PayloadType, nameof(message.PayloadType));
+        // deserialises fine, and some publishers send "" instead of omitting a value or
+        // sending null. Either would corrupt the blob path and the tracking row.
+        ThrowIfNullOrEmpty(message.SnapshotId, nameof(message.SnapshotId));
+        ThrowIfNullOrEmpty(message.AccountId, nameof(message.AccountId));
+        ThrowIfNullOrEmpty(message.SnapshotType, nameof(message.SnapshotType));
+        ThrowIfNullOrEmpty(message.PayloadType, nameof(message.PayloadType));
 
         // Bounded before the first write so an over-long value is rejected here rather than
         // surfacing as a SQL truncation error on a write redelivery could never make succeed.
@@ -59,9 +60,9 @@ public static class SnapshotEnvelopeValidator
             throw InvalidSnapshotEnvelopeException.MalformedPayloadJson(ex);
         }
 
-        static void ThrowIfNull(string? value, string fieldName)
+        static void ThrowIfNullOrEmpty(string? value, string fieldName)
         {
-            if (value is null)
+            if (string.IsNullOrEmpty(value))
             {
                 throw InvalidSnapshotEnvelopeException.NullRequiredField(fieldName);
             }

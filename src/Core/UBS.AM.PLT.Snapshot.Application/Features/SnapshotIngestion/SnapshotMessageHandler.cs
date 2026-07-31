@@ -137,12 +137,12 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         SnapshotMessageRejectedException rejection,
         CancellationToken cancellationToken)
     {
-        // SnapshotId is the tracking primary key, so a null or over-long one has nothing to
-        // record against and only the response goes out. A snapshotId rejected for its
-        // characters still fits the column and is recorded: it is a usable key, just not a
+        // SnapshotId is the tracking primary key, so a null, empty or over-long one has
+        // nothing to record against and only the response goes out. A snapshotId rejected for
+        // its characters still fits the column and is recorded: it is a usable key, just not a
         // usable blob path segment.
         var snapshotId = message.SnapshotId;
-        var storable = snapshotId is not null && snapshotId.Length <= SnapshotFieldLimits.SnapshotIdMaxLength;
+        var storable = !string.IsNullOrEmpty(snapshotId) && snapshotId.Length <= SnapshotFieldLimits.SnapshotIdMaxLength;
 
         SnapshotTrackingEntity? tracking = null;
         if (storable)

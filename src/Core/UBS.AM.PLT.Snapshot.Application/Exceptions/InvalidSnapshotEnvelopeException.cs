@@ -31,13 +31,14 @@ public sealed class InvalidSnapshotEnvelopeException : SnapshotMessageRejectedEx
     }
 
     /// <summary>
-    /// A field forming the blob path or the tracking identity arrived as an explicit null.
-    /// JSON <c>required</c> only proves the property was present, not that it had a value.
+    /// A field forming the blob path or the tracking identity arrived as an explicit null or
+    /// an empty string. JSON <c>required</c> only proves the property was present, not that
+    /// it had a usable value.
     /// </summary>
     public static InvalidSnapshotEnvelopeException NullRequiredField(string fieldName)
         => new(
             NullRequiredFieldReason,
-            $"Snapshot message envelope has a null required field '{fieldName}'; rejecting the message before any payload is written.");
+            $"Snapshot message envelope has a null or empty required field '{fieldName}'; rejecting the message before any payload is written.");
 
     /// <summary>
     /// An identity field is longer than the column it lands in. Caught here rather than as a

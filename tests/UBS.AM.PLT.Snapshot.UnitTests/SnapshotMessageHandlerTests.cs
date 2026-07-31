@@ -495,6 +495,44 @@ public class SnapshotMessageHandlerTests
         Assert.StartsWith("Published snapshot rejection response", entry.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("SnapshotId")]
+    [InlineData("AccountId")]
+    [InlineData("SnapshotType")]
+    [InlineData("PayloadType")]
+    public async Task HandleAsync_rejects_an_empty_required_envelope_field_before_any_write(string emptyField)
+    {
+        // An explicit "" is as unusable as null for a path-forming/identity field, and some
+        // publishers send "" rather than omitting a value or sending null.
+        var blobStore = new FakeSnapshotBlobStore();
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(blobStore, trackingStore, logger: logger);
+        var message = CreateMessageWithEmptyField(emptyField);
+
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotEnvelopeException>(
+            () => handler.HandleAsync(message, CancellationToken.None));
+
+        Assert.Equal(InvalidSnapshotEnvelopeException.NullRequiredFieldReason, thrown.ReasonCode);
+        Assert.Contains(emptyField, thrown.Message, StringComparison.Ordinal);
+
+        Assert.Empty(blobStore.Written);
+        Assert.Empty(trackingStore.Upserts);
+
+        if (emptyField == "SnapshotId")
+        {
+            Assert.Empty(trackingStore.MarkedRejected);
+        }
+        else
+        {
+            Assert.Single(trackingStore.MarkedRejected);
+        }
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.StartsWith("Published snapshot rejection response", entry.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task HandleAsync_rejects_a_payload_type_outside_the_snapshot_types_file_contract()
     {
@@ -1132,6 +1170,18 @@ public class SnapshotMessageHandlerTests
             PublishedAt = "2026-05-22T06:10:14Z",
             PublishedBy = "PortfolioCalculation",
             Payload = nullField == "Payload" ? null! : """{"total":21}""",
+        };
+
+    private static SnapshotMessage CreateMessageWithEmptyField(string emptyField)
+        => new()
+        {
+            SnapshotId = emptyField == "SnapshotId" ? "" : "corr98765",
+            AccountId = emptyField == "AccountId" ? "" : "00675442A",
+            SnapshotType = emptyField == "SnapshotType" ? "" : "portfolio",
+            PayloadType = emptyField == "PayloadType" ? "" : "orders",
+            PublishedAt = "2026-05-22T06:10:14Z",
+            PublishedBy = "PortfolioCalculation",
+            Payload = """{"total":21}""",
         };
 
     private static SnapshotMessageHandler CreateHandler(
