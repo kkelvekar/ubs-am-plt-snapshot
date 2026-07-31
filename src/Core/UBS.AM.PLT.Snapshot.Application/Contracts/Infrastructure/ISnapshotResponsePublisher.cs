@@ -3,11 +3,17 @@ using UBS.AM.PLT.Snapshot.Domain;
 namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
 /// <summary>
-/// Port for notifying the publishing application of a snapshot's status. Called after the
-/// snapshot's tracking row is flipped to COMPLETE and before the Kafka offset is committed:
-/// a publish failure propagates, no offset is committed, and redelivery retries the whole
-/// message. Every preceding write is idempotent, so that replay is harmless — but the
-/// notification itself is at-least-once and its consumer must tolerate duplicates.
+/// Port for notifying the publishing application of a snapshot's status: RECEIVING on the
+/// snapshot's first payload, COMPLETE on the payload that completes it, and FAILED when a
+/// message is rejected. The completion notification is published BEFORE the tracking row is
+/// flipped to COMPLETE — a publish after the flip could never be retried, because the
+/// redelivery would skip the completeness branch entirely. The rejection notification
+/// follows its FAILED tracking write, which has no such guard to lose.
+///
+/// Either way it precedes the Kafka offset commit: a publish failure propagates, no offset
+/// is committed, and redelivery retries the whole message. Every preceding write is
+/// idempotent, so that replay is harmless, but the notification itself is at-least-once and
+/// its consumer must tolerate duplicates.
 /// </summary>
 /// <remarks>
 /// No <see cref="CancellationToken"/> parameter: the org publisher this is swapped for at
