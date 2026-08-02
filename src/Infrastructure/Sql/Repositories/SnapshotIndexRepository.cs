@@ -9,9 +9,10 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 /// <summary>
 /// EF Core data access for the snapshot_index table - both the write-side UPSERT
 /// (ISnapshotIndexRepository, used by SqlSnapshotIndexStore) and the Load-snapshots
-/// grid read query (ISnapshotIndexQuery, solution design section 7, used directly by the
-/// Api composition root). One class owns all dbo.SnapshotIndex data access rather than
-/// splitting read and write into separate Infrastructure classes.
+/// grid read query plus the snapshot-detail AdlsPath lookup (ISnapshotIndexQuery, solution
+/// design sections 7 and 10, used directly by the Api composition root). One class owns all
+/// dbo.SnapshotIndex data access rather than splitting read and write into separate
+/// Infrastructure classes.
 /// <para>
 /// The read path uses Database.SqlQueryRaw&lt;SnapshotIndexRow&gt; onto the keyless read DTO
 /// so the DisplayData column comes back as its raw JSON string - this deliberately bypasses
@@ -70,6 +71,23 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         return await context.Database
             .SqlQueryRaw<SnapshotIndexRow>(sql, parameters)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetAdlsPathAsync(string snapshotId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(snapshotId);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // EF parameterises snapshotId, so the caller-supplied value is never in the SQL text.
+        // A point lookup on the nonclustered primary key, and the single-column projection
+        // keeps the DisplayData value converter out of the query entirely - unlike the grid
+        // read, nothing here needs the raw JSON column.
+        return await context.SnapshotIndex
+            .AsNoTracking()
+            .Where(e => e.SnapshotId == snapshotId)
+            .Select(e => e.AdlsPath)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     /// <summary>

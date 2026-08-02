@@ -12,4 +12,14 @@ namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 public interface ISnapshotIndexQuery
 {
     Task<IReadOnlyList<SnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves a snapshotId to the AdlsPath stored on its index row - the blob root folder
+    /// written at completion time (solution design section 10, Screen 2). Returns null when
+    /// no index row exists, since only a COMPLETE snapshot ever gets one; the edge maps that
+    /// to not-found. The stored path is used verbatim by the blob read - it is never
+    /// recomputed from the snapshot identity, so a snapshot whose payloads straddled a
+    /// month boundary still resolves to the one folder its files actually landed in.
+    /// </summary>
+    Task<string?> GetAdlsPathAsync(string snapshotId, CancellationToken cancellationToken);
 }
