@@ -37,6 +37,8 @@ public sealed class PortfolioSnapshotController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetPortfolioSnapshotIndex(
         [FromQuery] PortfolioSnapshotQuery query,
         CancellationToken ct)
@@ -64,6 +66,9 @@ public sealed class PortfolioSnapshotController : ControllerBase
     /// returned verbatim as application/json content.
     /// </summary>
     [HttpGet("{snapshotId}/payloads/{payloadType}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSnapshotPayload(string snapshotId, string payloadType, CancellationToken ct)
     {
         var json = await _detailQueryHandler.GetPayloadAsync(snapshotId, payloadType, ct);
@@ -84,6 +89,9 @@ public sealed class PortfolioSnapshotController : ControllerBase
     /// stored blob text embedded verbatim.
     /// </summary>
     [HttpGet("{snapshotId}/payloads")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSnapshotPayloads(string snapshotId, CancellationToken ct)
     {
         var json = await _detailQueryHandler.GetAllPayloadsAsync(snapshotId, ct);

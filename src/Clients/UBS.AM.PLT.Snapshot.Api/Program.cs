@@ -39,17 +39,24 @@ builder.Services.AddResponseCompression(options =>
 });
 
 // RFC 7807 ProblemDetails is the single error contract for every failure (validation 400s,
-// model-binding 400s, and unhandled 500s). Stamp a traceId on every problem so the generic
-// client response correlates to the full exception logged server-side under the same id.
+// model-binding 400s, framework status codes such as 405, and unhandled 500s). Stamp a
+// traceId on every problem so the generic client response correlates to the full exception
+// logged server-side under the same id, and an instance so the response names the request
+// that produced it (PathBase included - every route is served under /snapshot).
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Instance ??=
+            $"{context.HttpContext.Request.PathBase}{context.HttpContext.Request.Path}";
         context.ProblemDetails.Extensions["traceId"] =
-            Activity.Current?.Id ?? context.HttpContext.TraceIdentifier);
+            Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
+    });
 
 // Registration order is execution order: the specific handlers run first and each returns
-// false for anything that is not its own exception type - validation (400) then not-found
-// (404) - so the catch-all runs last for everything else (including SqlException from
-// Infrastructure).
+// false for anything that is not its own exception type - client disconnect (no response),
+// validation (400), then not-found (404) - so the catch-all runs last for everything else
+// (including SqlException from Infrastructure).
+builder.Services.AddExceptionHandler<ClientDisconnectExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 builder.Services.AddExceptionHandler<NotFoundExceptionHandler>();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
@@ -69,6 +76,12 @@ app.UseResponseCompression();
 // ProblemDetails response by the registered IExceptionHandlers. Placed right after the path
 // base so rewritten paths are in effect when handlers log the request path.
 app.UseExceptionHandler();
+
+// Error status codes the framework produces without throwing - 405 from routing on a wrong
+// verb, for example - never reach the exception handlers and would otherwise return an empty
+// body. With AddProblemDetails registered this fills them in with the same ProblemDetails
+// contract, so a client parses one error shape for every failure.
+app.UseStatusCodePages();
 
 app.UseSwagger();
 app.UseSwaggerUI();

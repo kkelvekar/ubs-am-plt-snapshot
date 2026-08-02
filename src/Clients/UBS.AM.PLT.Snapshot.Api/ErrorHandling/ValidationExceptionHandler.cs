@@ -35,7 +35,14 @@ internal sealed class ValidationExceptionHandler : IExceptionHandler
             return false;
         }
 
-        _logger.LogWarning("Rejected snapshot read request: {Reason}", exception.Message);
+        // Method and path are separate structured fields, not interpolated into the message,
+        // so a rejected request is filterable by route in the log backend - the same shape
+        // the controller's success logs use.
+        _logger.LogWarning(
+            "Rejected snapshot read request {Method} {Path}: {Reason}",
+            httpContext.Request.Method,
+            httpContext.Request.Path,
+            exception.Message);
 
         httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
 

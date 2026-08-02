@@ -33,7 +33,14 @@ internal sealed class NotFoundExceptionHandler : IExceptionHandler
             return false;
         }
 
-        _logger.LogWarning("Snapshot read found nothing: {Reason}", notFound.Message);
+        // Method and path are separate structured fields, not interpolated into the message,
+        // so a miss is filterable by route in the log backend - the same shape the
+        // controller's success logs use.
+        _logger.LogWarning(
+            "Snapshot read found nothing {Method} {Path}: {Reason}",
+            httpContext.Request.Method,
+            httpContext.Request.Path,
+            notFound.Message);
 
         httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
 

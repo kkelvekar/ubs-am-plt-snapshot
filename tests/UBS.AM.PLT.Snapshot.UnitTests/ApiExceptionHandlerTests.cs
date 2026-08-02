@@ -151,6 +151,57 @@ public sealed class ApiExceptionHandlerTests
         Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task Client_disconnect_is_swallowed_without_a_response_or_error_log()
+    {
+        var (context, body) = CreateContext();
+        var logger = new CapturingLogger<ClientDisconnectExceptionHandler>();
+        var handler = new ClientDisconnectExceptionHandler(logger);
+
+        // What ASP.NET Core signals when the caller goes away mid-request.
+        context.RequestAborted = new CancellationToken(canceled: true);
+
+        var handled = await handler.TryHandleAsync(
+            context, new OperationCanceledException(), CancellationToken.None);
+
+        Assert.True(handled);
+        // Nothing is written: the socket the response would go to is already gone.
+        Assert.Equal(0, body.Length);
+        // An aborted request is a client decision, so it must never be logged as a server fault.
+        Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task Cancellation_that_is_not_a_client_disconnect_falls_through_to_the_catch_all()
+    {
+        var (context, _) = CreateContext();
+        var handler = new ClientDisconnectExceptionHandler(
+            new CapturingLogger<ClientDisconnectExceptionHandler>());
+
+        // RequestAborted is NOT cancelled: an internal timeout, not the caller leaving, so it
+        // is a genuine fault and must still surface as a 500.
+        var handled = await handler.TryHandleAsync(
+            context, new OperationCanceledException(), CancellationToken.None);
+
+        Assert.False(handled);
+    }
+
+    [Fact]
+    public async Task Client_disconnect_handler_ignores_other_exceptions()
+    {
+        var (context, _) = CreateContext();
+        var handler = new ClientDisconnectExceptionHandler(
+            new CapturingLogger<ClientDisconnectExceptionHandler>());
+
+        context.RequestAborted = new CancellationToken(canceled: true);
+
+        var handled = await handler.TryHandleAsync(
+            context, new InvalidOperationException("boom"), CancellationToken.None);
+
+        // Returns false so the chain falls through to the catch-all handler.
+        Assert.False(handled);
+    }
+
     private static IProblemDetailsService ProblemDetailsService(HttpContext context) =>
         context.RequestServices.GetRequiredService<IProblemDetailsService>();
 
