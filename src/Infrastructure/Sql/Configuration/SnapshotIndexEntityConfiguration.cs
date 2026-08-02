@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
@@ -14,29 +12,22 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
 /// </summary>
 internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguration<SnapshotIndexEntity>
 {
-    // display_data travels as a single camelCase JSON object string (design §7) so the
-    // persisted keys match the wire/header naming convention (benchmark, baseCcy, ...).
-    private static readonly JsonSerializerOptions DisplayDataJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
-    private static readonly ValueConverter<SnapshotIndexDisplayData, string> DisplayDataConverter = new(
-        v => JsonSerializer.Serialize(v, DisplayDataJsonOptions),
-        v => JsonSerializer.Deserialize<SnapshotIndexDisplayData>(v, DisplayDataJsonOptions)!);
-
+    // DisplayData carries no value conversion on purpose: it holds the header.json text and
+    // must stay byte-identical to the blob.
     public void Configure(EntityTypeBuilder<SnapshotIndexEntity> indexEntity)
     {
         indexEntity.ToTable("SnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
 
+        // The widths below mirror db/scripts/002 and SnapshotFieldLimits; change all three
+        // together.
         indexEntity.Property(e => e.SnapshotId)
             .HasColumnName("SnapshotId")
-            .HasColumnType("varchar(50)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.SnapshotIdMaxLength
 
         indexEntity.Property(e => e.AccountId)
             .HasColumnName("AccountId")
-            .HasColumnType("varchar(20)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.AccountIdMaxLength
 
         indexEntity.Property(e => e.SnapshotDate)
             .HasColumnName("SnapshotDate")
@@ -44,7 +35,7 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
 
         indexEntity.Property(e => e.EventType)
             .HasColumnName("EventType")
-            .HasColumnType("varchar(50)");
+            .HasColumnType("varchar(100)"); // SnapshotFieldLimits.EventTypeMaxLength
 
         indexEntity.Property(e => e.AdlsPath)
             .HasColumnName("AdlsPath")
@@ -52,8 +43,7 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
 
         indexEntity.Property(e => e.DisplayData)
             .HasColumnName("DisplayData")
-            .HasColumnType("nvarchar(max)")
-            .HasConversion(DisplayDataConverter);
+            .HasColumnType("nvarchar(max)");
 
         indexEntity.Property(e => e.CreatedAt)
             .HasColumnName("CreatedAt")

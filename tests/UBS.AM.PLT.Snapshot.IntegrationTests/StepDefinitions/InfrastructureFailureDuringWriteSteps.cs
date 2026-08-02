@@ -3,7 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Reqnroll;
 using UBS.AM.PLT.Snapshot.Application;
-using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
+using UBS.AM.PLT.Snapshot.Application.Contracts;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
@@ -16,10 +17,10 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// deterministic, Kafka-independent slice of design doc §9: an unreachable downstream dependency
 /// during the write order propagates out of the handler unchanged (so the live consumer never
 /// commits the offset — recovery is forward, via redelivery) and leaves no durable state in the
-/// system of record. The retry cadence / Critical operations-alert half of §9 lives in the consumer
-/// and is proved by
-/// <c>KafkaSnapshotConsumerTests.Retry_delay_sequence_follows_configured_cadence_and_then_holds_at_max</c>
-/// (unit) and Mode B (<c>tools/fault-injection.ps1</c>).
+/// system of record. The retry / Critical operations-alert half of §9 lives in the consumer — 3
+/// in-process attempts, then one Critical alert and a non-zero process exit so the pod restarts and
+/// Kafka redelivers from the last committed offset — and is proved live in Mode B
+/// (<c>tools/fault-injection.ps1</c>), since Mode A bypasses the consumer entirely.
 ///
 /// Each scenario builds a SECOND, fault-injected object graph (the same
 /// <c>AddApplication</c>/<c>AddInfrastructure</c> wiring the fixture uses, with one dependency's
@@ -113,7 +114,7 @@ public sealed class InfrastructureFailureDuringWriteSteps
     public void ThenTheHandlerSurfacesAnInfrastructureError()
     {
         // The infra failure propagates out of the handler — in the live system this is the exception
-        // the consumer catches to seek-back/retry and never commit the offset.
+        // the consumer catches to retry in-process, and never commit the offset.
         Assert.NotNull(_handlerException);
     }
 
@@ -172,6 +173,9 @@ public sealed class InfrastructureFailureDuringWriteSteps
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(_fixture.MockTime.Object);
+        // Kafka is bypassed here as in the fixture, so the publisher port needs the same
+        // stand-in. These scenarios never reach completion, so nothing is ever published.
+        services.AddSingleton<ISnapshotResponsePublisher>(_fixture.ResponsePublisher);
         services.AddApplication()
             .AddSqlInfrastructure(configuration["Database:ConnectionString"] ?? string.Empty)
             .AddAdlsInfrastructure(

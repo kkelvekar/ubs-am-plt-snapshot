@@ -440,7 +440,7 @@ True distributed atomicity spanning Azure SQL and ADLS Gen2 is not implemented a
 
 **Idempotency:** All writes at every layer are safe to repeat. ADLS blob overwrites are content-idempotent. The tracking table upsert is idempotent. The snapshot_index write uses UPSERT so re-delivery of a header message after partial failure produces no duplicate rows.
 
-**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. Any failure causes the message to be re-delivered and all steps retried from the beginning.
+**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. Any failure causes the message to be re-delivered and all steps retried from the beginning. Redelivery after exhausted in-process retries is achieved by the worker exiting non-zero and being restarted (see §9); the restarted consumer resumes from the last committed offset.
 
 The guarantee to users: a snapshot is either fully visible in the grid with all blob files present, or it is not visible at all. There is no intermediate state.
 
@@ -543,16 +543,23 @@ The system does not roll back on failure. Data that has been successfully writte
 
 Retry timings are configurable via appsettings.
 
+All three attempts run in-process inside the consumer (~35 seconds total, well under the Kafka max.poll.interval.ms). If the final attempt fails, the worker logs a Critical operations alert and terminates with a non-zero exit code without committing the offset. Kubernetes (restartPolicy: Always, CrashLoopBackOff on repeated failure) restarts the pod, and Kafka redelivers the message from the last committed offset — recovery is always forward via redelivery, never via in-process seek-back.
+
 **Failure summary:**
 
 |Failure point|Auto recovery|Human needed|User impact|Data lost|
 |---|---|---|---|---|
 |Blob write fails|Yes -- Kafka retry|No|None|No|
 |Tracking write fails (transient)|Yes -- Kafka retry|No|None|No|
-|SQL unavailable (tracking or index)|Partial, then alert|Yes|Snapshot delayed|No|
+|SQL unavailable (tracking or index)|In-process retries, then alert + pod restart|Yes|Snapshot delayed|No|
 |Consumer pod crashes|Yes -- Kafka re-delivery|No|None|No|
 |Daily job fails|Yes -- next scheduled run|No|None|No|
 |Files never arrive (stale)|Detected by daily job|Yes -- investigate|Snapshot never visible|No (blobs deleted, logged)|
+|Message rejected (bad envelope)|Not retryable -- producer must resend|Yes -- producer fixes the message|Snapshot delayed, still recoverable|No (nothing was written)|
+
+**Rejected message.** A message whose envelope is unusable (null, over-long or path-unsafe identity field; empty or syntactically invalid payload; payload type outside the snapshot type's file contract) is non-retryable: the same bytes would fail identically forever and block the partition. It is refused before any payload is written -- no blob, no index row -- and handled as follows: the snapshot's tracking row is set to FAILED with the reason (`{reasonCode}: {detail}`) and declared_failed_at, a Failed response carrying reasonCode and reasonDetail is published to the producer on the response topic, and only then is the offset committed past the message. If the snapshot has no tracking row yet, a minimal FAILED row is inserted so the rejection is visible in SQL; if it is already COMPLETE, the row is left untouched.
+
+FAILED is not terminal here. A later valid message for the same snapshot returns the row to RECEIVING, clears the reason and declared_failed_at, and the snapshot completes normally once all required files have arrived -- so a producer that resends a corrected message needs no intervention.
 
 In no failure scenario is permanent audit data deleted or corrupted. The worst outcome is a snapshot delayed until the issue is resolved and the message re-processed, or a snapshot eventually declared failed and logged for investigation with full traceability of what was received and what was missing.
 

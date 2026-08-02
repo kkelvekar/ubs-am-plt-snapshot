@@ -1,13 +1,10 @@
-using UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
-using UBS.AM.PLT.Snapshot.Domain;
-
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 
 /// <summary>
-/// Canonical valid <c>header</c> payload shared across test groups, so the required-field
-/// shape (including <c>portfolioStatus</c>/<c>orderStatus</c>, which <see cref="HeaderPayload"/>
-/// marks <c>required</c>) lives in one place. <see cref="ExpectedHeader"/> is the typed
-/// twin of <see cref="HeaderJson"/> for field-by-field index assertions.
+/// Canonical valid <c>header</c> payload shared across test groups, so the header shape
+/// lives in one place. The header is opaque to the writer: completion assertions compare
+/// the persisted display data against <see cref="HeaderJson"/> verbatim, so no typed twin
+/// of it exists.
 /// </summary>
 internal static class TestPayloads
 {
@@ -29,22 +26,9 @@ internal static class TestPayloads
         }
         """;
 
-    public static HeaderPayload ExpectedHeader { get; } = new()
-    {
-        EventType = "REBALANCE",
-        PortfolioStatus = "APPROVED",
-        OrderStatus = "SENT",
-        Benchmark = "MSCI World",
-        BaseCcy = "CHF",
-        ProgramId = "PRG-7",
-        BatchId = "BATCH-2026-07-13",
-        NumOrders = 17,
-        PtcAlerts = 2,
-        OrderApprovedBy = "approver@ubs.com",
-        OrderApprovedAt = new DateTime(2026, 7, 13, 10, 45, 0, DateTimeKind.Utc),
-        OrderSentBy = "sender@ubs.com",
-        OrderSentAt = new DateTime(2026, 7, 13, 10, 50, 0, DateTimeKind.Utc),
-    };
+    // The one header value the writer extracts into its own filterable column; every other
+    // header field reaches SQL only inside the verbatim DisplayData text.
+    public const string HeaderEventType = "REBALANCE";
 
     // Canned opaque required-file payloads. No scenario asserts on their internal fields
     // (payloads stay opaque and are only compared byte-for-byte against what was sent), so a

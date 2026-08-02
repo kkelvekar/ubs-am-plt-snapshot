@@ -18,8 +18,6 @@
     <ProjectReference Include="..\..\src\Core\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Sql\UBS.AM.PLT.Snapshot.Infrastructure.Sql.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Adls\UBS.AM.PLT.Snapshot.Infrastructure.Adls.csproj" />
-    <ProjectReference Include="..\..\src\Infrastructure\Kafka\UBS.AM.PLT.Snapshot.Infrastructure.Kafka.csproj" />
-    <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.Worker\UBS.AM.PLT.Snapshot.Worker.csproj" />
     <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.Api\UBS.AM.PLT.Snapshot.Api.csproj" />
   </ItemGroup>
 

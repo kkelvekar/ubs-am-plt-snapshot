@@ -90,22 +90,43 @@ public sealed class SnapshotCompletionSteps
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var index = await SnapshotTestHelpers.GetIndexAsync(_fixture, _snapshotId);
-        var expected = TestPayloads.ExpectedHeader;
 
         Assert.Equal(_snapshotId, index.SnapshotId);
         Assert.Equal(_accountId, index.AccountId);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
-        Assert.Equal(expected.EventType, index.EventType);
-        Assert.Equal(expected.Benchmark, index.DisplayData.Benchmark);
-        Assert.Equal(expected.BaseCcy, index.DisplayData.BaseCcy);
-        Assert.Equal(expected.ProgramId, index.DisplayData.ProgramId);
-        Assert.Equal(expected.BatchId, index.DisplayData.BatchId);
-        Assert.Equal(expected.NumOrders, index.DisplayData.NumOrders);
-        Assert.Equal(expected.PtcAlerts, index.DisplayData.PtcAlerts);
-        Assert.Equal(expected.OrderApprovedBy, index.DisplayData.OrderApprovedBy);
-        Assert.Equal(expected.OrderApprovedAt, index.DisplayData.OrderApprovedAt);
-        Assert.Equal(expected.OrderSentBy, index.DisplayData.OrderSentBy);
-        Assert.Equal(expected.OrderSentAt, index.DisplayData.OrderSentAt);
+        Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
+        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
+    }
+
+    [Then("a receiving response was published listing the outstanding files")]
+    public void ThenAReceivingResponseWasPublishedListingTheOutstandingFiles()
+    {
+        var notification = Assert.Single(
+            _fixture.ResponsePublisher.PublishedFor(_snapshotId),
+            n => n.Status == SnapshotTrackingStatus.Receiving);
+
+        Assert.Equal(_accountId, notification.AccountId);
+        Assert.Equal(["orders.json"], notification.ReceivedFiles);
+        Assert.Equal(["calculations.json", "header.json", "settings.json"], notification.MissingFiles);
+        Assert.Null(notification.CompletedAt);
+    }
+
+    [Then("exactly one completion response was published for the snapshot")]
+    public async Task ThenExactlyOneCompletionResponseWasPublishedForTheSnapshot()
+    {
+        var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
+        var notification = Assert.Single(
+            _fixture.ResponsePublisher.PublishedFor(_snapshotId),
+            n => n.Status == SnapshotTrackingStatus.Complete);
+
+        Assert.Equal(_accountId, notification.AccountId);
+        Assert.Empty(notification.MissingFiles);
+        Assert.Equal(
+            new[] { "calculations.json", "header.json", "orders.json", "settings.json" },
+            notification.ReceivedFiles.Order());
+        Assert.Equal(tracking.FirstReceivedAt, notification.FirstReceivedAt);
+        Assert.NotNull(notification.CompletedAt);
+        Assert.Null(notification.DeclaredFailedAt);
     }
 
     [Then("the snapshot end state is a well-formed completed snapshot")]
@@ -123,23 +144,13 @@ public sealed class SnapshotCompletionSteps
         }
 
         var index = await SnapshotTestHelpers.GetIndexAsync(_fixture, _snapshotId);
-        var expected = TestPayloads.ExpectedHeader;
 
         Assert.Equal(_snapshotId, index.SnapshotId);
         Assert.Equal(_accountId, index.AccountId);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
         Assert.Equal(tracking.FirstReceivedAt, index.SnapshotDate);
-        Assert.Equal(expected.EventType, index.EventType);
-        Assert.Equal(expected.Benchmark, index.DisplayData.Benchmark);
-        Assert.Equal(expected.BaseCcy, index.DisplayData.BaseCcy);
-        Assert.Equal(expected.ProgramId, index.DisplayData.ProgramId);
-        Assert.Equal(expected.BatchId, index.DisplayData.BatchId);
-        Assert.Equal(expected.NumOrders, index.DisplayData.NumOrders);
-        Assert.Equal(expected.PtcAlerts, index.DisplayData.PtcAlerts);
-        Assert.Equal(expected.OrderApprovedBy, index.DisplayData.OrderApprovedBy);
-        Assert.Equal(expected.OrderApprovedAt, index.DisplayData.OrderApprovedAt);
-        Assert.Equal(expected.OrderSentBy, index.DisplayData.OrderSentBy);
-        Assert.Equal(expected.OrderSentAt, index.DisplayData.OrderSentAt);
+        Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
+        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
     }
 
     private async Task SendPayloadAsync(string payloadType, string payloadJson)

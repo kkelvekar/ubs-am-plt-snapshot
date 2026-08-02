@@ -24,6 +24,7 @@ Scenario: Redelivering a non-header payload after completion leaves everything b
     And exactly one tracking row remains, COMPLETE, with only its last-updated time advanced
     And exactly one index row remains, unchanged from the redelivery baseline
     And the redelivered "orders" blob is byte-identical to the originally sent payload
+    And exactly one completion response was published across the redelivery
 
 Scenario: A same-payload duplicate before completion is counted once and still completes
     Given a redelivery snapshot for account "IT-ACC-007"

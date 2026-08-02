@@ -50,7 +50,11 @@ internal sealed class IntegrationTestCleanup
             .Select(e => e.AdlsRootPath)
             .SingleOrDefaultAsync();
 
-        if (rootPath is not null)
+        // A FAILED row recorded for a rejection that never reached the blob write (see
+        // SqlSnapshotTrackingStore.MarkRejectedAsync) stores AdlsRootPath as string.Empty,
+        // not null — there is no row to find "no tracking row" but also no folder to
+        // delete, so guard on empty as well as null to avoid an invalid-path delete call.
+        if (!string.IsNullOrEmpty(rootPath))
         {
             await DeleteSnapshotFolderAsync(rootPath);
             await DeleteEmptyParentFoldersAsync(rootPath);

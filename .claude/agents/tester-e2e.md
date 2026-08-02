@@ -10,11 +10,11 @@ testing — both are required for a PASS. You may write and edit files ONLY insi
 `tests/`, `tools/`, and `docker/`; you never modify `src/` — a needed src change is a
 finding routed back, not something you fix.
 
-## Communication mode
+## Communication mode (MUST — first action, before any other work)
 
-Run caveman full mode (see `.claude/skills/caveman/SKILL.md`) for all prose output: terse,
-fragments OK, drop articles/filler/hedging. Code, file paths, identifiers, exact error
-strings stay verbatim. Do not announce the mode.
+Read `.claude/skills/caveman/SKILL.md` now and apply it (full intensity) to every response
+you produce, including blocker reports and requests for elevated permissions. Not optional —
+do it before reading anything else, and do not drop it under pressure.
 
 ## Must read before acting
 

@@ -11,15 +11,20 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// (ADLS Gen2 + Azure SQL) with Kafka bypassed. These cover inputs that deserialise into a
 /// valid envelope but violate a downstream expectation:
 /// TC-24 an unknown snapshotType (no SnapshotConfig entry); TC-26 a header whose
-/// <c>eventType</c> is null (rejected by the index's NOT NULL column, then recovered forward
-/// by a corrected header). Both are open design questions and are intentionally kept here as
-/// xUnit tests rather than converted to Gherkin.
+/// <c>eventType</c> is null (the header is opaque JSON text now, never deserialised into a
+/// DTO — a null/absent/unusable <c>eventType</c> is an upstream contract breach, not a
+/// transport failure, so the index row is still written with an empty EventType and the
+/// header text persisted verbatim; see <c>SnapshotMessageHandler.ExtractEventType</c>).
+/// Both are open design questions and are intentionally kept here as xUnit tests rather
+/// than converted to Gherkin.
 /// TC-25 (an extra payloadType not in the required-files set) is covered by the Gherkin
 /// scenarios in <c>Features/UnexpectedPayloadHandling.feature</c>.
-/// TC-23 (missing / null required envelope field) is covered as unit tests — the
-/// deserialisation guard in <c>KafkaSnapshotConsumerTests</c> and the Application-layer
-/// null-identity guard in <c>SnapshotMessageHandlerTests</c> — because "no blob / no
-/// tracking / no commit" is asserted most rigorously against fakes.
+/// TC-23 (missing / null required envelope field) is covered by the Application-layer
+/// null-identity guard unit tests in <c>SnapshotMessageHandlerTests</c>, because "no blob /
+/// no tracking / no commit" is asserted most rigorously against fakes. The envelope
+/// deserialisation half sits in the Kafka adapter: a message that will not deserialise
+/// fails every in-process attempt and then takes the consumer's crash-for-restart path,
+/// so nothing is written and the offset is never committed.
 /// </summary>
 public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<SnapshotFixture>
 {
@@ -88,13 +93,14 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     }
 
     [Fact]
-    public async Task Header_with_null_eventType_fails_the_index_write_then_recovers_forward()
+    public async Task Header_with_null_eventType_still_completes_with_an_empty_EventType_column()
     {
-        // TC-26: the completing header carries a null eventType. It passes deserialisation
-        // but the index write is rejected (event_type NOT NULL), so the message fails and
-        // retries — no index row, tracking stays RECEIVING. A later corrected header
-        // completes the snapshot (forward recovery), proving no schema change or skip path
-        // is needed.
+        // TC-26 (revised for the opaque-header slice): the header is never deserialised, so
+        // a null eventType is no longer a deserialisation-time failure. ExtractEventType
+        // treats "present but not a usable string" (including JSON null) the same as
+        // "absent": it logs a WARN and returns string.Empty, which the EventType NOT NULL
+        // column accepts. The snapshot still completes and display_data still carries the
+        // header verbatim, null eventType and all.
         Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 20, 0, 0, TimeSpan.Zero);
         var snapshotId = NewSnapshotId("tc26");
 
@@ -102,30 +108,20 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "calculations", CalculationsJson), CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "settings", SettingsJson), CancellationToken.None);
 
-        // Completing header with null eventType — the index write must reject it.
+        // Completing header with null eventType — no exception, snapshot completes anyway.
         var badHeader = CreateMessage(snapshotId, "header", NullEventTypeHeaderJson);
         var exception = await Record.ExceptionAsync(
             () => Fixture.Handler.HandleAsync(badHeader, CancellationToken.None));
-        Assert.NotNull(exception);
-
-        // No index row; tracking stays RECEIVING with all four files present.
-        Assert.False(await IndexRowExistsAsync(snapshotId));
-        var afterBadHeader = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Receiving, afterBadHeader.Status);
-        Assert.Null(afterBadHeader.CompletedAt);
-        Assert.Equal(4, afterBadHeader.ReceivedFiles.Count);
-
-        // Forward recovery: a corrected header redelivered later completes the snapshot.
-        Fixture.CurrentTime = Fixture.CurrentTime.AddMinutes(3);
-        await Fixture.Handler.HandleAsync(
-            CreateMessage(snapshotId, "header", TestPayloads.HeaderJson), CancellationToken.None);
+        Assert.Null(exception);
 
         var tracking = await GetTrackingAsync(snapshotId);
         Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
         Assert.NotNull(tracking.CompletedAt);
+        Assert.Equal(4, tracking.ReceivedFiles.Count);
 
         var index = await GetIndexAsync(snapshotId);
-        Assert.Equal(TestPayloads.ExpectedHeader.EventType, index.EventType);
+        Assert.Equal(string.Empty, index.EventType);
+        Assert.Equal(NullEventTypeHeaderJson, index.DisplayData);
     }
 
     private SnapshotMessage CreateMessage(

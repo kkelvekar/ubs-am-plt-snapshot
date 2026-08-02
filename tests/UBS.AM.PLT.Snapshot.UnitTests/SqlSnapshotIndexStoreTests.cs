@@ -52,7 +52,7 @@ public sealed class SqlSnapshotIndexStoreTests
         Assert.Equal(redelivered.AccountId, row.AccountId);
         Assert.Equal(redelivered.SnapshotDate, row.SnapshotDate);
         Assert.Equal(redelivered.AdlsPath, row.AdlsPath);
-        Assert.Same(redelivered.DisplayData, row.DisplayData);
+        Assert.Equal(redelivered.DisplayData, row.DisplayData);
         Assert.Equal(StartTime.UtcDateTime, row.CreatedAt);
     }
 
@@ -63,18 +63,6 @@ public sealed class SqlSnapshotIndexStoreTests
         SnapshotDate = StartTime.UtcDateTime,
         EventType = eventType,
         AdlsPath = "snapshots/year=2026/month=05/00675442A/snap-1_20260522061014",
-        DisplayData = new SnapshotIndexDisplayData
-        {
-            Benchmark = "MCCHM2EQ",
-            BaseCcy = "CHF",
-            ProgramId = "123456",
-            BatchId = "15884",
-            NumOrders = 4,
-            PtcAlerts = 0,
-            OrderApprovedBy = "Anna Miller",
-            OrderApprovedAt = new DateTime(2026, 5, 15, 6, 10, 14, DateTimeKind.Utc),
-            OrderSentBy = "James Smith",
-            OrderSentAt = new DateTime(2026, 5, 15, 6, 14, 22, DateTimeKind.Utc),
-        },
+        DisplayData = $$"""{"eventType":"{{eventType}}","benchmark":"MCCHM2EQ","batchId":"15884"}""",
     };
 }

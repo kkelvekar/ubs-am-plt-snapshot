@@ -149,8 +149,7 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
         Assert.Equal(baseline.AdlsPath, current.AdlsPath);
         Assert.Equal(baseline.SnapshotDate, current.SnapshotDate);
         Assert.Equal(baseline.EventType, current.EventType);
-        Assert.Equal(baseline.DisplayData.Benchmark, current.DisplayData.Benchmark);
-        Assert.Equal(baseline.DisplayData.BatchId, current.DisplayData.BatchId);
+        Assert.Equal(baseline.DisplayData, current.DisplayData);
     }
 
     [Then("the header blob still holds the originally sent header content")]

@@ -8,14 +8,19 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
 {
     private readonly List<(SnapshotMessage Message, string AdlsRootPath)> _upserts = [];
     private readonly List<string> _markedComplete = [];
+    private readonly List<SnapshotRejectionRecord> _markedRejected = [];
 
     public IReadOnlyList<(SnapshotMessage Message, string AdlsRootPath)> Upserts => _upserts;
 
     public IReadOnlyList<string> MarkedComplete => _markedComplete;
 
+    public IReadOnlyList<SnapshotRejectionRecord> MarkedRejected => _markedRejected;
+
     public Exception? ThrowOnUpsert { get; set; }
 
     public Exception? ThrowOnMarkComplete { get; set; }
+
+    public Exception? ThrowOnMarkRejected { get; set; }
 
     /// <summary>Status (and received files) returned by the next <see cref="UpsertReceivedAsync"/> call.</summary>
     public SnapshotTrackingStatus StatusToReturn { get; set; } = SnapshotTrackingStatus.Receiving;
@@ -81,5 +86,36 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
 
         _markedComplete.Add(snapshotId);
         return Task.CompletedTask;
+    }
+
+    /// <summary>Row returned by <see cref="MarkRejectedAsync"/>; a minimal FAILED row unless a test sets one.</summary>
+    public SnapshotTrackingEntity? RejectedRowToReturn { get; set; }
+
+    public Task<SnapshotTrackingEntity> MarkRejectedAsync(
+        SnapshotRejectionRecord rejection,
+        CancellationToken cancellationToken)
+    {
+        CallOrderLog?.Add(nameof(MarkRejectedAsync));
+
+        if (ThrowOnMarkRejected is not null)
+        {
+            throw ThrowOnMarkRejected;
+        }
+
+        _markedRejected.Add(rejection);
+
+        return Task.FromResult(RejectedRowToReturn ?? new SnapshotTrackingEntity
+        {
+            SnapshotId = rejection.SnapshotId,
+            AccountId = rejection.AccountId ?? string.Empty,
+            SnapshotType = rejection.SnapshotType ?? string.Empty,
+            AdlsRootPath = string.Empty,
+            ReceivedFiles = [],
+            Status = SnapshotTrackingStatus.Failed,
+            Reason = $"{rejection.ReasonCode}: {rejection.ReasonDetail}",
+            FirstReceivedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            LastUpdatedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+            DeclaredFailedAt = new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc),
+        });
     }
 }
