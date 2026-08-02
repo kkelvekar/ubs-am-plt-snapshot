@@ -52,6 +52,91 @@ Exercises the REAL consume-and-commit path that Mode A bypasses.
 - This must be a repeatable script/tool invocation, never a one-off manual step. Document
   the exact commands in the tool's README or help text.
 
+## Claude Cloud sandbox setup (CCR only — skip entirely on a normal local dev machine)
+
+Apply this section **only** when you are running as a Claude Code remote/cloud session
+(no human at a terminal, ephemeral container, `docker info` reporting "System has not
+been booted with systemd" and/or `dotnet` missing from `PATH`). On a real developer
+machine, ignore this section — docker, the .NET SDK, and PowerShell are already there;
+just run the `tools/*.ps1` scripts directly.
+
+The container ships `docker` (client + `dockerd` binary) but no systemd, so the daemon
+isn't started, and it does **not** ship the .NET SDK or PowerShell by default. Do these
+once per session, not once per test run:
+
+1. **Install the .NET SDK** (only if `dotnet --version` fails):
+   ```bash
+   curl -sSLO https://dot.net/v1/dotnet-install.sh && chmod +x dotnet-install.sh
+   ./dotnet-install.sh --channel 10.0 --install-dir /root/.dotnet
+   export PATH="/root/.dotnet:$PATH"   # add to every shell you use this session
+   ```
+2. **Install PowerShell** (only if `pwsh -v` fails) so the project's own `tools/*.ps1`
+   scripts run as written instead of being hand-translated to raw `docker run`:
+   ```bash
+   curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -o /tmp/msprod.deb
+   dpkg -i /tmp/msprod.deb && apt-get update -qq && apt-get install -y -qq powershell
+   ```
+3. **Start the Docker daemon manually** (only if `docker info` fails — no systemd here):
+   ```bash
+   nohup dockerd > /tmp/dockerd.log 2>&1 & disown
+   sleep 5 && docker info   # confirm it came up before proceeding
+   ```
+
+### Use the project's own tools — do NOT install SQL Server/Kafka/Azurite natively
+
+The three ad-hoc setup scripts in `tools/` already do the right thing (spin up a
+`docker run` container each, apply schema, print the connection string). Use them
+exactly as a local developer would — do not `apt-get install mssql-server`, do not
+`npm install -g azurite`, do not download a Kafka tarball. Native installs fight the
+container images on ports and are strictly worse: harder to tear down cleanly, and not
+what CI/local devs actually run.
+
+```bash
+pwsh -c "./tools/sqlserver-local.ps1 -Up"   # SQL Server on localhost:1433, schema applied, prints SA password
+pwsh -c "./tools/azurite-local.ps1 -Up"     # Azurite blob endpoint on localhost:10000
+pwsh -c "./tools/kafka-local.ps1 -Up"       # Kafka on localhost:9092, both topics created
+```
+
+If a script fails with "port already in use" or "container already exists", check for
+and kill stray native processes first (`pgrep -a sqlservr`, `pgrep -a azurite`,
+`pgrep -a java`) and `docker rm -f <container-name>` before retrying — don't leave both
+a native process and a container fighting over the same port.
+
+### Pass every connection string via environment variable — never hardcode
+
+Read the SA password the script printed (or `docker exec snapshot-writer-sqlserver
+printenv MSSQL_SA_PASSWORD`) and export the standard config-binding env vars used
+throughout this repo (`AGENTS.md` "Kafka bootstrap servers are externally configurable"
+rule applies to Database/BlobStorage too):
+
+```bash
+export Database__ConnectionString="Server=localhost,1433;Database=UbsAdvantageSnapshots;User Id=sa;Password=<SA_PW>;TrustServerCertificate=True"
+export BlobStorage__ServiceUri=""                       # MUST be empty — ServiceUri wins over ConnectionString in BlobContainerClientFactory
+export BlobStorage__ConnectionString="UseDevelopmentStorage=true"
+export BlobStorage__ContainerName="ubsadvsnapshots"
+export Kafka__BootstrapServers="localhost:9092"
+```
+
+Save this as a small sourceable file (e.g. `source /tmp/local-infra-env.sh`) so every
+`dotnet test`, `dotnet run --project .../Worker`, `dotnet run --project .../Api`, and the
+producer tool in this session picks it up identically — never re-derive or re-type it.
+
+### Running the two modes here
+
+- **Mode A**: `source` the env file, then `dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests`
+  — no other setup needed, the fixture reads `Database:ConnectionString` /
+  `BlobStorage:*` from `appsettings.json` + env override automatically.
+- **Mode B**: `source` the env file, start the Worker in the background
+  (`nohup dotnet run --project src/Clients/UBS.AM.PLT.Snapshot.Worker --no-launch-profile
+  > /tmp/worker.log 2>&1 & disown`), publish with the producer tool (`dotnet run
+  --project tools/UBS.AM.PLT.Snapshot.TestProducer -- --snapshots 1 --message-delay
+  00:00:00`), confirm completion in the Worker log, then (for API-level slices) start the
+  Api the same way with `ASPNETCORE_URLS` set to a free port and `curl` the endpoints
+  under test. Kill both processes (`pkill -f "dotnet.*UBS.AM.PLT.Snapshot.Worker"`,
+  same for `.Api`) when done; leave the containers running for the rest of the session
+  (`-Down` teardown is optional here — it's an ephemeral container, but tearing down
+  frees ports if you need to restart a service).
+
 ## Configuration rule (binding for everything you build)
 
 Kafka bootstrap servers must be externally configurable for BOTH the worker and the
