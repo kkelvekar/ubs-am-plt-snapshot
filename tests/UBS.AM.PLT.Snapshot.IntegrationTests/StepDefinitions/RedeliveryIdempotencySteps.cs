@@ -36,7 +36,7 @@ public sealed class RedeliveryIdempotencySteps
 
     // Baseline captured after the snapshot first reaches COMPLETE, before the redelivery.
     private SnapshotTrackingEntity? _trackingBaseline;
-    private SnapshotIndexEntity? _indexBaseline;
+    private PortfolioSnapshotIndexEntity? _indexBaseline;
     private string? _ordersBlobBaseline;
 
     private Exception? _redeliveryException;
@@ -135,7 +135,7 @@ public sealed class RedeliveryIdempotencySteps
 
         await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
         {
-            var indexRowCount = await context.SnapshotIndex
+            var indexRowCount = await context.PortfolioSnapshotIndex
                 .AsNoTracking()
                 .CountAsync(e => e.SnapshotId == _snapshotId);
             Assert.Equal(1, indexRowCount);

@@ -43,9 +43,9 @@ CREATE TABLE dbo.PortfolioSnapshotIndex
 (
     -- SnapshotId and AccountId widths are mirrored by SnapshotFieldLimits and enforced before
     -- the first write. EventType comes from the header blob instead, so
-    -- SnapshotIndexEntryBuilder.ExtractEventType falls back to an empty string rather than
+    -- PortfolioSnapshotIndexEntryBuilder.ExtractEventType falls back to an empty string rather than
     -- handing this column an over-long value. Change this script, SnapshotFieldLimits and
-    -- SnapshotIndexEntityConfiguration together.
+    -- PortfolioSnapshotIndexEntityConfiguration together.
     SnapshotId   VARCHAR(100)  NOT NULL CONSTRAINT PK_PortfolioSnapshotIndex PRIMARY KEY NONCLUSTERED,
     AccountId    VARCHAR(100)  NOT NULL,
     SnapshotDate DATETIME2     NOT NULL,

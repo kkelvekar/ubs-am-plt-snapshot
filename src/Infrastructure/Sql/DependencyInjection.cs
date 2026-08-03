@@ -14,10 +14,10 @@ public static class DependencyInjection
         services.AddSnapshotDbContextFactory(connectionString);
 
         services.AddSingleton<ISnapshotTrackingRepository, SnapshotTrackingRepository>();
-        services.AddSingleton<ISnapshotIndexRepository, SnapshotIndexRepository>();
+        services.AddSingleton<IPortfolioSnapshotIndexRepository, PortfolioSnapshotIndexRepository>();
 
         services.AddSingleton<ISnapshotTrackingStore, SqlSnapshotTrackingStore>();
-        services.AddSingleton<ISnapshotIndexStore, SqlSnapshotIndexStore>();
+        services.AddSingleton<IPortfolioSnapshotIndexStore, SqlPortfolioSnapshotIndexStore>();
 
         return services;
     }
@@ -25,7 +25,7 @@ public static class DependencyInjection
     /// <summary>
     /// Read-side registration for the Load-snapshots grid Read API (solution design section 7).
     /// Wires only the shared options + pooled DbContext factory and the read-only
-    /// ISnapshotIndexQuery (implemented by the same SnapshotIndexRepository the write side
+    /// IPortfolioSnapshotIndexQuery (implemented by the same PortfolioSnapshotIndexRepository the write side
     /// uses for the UPSERT) - deliberately NONE of the write-path stores or the
     /// required-files provider, which the Read API never touches. The grid filter resolver
     /// is a pure static rule (SnapshotGridFilter.Resolve), so it needs no registration
@@ -35,7 +35,7 @@ public static class DependencyInjection
     {
         services.AddSnapshotDbContextFactory(connectionString);
 
-        services.AddSingleton<ISnapshotIndexQuery, SnapshotIndexRepository>();
+        services.AddSingleton<IPortfolioSnapshotIndexQuery, PortfolioSnapshotIndexRepository>();
 
         return services;
     }

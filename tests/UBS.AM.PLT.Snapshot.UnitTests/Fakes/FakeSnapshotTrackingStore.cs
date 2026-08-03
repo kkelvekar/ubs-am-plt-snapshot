@@ -37,7 +37,7 @@ public sealed class FakeSnapshotTrackingStore : ISnapshotTrackingStore
 
     /// <summary>
     /// Shared call-order log, injected by the test, so ordering of
-    /// <see cref="MarkCompleteAsync"/> against <see cref="FakeSnapshotIndexStore.UpsertAsync"/>
+    /// <see cref="MarkCompleteAsync"/> against <see cref="FakePortfolioSnapshotIndexStore.UpsertAsync"/>
     /// can be asserted. Optional — tests that don't care about ordering can leave it null.
     /// </summary>
     public List<string>? CallOrderLog { get; set; }

@@ -16,7 +16,7 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 /// (connection string) and ADLS Gen2 (credential auth via
 /// <see cref="BlobContainerClientFactory"/>) with no change. One class owns all blob access
 /// rather than splitting read and write into separate adapters — the same precedent as
-/// SnapshotIndexRepository on the SQL side; the two ports stay separate so the Read API
+/// PortfolioSnapshotIndexRepository on the SQL side; the two ports stay separate so the Read API
 /// composition root can register the read one alone. The payload string is written opaquely
 /// and verbatim — never re-serialised from anything parsed, so every delivery produces
 /// byte-identical content and overwrite makes the write content-idempotent under redelivery,

@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 
 /// <summary>
-/// Flattens each SnapshotIndexRow into one flat grid row: the fixed columns at
+/// Flattens each PortfolioSnapshotIndexRow into one flat grid row: the fixed columns at
 /// the top level, then every top-level property of the opaque DisplayData JSON copied
 /// up alongside them. New display keys therefore flow through to the response with zero code
 /// change (solution design section 7). Fixed columns win on any key collision, and null/blank/invalid
@@ -19,7 +19,7 @@ public static class SnapshotRowFlattener
     private const string EventType = "eventType";
     private const string CreatedAt = "createdAt";
 
-    public static IReadOnlyList<Dictionary<string, object?>> Flatten(IEnumerable<SnapshotIndexRow> rows)
+    public static IReadOnlyList<Dictionary<string, object?>> Flatten(IEnumerable<PortfolioSnapshotIndexRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
 
@@ -32,7 +32,7 @@ public static class SnapshotRowFlattener
         return result;
     }
 
-    private static Dictionary<string, object?> FlattenRow(SnapshotIndexRow row)
+    private static Dictionary<string, object?> FlattenRow(PortfolioSnapshotIndexRow row)
     {
         var flat = new Dictionary<string, object?>(StringComparer.Ordinal)
         {

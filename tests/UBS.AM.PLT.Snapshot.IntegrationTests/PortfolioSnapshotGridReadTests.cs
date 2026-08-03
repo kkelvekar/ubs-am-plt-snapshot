@@ -9,17 +9,17 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 
 /// <summary>
 /// Mode A coverage for the Load-snapshots grid Read API (solution design §7):
-/// <see cref="ISnapshotIndexQuery"/> + <see cref="SnapshotRowFlattener"/> exercised directly
+/// <see cref="IPortfolioSnapshotIndexQuery"/> + <see cref="SnapshotRowFlattener"/> exercised directly
 /// against REAL Azure SQL. This is the only place that proves
-/// <c>Database.SqlQueryRaw&lt;SnapshotIndexRow&gt;</c> actually materialises
+/// <c>Database.SqlQueryRaw&lt;PortfolioSnapshotIndexRow&gt;</c> actually materialises
 /// <c>dbo.PortfolioSnapshotIndex</c> columns (including the <c>DisplayData AS DisplayDataJson</c>
 /// alias and the required-init/DateTime properties) onto the keyless read DTO — no unit
 /// test can catch a column/property name mismatch.
 /// <para>
 /// Rows are seeded with a direct SQL INSERT against <see cref="SnapshotFixture.DbContextFactory"/>
 /// rather than through <see cref="SnapshotFixture.Handler"/>: this is a read-path test, and a
-/// direct insert is the only way to plant a <c>DisplayData</c> payload containing a key not
-/// modelled on <c>SnapshotIndexDisplayData</c> (proving the zero-code-change flow-through — the
+/// direct insert is the only way to plant a <c>DisplayData</c> payload containing a key that
+/// is not a known PortfolioSnapshotIndex DisplayData key (proving the zero-code-change flow-through — the
 /// write-side value converter would otherwise round-trip through the typed POCO and drop it).
 /// </para>
 /// <para>
@@ -51,7 +51,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         var sidNewer = NewSnapshotId("grid-newer");
         var sidOtherAccount = NewSnapshotId("grid-othacct");
 
-        // sidOlder: novel DisplayData key not modelled on SnapshotIndexDisplayData at all —
+        // sidOlder: novel DisplayData key that no known PortfolioSnapshotIndex DisplayData shape covers —
         // proves zero-code-change flow-through end to end.
         await InsertIndexRowAsync(
             sidOlder,
@@ -103,7 +103,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         Assert.Equal(sidNewer, rows[0].SnapshotId);
         Assert.Equal(sidOlder, rows[1].SnapshotId);
 
-        // Fixed-field materialisation via SqlQueryRaw<SnapshotIndexRow> — every column, including
+        // Fixed-field materialisation via SqlQueryRaw<PortfolioSnapshotIndexRow> — every column, including
         // the DisplayData AS DisplayDataJson alias, correctly bound onto the keyless read DTO.
         var older = rows[1];
         Assert.Equal(sidOlder, older.SnapshotId);
@@ -270,7 +270,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     }
 
     /// <summary>
-    /// Builds <see cref="ISnapshotIndexQuery"/> the same way the Api composition root does
+    /// Builds <see cref="IPortfolioSnapshotIndexQuery"/> the same way the Api composition root does
     /// (<c>AddSqlReadInfrastructure</c>, in <c>Api/Program.cs</c>), rather than reusing
     /// <see cref="SnapshotFixture"/>'s write-side provider, which never registers the read port.
     /// The returned wrapper owns its own <see cref="ServiceProvider"/> and disposes it with the
@@ -291,10 +291,10 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         public QueryScope(ServiceProvider provider)
         {
             _provider = provider;
-            Service = provider.GetRequiredService<ISnapshotIndexQuery>();
+            Service = provider.GetRequiredService<IPortfolioSnapshotIndexQuery>();
         }
 
-        public ISnapshotIndexQuery Service { get; }
+        public IPortfolioSnapshotIndexQuery Service { get; }
 
         public void Dispose() => _provider.Dispose();
     }

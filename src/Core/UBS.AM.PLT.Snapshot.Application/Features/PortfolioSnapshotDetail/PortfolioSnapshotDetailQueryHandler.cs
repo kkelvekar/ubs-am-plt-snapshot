@@ -6,17 +6,17 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotDetail;
 /// <summary>
 /// Resolves the caller-supplied route identifiers (SnapshotDetailRequest - 400-mappable
 /// SnapshotDetailValidationException), resolves the snapshotId to its stored AdlsPath via
-/// ISnapshotIndexQuery, and reads the payload blobs via ISnapshotPayloadQuery. The Api
+/// IPortfolioSnapshotIndexQuery, and reads the payload blobs via ISnapshotPayloadQuery. The Api
 /// controller only ever calls these two methods - it never talks to either port, the
 /// validators or the composer directly. Payload text is passed through opaquely: it is only
 /// ever returned as-is or embedded raw by SnapshotPayloadDocumentComposer.
 /// </summary>
 public sealed class PortfolioSnapshotDetailQueryHandler : IPortfolioSnapshotDetailQueryHandler
 {
-    private readonly ISnapshotIndexQuery _indexQuery;
+    private readonly IPortfolioSnapshotIndexQuery _indexQuery;
     private readonly ISnapshotPayloadQuery _payloadQuery;
 
-    public PortfolioSnapshotDetailQueryHandler(ISnapshotIndexQuery indexQuery, ISnapshotPayloadQuery payloadQuery)
+    public PortfolioSnapshotDetailQueryHandler(IPortfolioSnapshotIndexQuery indexQuery, ISnapshotPayloadQuery payloadQuery)
     {
         _indexQuery = indexQuery;
         _payloadQuery = payloadQuery;

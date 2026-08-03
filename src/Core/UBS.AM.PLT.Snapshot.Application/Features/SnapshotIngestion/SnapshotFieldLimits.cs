@@ -15,7 +15,7 @@ public static class SnapshotFieldLimits
     public const int SnapshotIdMaxLength = 100;   // varchar(100), both tables
     public const int AccountIdMaxLength = 100;    // varchar(100), both tables
     public const int SnapshotTypeMaxLength = 100; // varchar(100), SnapshotTracking
-    public const int EventTypeMaxLength = 100;    // varchar(100), SnapshotIndex
+    public const int EventTypeMaxLength = 100;    // varchar(100), PortfolioSnapshotIndex
 
     /// <summary>
     /// PayloadType has no column of its own — it becomes the <c>{payloadType}.json</c> blob

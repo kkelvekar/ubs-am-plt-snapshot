@@ -6,16 +6,16 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 /// <summary>
 /// Resolves the caller-supplied filter (SnapshotGridFilter.Resolve - 400-mappable
 /// SnapshotGridFilterValidationException on an empty account list or inverted window),
-/// reads via the ISnapshotIndexQuery port, and flattens the opaque DisplayData JSON
+/// reads via the IPortfolioSnapshotIndexQuery port, and flattens the opaque DisplayData JSON
 /// into flat response rows via SnapshotRowFlattener. The Api controller only ever calls
 /// this one method - it never talks to the read port or the flattener directly.
 /// </summary>
 public sealed class PortfolioSnapshotGridQueryHandler : IPortfolioSnapshotGridQueryHandler
 {
-    private readonly ISnapshotIndexQuery _indexQuery;
+    private readonly IPortfolioSnapshotIndexQuery _indexQuery;
     private readonly TimeProvider _timeProvider;
 
-    public PortfolioSnapshotGridQueryHandler(ISnapshotIndexQuery indexQuery, TimeProvider timeProvider)
+    public PortfolioSnapshotGridQueryHandler(IPortfolioSnapshotIndexQuery indexQuery, TimeProvider timeProvider)
     {
         _indexQuery = indexQuery;
         _timeProvider = timeProvider;

@@ -17,7 +17,7 @@ public sealed class PortfolioSnapshotDetailQueryHandlerTests
     private const string SnapshotId = "s1";
     private const string AdlsPath = "portfolio_snapshots/year=2026/month=07/accountId=A1/snapshotId=s1";
 
-    private readonly FakeSnapshotIndexQuery _indexQuery = new();
+    private readonly FakePortfolioSnapshotIndexQuery _indexQuery = new();
     private readonly FakeSnapshotPayloadQuery _payloadQuery = new();
 
     private PortfolioSnapshotDetailQueryHandler CreateHandler() => new(_indexQuery, _payloadQuery);

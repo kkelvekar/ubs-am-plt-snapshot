@@ -18,11 +18,11 @@ public sealed class SnapshotDbContext : DbContext
 
     public DbSet<SnapshotTrackingEntity> SnapshotTracking => Set<SnapshotTrackingEntity>();
 
-    public DbSet<SnapshotIndexEntity> SnapshotIndex => Set<SnapshotIndexEntity>();
+    public DbSet<PortfolioSnapshotIndexEntity> PortfolioSnapshotIndex => Set<PortfolioSnapshotIndexEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new SnapshotTrackingEntityConfiguration());
-        modelBuilder.ApplyConfiguration(new SnapshotIndexEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PortfolioSnapshotIndexEntityConfiguration());
     }
 }

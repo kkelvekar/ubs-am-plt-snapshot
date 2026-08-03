@@ -9,7 +9,7 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 /// only value read out of the header is <c>eventType</c>; the persisted display data is the
 /// header text verbatim.
 /// </summary>
-public static class SnapshotIndexEntryBuilder
+public static class PortfolioSnapshotIndexEntryBuilder
 {
     /// <summary>
     /// Reads the one header value this service needs, <c>eventType</c>, which has its own
@@ -60,7 +60,7 @@ public static class SnapshotIndexEntryBuilder
     /// Builds the index row for a completed snapshot. <paramref name="headerJson"/> is stored
     /// verbatim as the display data.
     /// </summary>
-    public static SnapshotIndexEntity Build(
+    public static PortfolioSnapshotIndexEntity Build(
         SnapshotMessage message,
         SnapshotTrackingEntity tracking,
         string headerJson,

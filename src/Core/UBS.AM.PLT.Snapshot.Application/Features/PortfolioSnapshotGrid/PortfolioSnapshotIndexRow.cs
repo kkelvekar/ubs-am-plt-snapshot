@@ -8,7 +8,7 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 /// change. Deliberately free of ASP.NET types - this is an Application
 /// contract, not a wire shape.
 /// </summary>
-public sealed class SnapshotIndexRow
+public sealed class PortfolioSnapshotIndexRow
 {
     public required string SnapshotId { get; init; }
     public required string AccountId { get; init; }

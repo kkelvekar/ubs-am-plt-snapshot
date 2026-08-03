@@ -5,16 +5,16 @@ using UBS.AM.PLT.Snapshot.Domain.Entities;
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
 
 /// <summary>
-/// EF Core mapping for <see cref="SnapshotIndexEntity"/> onto the hand-written schema in
+/// EF Core mapping for <see cref="PortfolioSnapshotIndexEntity"/> onto the hand-written schema in
 /// <c>db/scripts/002_snapshot_index.sql</c> (solution design §7). The SQL script is the
 /// source of truth — never add EF migrations; a schema change means updating the script and
 /// this mapping together.
 /// </summary>
-internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguration<SnapshotIndexEntity>
+internal sealed class PortfolioSnapshotIndexEntityConfiguration : IEntityTypeConfiguration<PortfolioSnapshotIndexEntity>
 {
     // DisplayData carries no value conversion on purpose: it holds the header.json text and
     // must stay byte-identical to the blob.
-    public void Configure(EntityTypeBuilder<SnapshotIndexEntity> indexEntity)
+    public void Configure(EntityTypeBuilder<PortfolioSnapshotIndexEntity> indexEntity)
     {
         indexEntity.ToTable("PortfolioSnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
