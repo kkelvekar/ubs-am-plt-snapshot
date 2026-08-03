@@ -44,10 +44,10 @@ internal static class SnapshotTestHelpers
             .SingleAsync(e => e.SnapshotId == snapshotId);
     }
 
-    public static async Task<SnapshotIndexEntity> GetIndexAsync(SnapshotFixture fixture, string snapshotId)
+    public static async Task<PortfolioSnapshotIndexEntity> GetIndexAsync(SnapshotFixture fixture, string snapshotId)
     {
         await using var context = await fixture.DbContextFactory.CreateDbContextAsync();
-        return await context.SnapshotIndex
+        return await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .SingleAsync(e => e.SnapshotId == snapshotId);
     }
@@ -55,7 +55,7 @@ internal static class SnapshotTestHelpers
     public static async Task<bool> IndexRowExistsAsync(SnapshotFixture fixture, string snapshotId)
     {
         await using var context = await fixture.DbContextFactory.CreateDbContextAsync();
-        return await context.SnapshotIndex
+        return await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .AnyAsync(e => e.SnapshotId == snapshotId);
     }

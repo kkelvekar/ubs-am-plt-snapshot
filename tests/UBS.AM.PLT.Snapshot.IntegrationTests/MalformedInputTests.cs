@@ -148,10 +148,10 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
             .SingleAsync(e => e.SnapshotId == snapshotId);
     }
 
-    private async Task<SnapshotIndexEntity> GetIndexAsync(string snapshotId)
+    private async Task<PortfolioSnapshotIndexEntity> GetIndexAsync(string snapshotId)
     {
         await using var context = await Fixture.DbContextFactory.CreateDbContextAsync();
-        return await context.SnapshotIndex
+        return await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .SingleAsync(e => e.SnapshotId == snapshotId);
     }
@@ -159,7 +159,7 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     private async Task<bool> IndexRowExistsAsync(string snapshotId)
     {
         await using var context = await Fixture.DbContextFactory.CreateDbContextAsync();
-        return await context.SnapshotIndex
+        return await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .AnyAsync(e => e.SnapshotId == snapshotId);
     }

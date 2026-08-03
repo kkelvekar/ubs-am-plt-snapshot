@@ -22,7 +22,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     private readonly ISnapshotBlobStore _blobStore;
     private readonly ISnapshotTrackingStore _trackingStore;
     private readonly IRequiredFilesProvider _requiredFilesProvider;
-    private readonly ISnapshotIndexStore _indexStore;
+    private readonly IPortfolioSnapshotIndexStore _indexStore;
     private readonly ISnapshotResponsePublisher _responsePublisher;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SnapshotMessageHandler> _logger;
@@ -31,7 +31,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         ISnapshotBlobStore blobStore,
         ISnapshotTrackingStore trackingStore,
         IRequiredFilesProvider requiredFilesProvider,
-        ISnapshotIndexStore indexStore,
+        IPortfolioSnapshotIndexStore indexStore,
         ISnapshotResponsePublisher responsePublisher,
         TimeProvider timeProvider,
         ILogger<SnapshotMessageHandler> logger)
@@ -75,7 +75,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             if (SnapshotCompleteness.IsComplete(tracking.ReceivedFiles, required))
             {
                 var headerJson = await _blobStore.ReadHeaderAsync(tracking.AdlsRootPath, cancellationToken);
-                var eventType = SnapshotIndexEntryBuilder.ExtractEventType(headerJson);
+                var eventType = PortfolioSnapshotIndexEntryBuilder.ExtractEventType(headerJson);
                 if (eventType.Length == 0)
                 {
                     _logger.LogWarning(
@@ -85,7 +85,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
                         message.PayloadType);
                 }
 
-                var indexEntry = SnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
+                var indexEntry = PortfolioSnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
 
                 // The index UPSERT must precede the status flip: if it fails, tracking must
                 // still read RECEIVING so redelivery retries this branch.

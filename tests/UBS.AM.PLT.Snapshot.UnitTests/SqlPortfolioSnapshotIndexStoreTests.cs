@@ -6,22 +6,22 @@ using Xunit;
 namespace UBS.AM.PLT.Snapshot.UnitTests;
 
 /// <summary>
-/// Exercises <see cref="SqlSnapshotIndexStore"/>'s UPSERT decisions (the <c>apply</c>
-/// delegate it passes to <see cref="ISnapshotIndexRepository"/>) against the in-memory
-/// <see cref="FakeSnapshotIndexRepository"/> — no EF Core, no SQL. The same rules against
+/// Exercises <see cref="SqlPortfolioSnapshotIndexStore"/>'s UPSERT decisions (the <c>apply</c>
+/// delegate it passes to <see cref="IPortfolioSnapshotIndexRepository"/>) against the in-memory
+/// <see cref="FakePortfolioSnapshotIndexRepository"/> — no EF Core, no SQL. The same rules against
 /// the real repository/SQL Server are covered by <c>SnapshotCompletionIntegrationTests</c>.
 /// </summary>
-public sealed class SqlSnapshotIndexStoreTests
+public sealed class SqlPortfolioSnapshotIndexStoreTests
 {
     private static readonly DateTimeOffset StartTime = new(2026, 5, 22, 6, 10, 14, TimeSpan.Zero);
 
-    private readonly FakeSnapshotIndexRepository _repository = new();
+    private readonly FakePortfolioSnapshotIndexRepository _repository = new();
     private readonly RecordingTimeProvider _timeProvider = new() { UtcNow = StartTime };
-    private readonly SqlSnapshotIndexStore _store;
+    private readonly SqlPortfolioSnapshotIndexStore _store;
 
-    public SqlSnapshotIndexStoreTests()
+    public SqlPortfolioSnapshotIndexStoreTests()
     {
-        _store = new SqlSnapshotIndexStore(_repository, _timeProvider);
+        _store = new SqlPortfolioSnapshotIndexStore(_repository, _timeProvider);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class SqlSnapshotIndexStoreTests
         Assert.Equal(StartTime.UtcDateTime, row.CreatedAt);
     }
 
-    private static SnapshotIndexEntity CreateEntry(string snapshotId, string eventType) => new()
+    private static PortfolioSnapshotIndexEntity CreateEntry(string snapshotId, string eventType) => new()
     {
         SnapshotId = snapshotId,
         AccountId = "00675442A",

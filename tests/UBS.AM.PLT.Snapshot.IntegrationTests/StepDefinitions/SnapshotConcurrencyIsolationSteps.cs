@@ -33,7 +33,7 @@ public sealed class SnapshotConcurrencyIsolationSteps
     private readonly Dictionary<string, Dictionary<string, SnapshotMessage>> _sentMessages = new(StringComparer.Ordinal);
 
     private SnapshotTrackingEntity? _baselineTracking;
-    private SnapshotIndexEntity? _baselineIndex;
+    private PortfolioSnapshotIndexEntity? _baselineIndex;
 
     public SnapshotConcurrencyIsolationSteps(SnapshotFixture fixture, ScenarioFixtureContext scenario)
     {
@@ -143,7 +143,7 @@ public sealed class SnapshotConcurrencyIsolationSteps
     }
 
     [Then("snapshot \"(.*)\" index row has account \"(.*)\" and adls path equal to its tracking root")]
-    public async Task ThenSnapshotIndexRowHasAccountAndAdlsPathEqualToItsTrackingRoot(string label, string accountId)
+    public async Task ThenPortfolioSnapshotIndexRowHasAccountAndAdlsPathEqualToItsTrackingRoot(string label, string accountId)
     {
         var tracking = await GetTrackingAsync(label);
         var index = await SnapshotTestHelpers.GetIndexAsync(_fixture, SnapshotId(label));
@@ -188,7 +188,7 @@ public sealed class SnapshotConcurrencyIsolationSteps
     }
 
     [Then("snapshot \"(.*)\" index is unchanged from the isolation baseline")]
-    public async Task ThenSnapshotIndexIsUnchangedFromTheIsolationBaseline(string label)
+    public async Task ThenPortfolioSnapshotIndexIsUnchangedFromTheIsolationBaseline(string label)
     {
         var baseline = _baselineIndex ?? throw new InvalidOperationException("No index baseline has been recorded.");
         var current = await SnapshotTestHelpers.GetIndexAsync(_fixture, SnapshotId(label));

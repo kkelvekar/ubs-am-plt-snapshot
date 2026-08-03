@@ -4,13 +4,13 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 
 /// <summary>
 /// Raw EF Core data access for the snapshot_index table. Internal to Infrastructure —
-/// this is not an Application port; the port stays <c>ISnapshotIndexStore</c>, and the
-/// UPSERT/idempotency decisions stay in <see cref="SqlSnapshotIndexStore"/> (expressed as
+/// this is not an Application port; the port stays <c>IPortfolioSnapshotIndexStore</c>, and the
+/// UPSERT/idempotency decisions stay in <see cref="SqlPortfolioSnapshotIndexStore"/> (expressed as
 /// the <c>apply</c> delegate). Same single-call contract as
 /// <see cref="ISnapshotTrackingRepository"/>: one self-contained DbContext per call,
 /// disposed before returning.
 /// </summary>
-internal interface ISnapshotIndexRepository
+internal interface IPortfolioSnapshotIndexRepository
 {
     /// <summary>
     /// Single-call read-modify-write: opens one DbContext, does a tracked SELECT by PK,
@@ -21,6 +21,6 @@ internal interface ISnapshotIndexRepository
     /// </summary>
     Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
+        Func<PortfolioSnapshotIndexEntity?, PortfolioSnapshotIndexEntity> apply,
         CancellationToken cancellationToken);
 }

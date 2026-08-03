@@ -14,7 +14,7 @@ public sealed class SnapshotRowFlattenerTests
     [Fact]
     public void Novel_display_key_flows_through_to_output()
     {
-        // "brandNewField" is not modelled on SnapshotIndexDisplayData — it must still surface.
+        // "brandNewField" is not a known PortfolioSnapshotIndex DisplayData key — it must still surface.
         var row = CreateRow(displayDataJson: """{"benchmark":"MCCHM2EQ","brandNewField":"hello"}""");
 
         var flat = SnapshotRowFlattener.Flatten([row])[0];
@@ -56,7 +56,7 @@ public sealed class SnapshotRowFlattenerTests
     private static string? AsString(object? value) =>
         value is JsonElement element ? element.GetString() : value?.ToString();
 
-    private static SnapshotIndexRow CreateRow(
+    private static PortfolioSnapshotIndexRow CreateRow(
         string accountId = "00675442A",
         string displayDataJson = "{}") => new()
         {

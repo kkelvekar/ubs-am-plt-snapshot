@@ -8,15 +8,15 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 
 /// <summary>
 /// EF Core data access for the snapshot_index table - both the write-side UPSERT
-/// (ISnapshotIndexRepository, used by SqlSnapshotIndexStore) and the Load-snapshots
-/// grid read query plus the snapshot-detail AdlsPath lookup (ISnapshotIndexQuery, solution
+/// (IPortfolioSnapshotIndexRepository, used by SqlPortfolioSnapshotIndexStore) and the Load-snapshots
+/// grid read query plus the snapshot-detail AdlsPath lookup (IPortfolioSnapshotIndexQuery, solution
 /// design sections 7 and 10, used directly by the Api composition root). One class owns all
-/// dbo.SnapshotIndex data access rather than splitting read and write into separate
+/// dbo.PortfolioSnapshotIndex data access rather than splitting read and write into separate
 /// Infrastructure classes.
 /// <para>
-/// The read path uses Database.SqlQueryRaw&lt;SnapshotIndexRow&gt; onto the keyless read DTO
+/// The read path uses Database.SqlQueryRaw&lt;PortfolioSnapshotIndexRow&gt; onto the keyless read DTO
 /// so the DisplayData column comes back as its raw JSON string - this deliberately bypasses
-/// the write-side SnapshotIndexEntity value converter, which would otherwise round-trip
+/// the write-side PortfolioSnapshotIndexEntity value converter, which would otherwise round-trip
 /// the JSON through the typed POCO and drop any display key not modelled on it. Every
 /// account id becomes its own @pN parameter - ids are never concatenated into the SQL text.
 /// </para>
@@ -26,30 +26,30 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 /// and returns it to the pool on dispose, so this is connection-efficient on a hot consume
 /// loop. Do not reintroduce a shared/held context.
 /// </summary>
-internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnapshotIndexQuery
+internal sealed class PortfolioSnapshotIndexRepository : IPortfolioSnapshotIndexRepository, IPortfolioSnapshotIndexQuery
 {
     private readonly IDbContextFactory<SnapshotDbContext> _contextFactory;
 
-    public SnapshotIndexRepository(IDbContextFactory<SnapshotDbContext> contextFactory)
+    public PortfolioSnapshotIndexRepository(IDbContextFactory<SnapshotDbContext> contextFactory)
     {
         _contextFactory = contextFactory;
     }
 
     public async Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
+        Func<PortfolioSnapshotIndexEntity?, PortfolioSnapshotIndexEntity> apply,
         CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var existing = await context.SnapshotIndex
+        var existing = await context.PortfolioSnapshotIndex
             .SingleOrDefaultAsync(e => e.SnapshotId == snapshotId, cancellationToken);
 
         var result = apply(existing);
 
         if (existing is null)
         {
-            context.SnapshotIndex.Add(result);
+            context.PortfolioSnapshotIndex.Add(result);
         }
         else if (!ReferenceEquals(result, existing))
         {
@@ -60,7 +60,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<SnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PortfolioSnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
 
@@ -69,7 +69,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.Database
-            .SqlQueryRaw<SnapshotIndexRow>(sql, parameters)
+            .SqlQueryRaw<PortfolioSnapshotIndexRow>(sql, parameters)
             .ToListAsync(cancellationToken);
     }
 
@@ -83,7 +83,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         // A point lookup on the nonclustered primary key, and the single-column projection
         // keeps the DisplayData value converter out of the query entirely - unlike the grid
         // read, nothing here needs the raw JSON column.
-        return await context.SnapshotIndex
+        return await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .Where(e => e.SnapshotId == snapshotId)
             .Select(e => e.AdlsPath)
@@ -120,7 +120,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         var sql =
             "SELECT SnapshotId, AccountId, SnapshotDate, EventType, AdlsPath, " +
             "DisplayData AS DisplayDataJson, CreatedAt " +
-            "FROM dbo.SnapshotIndex " +
+            "FROM dbo.PortfolioSnapshotIndex " +
             $"WHERE AccountId IN ({string.Join(", ", placeholders)}) " +
             "AND SnapshotDate >= @from AND SnapshotDate <= @to";
 

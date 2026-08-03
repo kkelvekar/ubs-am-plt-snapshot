@@ -147,7 +147,7 @@ public sealed class InfrastructureFailureDuringWriteSteps
     public async Task ThenNoIndexRowExists()
     {
         await using var context = await _fixture.DbContextFactory.CreateDbContextAsync();
-        var count = await context.SnapshotIndex
+        var count = await context.PortfolioSnapshotIndex
             .AsNoTracking()
             .CountAsync(e => e.SnapshotId == _snapshotId);
         Assert.Equal(0, count);

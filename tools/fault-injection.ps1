@@ -12,9 +12,9 @@
     trg_fault_SnapshotTracking   on dbo.SnapshotTracking, AFTER INSERT, UPDATE
                                   — THROWs, simulating a hard tracking-write failure
                                   (SELECT is untouched)
-    trg_fault_SnapshotIndex      on dbo.SnapshotIndex, AFTER INSERT, UPDATE
+    trg_fault_PortfolioSnapshotIndex  on dbo.PortfolioSnapshotIndex, AFTER INSERT, UPDATE
                                   — THROWs, simulating a hard index-write failure
-    trg_delay_SnapshotIndex      on dbo.SnapshotIndex, AFTER INSERT ONLY
+    trg_delay_PortfolioSnapshotIndex  on dbo.PortfolioSnapshotIndex, AFTER INSERT ONLY
                                   — does NOT throw: WAITFOR DELAY '00:00:20' then
                                   returns successfully, simulating a slow-but-
                                   succeeding index write (TC-20 — offset commit
@@ -441,8 +441,8 @@ $ErrorActionPreference = 'Stop'
 
 $triggerNames = @{
     Tracking = 'trg_fault_SnapshotTracking'
-    Index    = 'trg_fault_SnapshotIndex'
-    Delay    = 'trg_delay_SnapshotIndex'
+    Index    = 'trg_fault_PortfolioSnapshotIndex'
+    Delay    = 'trg_delay_PortfolioSnapshotIndex'
 }
 
 # Every fault-trigger name, independent of -Target — used by -Status/-VerifyClean so
@@ -461,17 +461,17 @@ BEGIN
 END
 "@
     Index    = @"
-CREATE TRIGGER dbo.trg_fault_SnapshotIndex
-ON dbo.SnapshotIndex
+CREATE TRIGGER dbo.trg_fault_PortfolioSnapshotIndex
+ON dbo.PortfolioSnapshotIndex
 AFTER INSERT, UPDATE
 AS
 BEGIN
-    THROW 51001, 'fault-injection: simulated failure on SnapshotIndex write', 1;
+    THROW 51001, 'fault-injection: simulated failure on PortfolioSnapshotIndex write', 1;
 END
 "@
     Delay    = @"
-CREATE TRIGGER dbo.trg_delay_SnapshotIndex
-ON dbo.SnapshotIndex
+CREATE TRIGGER dbo.trg_delay_PortfolioSnapshotIndex
+ON dbo.PortfolioSnapshotIndex
 AFTER INSERT
 AS
 BEGIN
@@ -522,8 +522,8 @@ $triggerNameList = "'" + ($allTriggerNames -join "', '") + "'"
 
 $tableForTarget = @{
     Tracking = 'SnapshotTracking'
-    Index    = 'SnapshotIndex'
-    Delay    = 'SnapshotIndex'
+    Index    = 'PortfolioSnapshotIndex'
+    Delay    = 'PortfolioSnapshotIndex'
 }
 
 if ($VerifyClean) {

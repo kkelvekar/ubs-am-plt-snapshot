@@ -33,7 +33,7 @@ public sealed class UnexpectedPayloadHandlingSteps
 
     // Baseline captured after the snapshot first reaches COMPLETE, before the extra file arrives.
     private SnapshotTrackingEntity? _trackingBaseline;
-    private SnapshotIndexEntity? _indexBaseline;
+    private PortfolioSnapshotIndexEntity? _indexBaseline;
 
     private Exception? _rejection;
 
@@ -166,7 +166,7 @@ public sealed class UnexpectedPayloadHandlingSteps
 
         await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
         {
-            var indexRowCount = await context.SnapshotIndex
+            var indexRowCount = await context.PortfolioSnapshotIndex
                 .AsNoTracking()
                 .CountAsync(e => e.SnapshotId == _snapshotId);
             Assert.Equal(1, indexRowCount);

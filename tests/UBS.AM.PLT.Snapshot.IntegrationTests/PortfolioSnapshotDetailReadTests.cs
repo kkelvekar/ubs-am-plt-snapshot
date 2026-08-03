@@ -12,7 +12,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// <summary>
 /// Mode A coverage for the View-a-snapshot-detail Read API (solution design section 10,
 /// Screen 2): <see cref="IPortfolioSnapshotDetailQueryHandler"/> exercised against REAL Azure
-/// SQL (index-row lookup via <c>ISnapshotIndexQuery</c>) and REAL ADLS Gen2 blob storage
+/// SQL (index-row lookup via <c>IPortfolioSnapshotIndexQuery</c>) and REAL ADLS Gen2 blob storage
 /// (<c>ISnapshotPayloadQuery</c> on <see cref="AzureBlobSnapshotStore"/>).
 /// <para>
 /// Snapshots are seeded by driving the REAL write pipeline (<see cref="SnapshotFixture.Handler"/>),
@@ -130,7 +130,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
 
         // Only the orders payload arrives — no index row is ever written for this snapshot,
         // even though the orders.json blob now exists in ADLS. This proves the read is
-        // index-gated (via ISnapshotIndexQuery.GetAdlsPathAsync), not blob-existence-gated.
+        // index-gated (via IPortfolioSnapshotIndexQuery.GetAdlsPathAsync), not blob-existence-gated.
         var message = SnapshotTestHelpers.CreateMessage(Fixture, snapshotId, AccountId, "orders", OrdersJson);
         await Fixture.Handler.HandleAsync(message, CancellationToken.None);
 

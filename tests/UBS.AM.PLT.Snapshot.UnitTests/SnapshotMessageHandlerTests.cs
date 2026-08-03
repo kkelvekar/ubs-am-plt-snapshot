@@ -142,7 +142,7 @@ public class SnapshotMessageHandlerTests
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var blobStore = new FakeSnapshotBlobStore();
 
         var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore);
@@ -166,7 +166,7 @@ public class SnapshotMessageHandlerTests
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
-        var indexStore = new FakeSnapshotIndexStore { CallOrderLog = callOrderLog };
+        var indexStore = new FakePortfolioSnapshotIndexStore { CallOrderLog = callOrderLog };
         var responsePublisher = new FakeSnapshotResponsePublisher { CallOrderLog = callOrderLog };
 
         const string headerJson = """
@@ -220,7 +220,7 @@ public class SnapshotMessageHandlerTests
         // flip could never be retried by a redelivery.
         Assert.Equal(
             [
-                nameof(FakeSnapshotIndexStore.UpsertAsync),
+                nameof(FakePortfolioSnapshotIndexStore.UpsertAsync),
                 nameof(FakeSnapshotResponsePublisher.Publish),
                 nameof(FakeSnapshotTrackingStore.MarkCompleteAsync),
             ],
@@ -408,7 +408,7 @@ public class SnapshotMessageHandlerTests
         trackingStore.RootPathsBySnapshotId["corr98765"] = pinnedRootPath;
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var blobStore = new FakeSnapshotBlobStore();
 
         var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore);
@@ -435,7 +435,7 @@ public class SnapshotMessageHandlerTests
             ReceivedFilesToReturn = ["header.json", "orders.json", "calculations.json", "settings.json"],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider(); // "portfolio" deliberately unconfigured
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var blobStore = new FakeSnapshotBlobStore();
 
         var handler = CreateHandler(blobStore, trackingStore, requiredFilesProvider, indexStore);
@@ -540,7 +540,7 @@ public class SnapshotMessageHandlerTests
         // refused before it can reach blob storage or received_files.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
 
@@ -604,7 +604,7 @@ public class SnapshotMessageHandlerTests
         // up front — blob, tracking and index must all be untouched, and nothing logged.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
 
@@ -828,7 +828,7 @@ public class SnapshotMessageHandlerTests
         // rejection the consumer commits past — and every post-write failure stays retryable.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
         var message = CreateMessageWithFieldValue(field, new string('a', maxLength + 1));
@@ -873,7 +873,7 @@ public class SnapshotMessageHandlerTests
         // other than its snapshot folder — refused before the first write.
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore();
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(blobStore, trackingStore, indexStore: indexStore, logger: logger);
 
@@ -902,7 +902,7 @@ public class SnapshotMessageHandlerTests
         var callOrderLog = new List<string>();
         var blobStore = new FakeSnapshotBlobStore();
         var trackingStore = new FakeSnapshotTrackingStore { CallOrderLog = callOrderLog };
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var responsePublisher = new FakeSnapshotResponsePublisher { CallOrderLog = callOrderLog };
         var handler = CreateHandler(
             blobStore,
@@ -1081,7 +1081,7 @@ public class SnapshotMessageHandlerTests
 
         Assert.Equal(
             string.Empty,
-            SnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{overlong}}"}"""));
+            PortfolioSnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{overlong}}"}"""));
     }
 
     [Fact]
@@ -1091,7 +1091,7 @@ public class SnapshotMessageHandlerTests
 
         Assert.Equal(
             atLimit,
-            SnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{atLimit}}"}"""));
+            PortfolioSnapshotIndexEntryBuilder.ExtractEventType($$"""{"eventType":"{{atLimit}}"}"""));
     }
 
     [Fact]
@@ -1119,14 +1119,14 @@ public class SnapshotMessageHandlerTests
             accountId: field == "AccountId" ? value : "00675442A",
             snapshotType: field == "SnapshotType" ? value : "portfolio");
 
-    private static (SnapshotMessageHandler Handler, FakeSnapshotIndexStore IndexStore, CapturingLogger<SnapshotMessageHandler> Logger)
+    private static (SnapshotMessageHandler Handler, FakePortfolioSnapshotIndexStore IndexStore, CapturingLogger<SnapshotMessageHandler> Logger)
         CreateCompletingHandler(string headerJson)
     {
         var (handler, indexStore, _, logger) = CreateCompletingParts(headerJson);
         return (handler, indexStore, logger);
     }
 
-    private static (SnapshotMessageHandler Handler, FakeSnapshotIndexStore IndexStore, FakeSnapshotTrackingStore TrackingStore)
+    private static (SnapshotMessageHandler Handler, FakePortfolioSnapshotIndexStore IndexStore, FakeSnapshotTrackingStore TrackingStore)
         CreateCompletingHandlerWithTracking(string headerJson)
     {
         var (handler, indexStore, trackingStore, _) = CreateCompletingParts(headerJson);
@@ -1138,7 +1138,7 @@ public class SnapshotMessageHandlerTests
     /// next delivery completes the snapshot and builds the index entry from
     /// <paramref name="headerJson"/>.
     /// </summary>
-    private static (SnapshotMessageHandler Handler, FakeSnapshotIndexStore IndexStore, FakeSnapshotTrackingStore TrackingStore, CapturingLogger<SnapshotMessageHandler> Logger)
+    private static (SnapshotMessageHandler Handler, FakePortfolioSnapshotIndexStore IndexStore, FakeSnapshotTrackingStore TrackingStore, CapturingLogger<SnapshotMessageHandler> Logger)
         CreateCompletingParts(string headerJson)
     {
         var trackingStore = new FakeSnapshotTrackingStore
@@ -1148,7 +1148,7 @@ public class SnapshotMessageHandlerTests
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
-        var indexStore = new FakeSnapshotIndexStore();
+        var indexStore = new FakePortfolioSnapshotIndexStore();
         var logger = new CapturingLogger<SnapshotMessageHandler>();
         var handler = CreateHandler(
             new FakeSnapshotBlobStore { HeaderJson = headerJson },
@@ -1188,7 +1188,7 @@ public class SnapshotMessageHandlerTests
         FakeSnapshotBlobStore blobStore,
         FakeSnapshotTrackingStore trackingStore,
         FakeRequiredFilesProvider? requiredFilesProvider = null,
-        FakeSnapshotIndexStore? indexStore = null,
+        FakePortfolioSnapshotIndexStore? indexStore = null,
         TimeProvider? timeProvider = null,
         CapturingLogger<SnapshotMessageHandler>? logger = null,
         FakeSnapshotResponsePublisher? responsePublisher = null)
@@ -1203,7 +1203,7 @@ public class SnapshotMessageHandlerTests
             blobStore,
             trackingStore,
             requiredFilesProvider,
-            indexStore ?? new FakeSnapshotIndexStore(),
+            indexStore ?? new FakePortfolioSnapshotIndexStore(),
             responsePublisher ?? new FakeSnapshotResponsePublisher(),
             timeProvider ?? new RecordingTimeProvider(),
             logger ?? new CapturingLogger<SnapshotMessageHandler>());

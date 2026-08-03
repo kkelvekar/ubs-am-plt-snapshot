@@ -7,7 +7,7 @@ namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 /// snapshot is complete and only before the tracking row is marked COMPLETE (design §7,
 /// §8). The write is idempotent: redelivery upserts the same row content.
 /// </summary>
-public interface ISnapshotIndexStore
+public interface IPortfolioSnapshotIndexStore
 {
-    Task UpsertAsync(SnapshotIndexEntity entry, CancellationToken cancellationToken);
+    Task UpsertAsync(PortfolioSnapshotIndexEntity entry, CancellationToken cancellationToken);
 }

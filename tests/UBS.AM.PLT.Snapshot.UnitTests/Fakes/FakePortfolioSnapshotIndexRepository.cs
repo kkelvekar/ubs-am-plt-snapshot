@@ -4,17 +4,17 @@ using UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 namespace UBS.AM.PLT.Snapshot.UnitTests.Fakes;
 
 /// <summary>
-/// In-memory <see cref="ISnapshotIndexRepository"/>: <see cref="UpsertAsync"/> invokes
+/// In-memory <see cref="IPortfolioSnapshotIndexRepository"/>: <see cref="UpsertAsync"/> invokes
 /// the store's <c>apply</c> delegate against a dictionary-held entity and stores the
 /// result, so tests exercise the store's UPSERT decisions without EF Core.
 /// </summary>
-internal sealed class FakeSnapshotIndexRepository : ISnapshotIndexRepository
+internal sealed class FakePortfolioSnapshotIndexRepository : IPortfolioSnapshotIndexRepository
 {
-    public Dictionary<string, SnapshotIndexEntity> Rows { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, PortfolioSnapshotIndexEntity> Rows { get; } = new(StringComparer.Ordinal);
 
     public Task UpsertAsync(
         string snapshotId,
-        Func<SnapshotIndexEntity?, SnapshotIndexEntity> apply,
+        Func<PortfolioSnapshotIndexEntity?, PortfolioSnapshotIndexEntity> apply,
         CancellationToken cancellationToken)
     {
         Rows.TryGetValue(snapshotId, out var existing);

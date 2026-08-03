@@ -61,7 +61,7 @@ internal sealed class IntegrationTestCleanup
         }
 
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.SnapshotIndex WHERE SnapshotId = {snapshotId}");
+            $"DELETE FROM dbo.PortfolioSnapshotIndex WHERE SnapshotId = {snapshotId}");
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM dbo.SnapshotTracking WHERE SnapshotId = {snapshotId}");
     }
@@ -196,7 +196,7 @@ internal sealed class IntegrationTestCleanup
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM dbo.SnapshotIndex WHERE SnapshotId LIKE 'it-%' AND AccountId = {accountId}");
+            $"DELETE FROM dbo.PortfolioSnapshotIndex WHERE SnapshotId LIKE 'it-%' AND AccountId = {accountId}");
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM dbo.SnapshotTracking WHERE SnapshotId LIKE 'it-%' AND AccountId = {accountId}");
     }
