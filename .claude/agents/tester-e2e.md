@@ -61,65 +61,30 @@ machine, ignore this section — docker, the .NET SDK, and PowerShell are alread
 just run the `tools/*.ps1` scripts directly.
 
 The container ships `docker` (client + `dockerd` binary) but no systemd, so the daemon
-isn't started, and it does **not** ship the .NET SDK or PowerShell by default. Do these
-once per session, not once per test run:
-
-1. **Install the .NET SDK** (only if `dotnet --version` fails):
-   ```bash
-   curl -sSLO https://dot.net/v1/dotnet-install.sh && chmod +x dotnet-install.sh
-   ./dotnet-install.sh --channel 10.0 --install-dir /root/.dotnet
-   export PATH="/root/.dotnet:$PATH"   # add to every shell you use this session
-   ```
-2. **Install PowerShell** (only if `pwsh -v` fails) so the project's own `tools/*.ps1`
-   scripts run as written instead of being hand-translated to raw `docker run`:
-   ```bash
-   curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -o /tmp/msprod.deb
-   dpkg -i /tmp/msprod.deb && apt-get update -qq && apt-get install -y -qq powershell
-   ```
-3. **Start the Docker daemon manually** (only if `docker info` fails — no systemd here):
-   ```bash
-   nohup dockerd > /tmp/dockerd.log 2>&1 & disown
-   sleep 5 && docker info   # confirm it came up before proceeding
-   ```
-
-### Use the project's own tools — do NOT install SQL Server/Kafka/Azurite natively
-
-The three ad-hoc setup scripts in `tools/` already do the right thing (spin up a
-`docker run` container each, apply schema, print the connection string). Use them
-exactly as a local developer would — do not `apt-get install mssql-server`, do not
-`npm install -g azurite`, do not download a Kafka tarball. Native installs fight the
-container images on ports and are strictly worse: harder to tear down cleanly, and not
-what CI/local devs actually run.
+isn't started, and it does **not** ship the .NET SDK or PowerShell by default.
+`tools/claude-cloud-setup.sh` does all of this in one idempotent pass — run it once per
+session (safe to re-run; it skips anything already satisfied and restarts a container that
+exists but is stopped rather than recreating it, which matters here because the Docker
+daemon itself does not reliably survive across the whole session, unlike on a real machine):
 
 ```bash
-pwsh -c "./tools/sqlserver-local.ps1 -Up"   # SQL Server on localhost:1433, schema applied, prints SA password
-pwsh -c "./tools/azurite-local.ps1 -Up"     # Azurite blob endpoint on localhost:10000
-pwsh -c "./tools/kafka-local.ps1 -Up"       # Kafka on localhost:9092, both topics created
+bash tools/claude-cloud-setup.sh
+source /tmp/claude-cloud-env.sh   # exports Database__ConnectionString, BlobStorage__*, Kafka__BootstrapServers
 ```
 
-If a script fails with "port already in use" or "container already exists", check for
-and kill stray native processes first (`pgrep -a sqlservr`, `pgrep -a azurite`,
-`pgrep -a java`) and `docker rm -f <container-name>` before retrying — don't leave both
-a native process and a container fighting over the same port.
+It installs the .NET SDK and PowerShell if missing, starts `dockerd` if it isn't running,
+then brings up SQL Server, Azurite and Kafka via the project's own `tools/sqlserver-local.ps1`
+/ `tools/azurite-local.ps1` / `tools/kafka-local.ps1` — exactly as a local developer would,
+never a native install of any of the three (native installs fight the container images on
+ports and are strictly worse: harder to tear down cleanly, and not what CI/local devs
+actually run). Tear down with `bash tools/claude-cloud-setup.sh --down`.
 
-### Pass every connection string via environment variable — never hardcode
-
-Read the SA password the script printed (or `docker exec snapshot-writer-sqlserver
-printenv MSSQL_SA_PASSWORD`) and export the standard config-binding env vars used
-throughout this repo (`AGENTS.md` "Kafka bootstrap servers are externally configurable"
-rule applies to Database/BlobStorage too):
-
-```bash
-export Database__ConnectionString="Server=localhost,1433;Database=UbsAdvantageSnapshots;User Id=sa;Password=<SA_PW>;TrustServerCertificate=True"
-export BlobStorage__ServiceUri=""                       # MUST be empty — ServiceUri wins over ConnectionString in BlobContainerClientFactory
-export BlobStorage__ConnectionString="UseDevelopmentStorage=true"
-export BlobStorage__ContainerName="ubsadvsnapshots"
-export Kafka__BootstrapServers="localhost:9092"
-```
-
-Save this as a small sourceable file (e.g. `source /tmp/local-infra-env.sh`) so every
-`dotnet test`, `dotnet run --project .../Worker`, `dotnet run --project .../Api`, and the
-producer tool in this session picks it up identically — never re-derive or re-type it.
+Every connection string is passed via environment variable, never hardcoded — the standard
+config-binding names used throughout this repo (`AGENTS.md` "Kafka bootstrap servers are
+externally configurable" rule applies to Database/BlobStorage too), written to
+`/tmp/claude-cloud-env.sh` for every `dotnet test`, `dotnet run --project .../Worker`,
+`dotnet run --project .../Api`, and the producer tool in this session to `source` — never
+re-derive or re-type them.
 
 ### Running the two modes here
 
