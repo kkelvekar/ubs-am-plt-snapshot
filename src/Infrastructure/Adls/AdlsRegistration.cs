@@ -3,7 +3,7 @@ using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 
-public static class DependencyInjection
+public static class AdlsRegistration
 {
     public static IServiceCollection AddAdlsInfrastructure(this IServiceCollection services, string serviceUri, string containerName, string? connectionString = null)
     {
@@ -14,13 +14,8 @@ public static class DependencyInjection
         return services;
     }
 
-    /// <summary>
-    /// Read-side registration for the snapshot-detail Read API (solution design section 10,
-    /// Screen 2). Wires the same blob options plus ONLY the read-only ISnapshotPayloadQuery
-    /// (implemented by the same AzureBlobSnapshotStore the write side uses) - deliberately
-    /// NOT the write-flow ISnapshotBlobStore, so the read process can never resolve a
-    /// container-creating or payload-overwriting port.
-    /// </summary>
+    // Read-side only: registers ISnapshotPayloadQuery, not the write-flow ISnapshotBlobStore,
+    // so the read process can never resolve a container-creating or payload-overwriting port.
     public static IServiceCollection AddAdlsReadInfrastructure(this IServiceCollection services, string serviceUri, string containerName, string? connectionString = null)
     {
         services.AddBlobStorageOptions(serviceUri, containerName, connectionString);
@@ -32,9 +27,7 @@ public static class DependencyInjection
 
     private static IServiceCollection AddBlobStorageOptions(this IServiceCollection services, string serviceUri, string containerName, string? connectionString)
     {
-        // Fail-fast at host start: a misconfigured pod must crash-loop immediately with a
-        // clear reason (the acceptable-crash case) rather than sit Running and fail per
-        // message. Validation messages name the missing configuration key exactly.
+        // Fail-fast at host start rather than per message.
         services.AddOptions<BlobStorageOptions>()
             .Configure(o =>
             {
@@ -43,8 +36,8 @@ public static class DependencyInjection
                 o.ConnectionString = connectionString ?? string.Empty;
             })
             .Validate(
-                // Mirror BlobContainerClientFactory: either credential auth (ServiceUri)
-                // or the Azurite/local ConnectionString fallback must be present.
+                // Mirrors BlobContainerClientFactory: ServiceUri (credential auth) or
+                // ConnectionString (Azurite/local) must be present.
                 o => !string.IsNullOrWhiteSpace(o.ServiceUri) || !string.IsNullOrWhiteSpace(o.ConnectionString),
                 "BlobStorage:ServiceUri or BlobStorage:ConnectionString must be configured (non-empty).")
             .Validate(

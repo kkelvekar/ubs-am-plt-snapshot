@@ -4,13 +4,11 @@ using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
-public static class DependencyInjection
+public static class KafkaRegistration
 {
     public static IServiceCollection AddKafkaInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        // Fail-fast at host start: a misconfigured pod must crash-loop immediately with a
-        // clear reason (the acceptable-crash case) rather than sit Running and fail per
-        // message. Validation messages name the missing configuration key exactly.
+        // Fail-fast at host start rather than per message.
         services.AddOptions<KafkaConsumerOptions>()
             .Bind(configuration.GetSection(KafkaConsumerOptions.SectionName))
             .Validate(

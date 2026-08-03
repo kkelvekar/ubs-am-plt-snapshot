@@ -22,7 +22,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// </para>
 /// <para>
 /// The read graph is built the same way the Api composition root builds it
-/// (<c>AddPortfolioSnapshotDetail</c> + <c>AddSqlReadInfrastructure</c> +
+/// (<c>AddPortfolioSnapshotReadFeatures</c> + <c>AddSqlReadInfrastructure</c> +
 /// <c>AddAdlsReadInfrastructure</c>, see <c>Api/Program.cs</c>) rather than reusing
 /// <see cref="SnapshotFixture.Handler"/>'s provider, which only wires the write-side stores.
 /// </para>
@@ -174,7 +174,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
 
     /// <summary>
     /// Builds <see cref="IPortfolioSnapshotDetailQueryHandler"/> the same way the Api
-    /// composition root does (<c>AddPortfolioSnapshotDetail</c> + <c>AddSqlReadInfrastructure</c>
+    /// composition root does (<c>AddPortfolioSnapshotReadFeatures</c> + <c>AddSqlReadInfrastructure</c>
     /// + <c>AddAdlsReadInfrastructure</c>, in <c>Api/Program.cs</c>), rather than reusing
     /// <see cref="SnapshotFixture"/>'s write-side provider, which never registers the read
     /// ports. The returned wrapper owns its own <see cref="ServiceProvider"/> and disposes it
@@ -183,7 +183,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
     private QueryScope BuildQuery()
     {
         var services = new ServiceCollection();
-        services.AddPortfolioSnapshotDetail();
+        services.AddPortfolioSnapshotReadFeatures();
         services.AddSqlReadInfrastructure(Fixture.Configuration["Database:ConnectionString"] ?? string.Empty);
         services.AddAdlsReadInfrastructure(
             Fixture.Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
