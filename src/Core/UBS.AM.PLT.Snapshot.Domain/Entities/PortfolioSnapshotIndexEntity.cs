@@ -5,7 +5,7 @@ namespace UBS.AM.PLT.Snapshot.Domain.Entities;
 /// grid data source, written once all required files for a snapshot are received. Plain
 /// POCO — persistence mapping lives in Infrastructure.
 /// </summary>
-public class SnapshotIndexEntity
+public class PortfolioSnapshotIndexEntity
 {
     public required string SnapshotId { get; set; }
     public required string AccountId { get; set; }

@@ -36,7 +36,7 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
 
     // Baseline captured after the first (successful) completing delivery, before redelivery.
     private SnapshotTrackingEntity? _trackingBaseline;
-    private SnapshotIndexEntity? _indexBaseline;
+    private PortfolioSnapshotIndexEntity? _indexBaseline;
     private string? _headerBlobBaseline;
 
     private Exception? _redeliveryException;
@@ -137,7 +137,7 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
 
         await using (var context = await _fixture.DbContextFactory.CreateDbContextAsync())
         {
-            var indexRowCount = await context.SnapshotIndex
+            var indexRowCount = await context.PortfolioSnapshotIndex
                 .AsNoTracking()
                 .CountAsync(e => e.SnapshotId == _snapshotId);
             Assert.Equal(1, indexRowCount);

@@ -126,7 +126,7 @@ org-provided consumer library, and that swap must touch **only the Infrastructur
   screens: the Load-snapshots grid (`GET /snapshots/api/portfolio-snapshots`) and the
   Screen-2 snapshot-detail read
   (`GET /snapshots/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`). For the
-  detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.SnapshotIndex`
+  detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.PortfolioSnapshotIndex`
   and returns the stored payload blobs verbatim.
 - **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
   K8s manifests, CI/CD pipeline files, or AKS deployment YAML. Deployment is handled

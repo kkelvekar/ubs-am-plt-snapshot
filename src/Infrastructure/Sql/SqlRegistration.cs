@@ -14,21 +14,21 @@ public static class SqlRegistration
         services.AddSnapshotDbContextFactory(connectionString);
 
         services.AddSingleton<ISnapshotTrackingRepository, SnapshotTrackingRepository>();
-        services.AddSingleton<ISnapshotIndexRepository, SnapshotIndexRepository>();
+        services.AddSingleton<IPortfolioSnapshotIndexRepository, PortfolioSnapshotIndexRepository>();
 
         services.AddSingleton<ISnapshotTrackingStore, SqlSnapshotTrackingStore>();
-        services.AddSingleton<ISnapshotIndexStore, SqlSnapshotIndexStore>();
+        services.AddSingleton<IPortfolioSnapshotIndexStore, SqlPortfolioSnapshotIndexStore>();
 
         return services;
     }
 
-    // Read-side only: registers ISnapshotIndexQuery (same SnapshotIndexRepository the write
-    // side uses), not the write-path stores or the required-files provider.
+    // Read-side only: registers IPortfolioSnapshotIndexQuery (same PortfolioSnapshotIndexRepository
+    // the write side uses), not the write-path stores or the required-files provider.
     public static IServiceCollection AddSqlReadInfrastructure(this IServiceCollection services, string connectionString)
     {
         services.AddSnapshotDbContextFactory(connectionString);
 
-        services.AddSingleton<ISnapshotIndexQuery, SnapshotIndexRepository>();
+        services.AddSingleton<IPortfolioSnapshotIndexQuery, PortfolioSnapshotIndexRepository>();
 
         return services;
     }

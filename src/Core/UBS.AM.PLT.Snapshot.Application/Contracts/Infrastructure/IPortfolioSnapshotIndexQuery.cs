@@ -5,13 +5,13 @@ namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 /// <summary>
 /// Port for the Load-snapshots grid read query (solution design section 7). Reads the
 /// permanent snapshot_index table filtered by account, date range and optional event type.
-/// The DisplayData JSON column stays opaque on this port (SnapshotIndexRow.DisplayDataJson) -
+/// The DisplayData JSON column stays opaque on this port (PortfolioSnapshotIndexRow.DisplayDataJson) -
 /// it is flattened by SnapshotRowFlattener, not here. The SQL implementation is
-/// SnapshotIndexRepository in Infrastructure.
+/// PortfolioSnapshotIndexRepository in Infrastructure.
 /// </summary>
-public interface ISnapshotIndexQuery
+public interface IPortfolioSnapshotIndexQuery
 {
-    Task<IReadOnlyList<SnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PortfolioSnapshotIndexRow>> QueryAsync(SnapshotGridFilter filter, CancellationToken cancellationToken);
 
     /// <summary>
     /// Resolves a snapshotId to the AdlsPath stored on its index row - the blob root folder
