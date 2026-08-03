@@ -1,7 +1,7 @@
 namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 
 /// <summary>
-/// Read model for one dbo.SnapshotIndex row served to the Audit "Load snapshots"
+/// Read model for one dbo.PortfolioSnapshotIndex row served to the Audit "Load snapshots"
 /// grid (solution design section 7). Fixed fields come from real SQL columns; the non-filterable
 /// display fields stay as the raw DisplayDataJson string and are flattened to
 /// the response row inside this feature, so new display keys pass through with zero code

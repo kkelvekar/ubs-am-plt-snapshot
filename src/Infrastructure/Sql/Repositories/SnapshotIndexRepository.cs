@@ -11,7 +11,7 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
 /// (ISnapshotIndexRepository, used by SqlSnapshotIndexStore) and the Load-snapshots
 /// grid read query plus the snapshot-detail AdlsPath lookup (ISnapshotIndexQuery, solution
 /// design sections 7 and 10, used directly by the Api composition root). One class owns all
-/// dbo.SnapshotIndex data access rather than splitting read and write into separate
+/// dbo.PortfolioSnapshotIndex data access rather than splitting read and write into separate
 /// Infrastructure classes.
 /// <para>
 /// The read path uses Database.SqlQueryRaw&lt;SnapshotIndexRow&gt; onto the keyless read DTO
@@ -120,7 +120,7 @@ internal sealed class SnapshotIndexRepository : ISnapshotIndexRepository, ISnaps
         var sql =
             "SELECT SnapshotId, AccountId, SnapshotDate, EventType, AdlsPath, " +
             "DisplayData AS DisplayDataJson, CreatedAt " +
-            "FROM dbo.SnapshotIndex " +
+            "FROM dbo.PortfolioSnapshotIndex " +
             $"WHERE AccountId IN ({string.Join(", ", placeholders)}) " +
             "AND SnapshotDate >= @from AND SnapshotDate <= @to";
 

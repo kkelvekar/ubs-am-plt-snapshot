@@ -18,7 +18,7 @@ public sealed class SnapshotIndexRepositoryQueryTests
     [Fact]
     public void Account_ids_are_bound_as_parameters_not_concatenated()
     {
-        const string malicious = "'; DROP TABLE dbo.SnapshotIndex; --";
+        const string malicious = "'; DROP TABLE dbo.PortfolioSnapshotIndex; --";
         var filter = new SnapshotGridFilter
         {
             AccountIds = ["A", malicious],
@@ -73,7 +73,7 @@ public sealed class SnapshotIndexRepositoryQueryTests
         var sql = SnapshotIndexRepository.BuildQuery(filter, out _);
 
         Assert.Contains("DisplayData AS DisplayDataJson", sql);
-        Assert.Contains("FROM dbo.SnapshotIndex", sql);
+        Assert.Contains("FROM dbo.PortfolioSnapshotIndex", sql);
         Assert.EndsWith("ORDER BY SnapshotDate DESC", sql);
     }
 

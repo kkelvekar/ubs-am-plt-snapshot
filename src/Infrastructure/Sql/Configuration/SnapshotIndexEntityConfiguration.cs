@@ -16,7 +16,7 @@ internal sealed class SnapshotIndexEntityConfiguration : IEntityTypeConfiguratio
     // must stay byte-identical to the blob.
     public void Configure(EntityTypeBuilder<SnapshotIndexEntity> indexEntity)
     {
-        indexEntity.ToTable("SnapshotIndex", "dbo");
+        indexEntity.ToTable("PortfolioSnapshotIndex", "dbo");
         indexEntity.HasKey(e => e.SnapshotId);
 
         // The widths below mirror db/scripts/002 and SnapshotFieldLimits; change all three

@@ -12,7 +12,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// <see cref="ISnapshotIndexQuery"/> + <see cref="SnapshotRowFlattener"/> exercised directly
 /// against REAL Azure SQL. This is the only place that proves
 /// <c>Database.SqlQueryRaw&lt;SnapshotIndexRow&gt;</c> actually materialises
-/// <c>dbo.SnapshotIndex</c> columns (including the <c>DisplayData AS DisplayDataJson</c>
+/// <c>dbo.PortfolioSnapshotIndex</c> columns (including the <c>DisplayData AS DisplayDataJson</c>
 /// alias and the required-init/DateTime properties) onto the keyless read DTO — no unit
 /// test can catch a column/property name mismatch.
 /// <para>
@@ -264,7 +264,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"""
-             INSERT INTO dbo.SnapshotIndex (SnapshotId, AccountId, SnapshotDate, EventType, AdlsPath, DisplayData, CreatedAt)
+             INSERT INTO dbo.PortfolioSnapshotIndex (SnapshotId, AccountId, SnapshotDate, EventType, AdlsPath, DisplayData, CreatedAt)
              VALUES ({snapshotId}, {accountId}, {snapshotDate}, {eventType}, {adlsPath}, {displayDataJson}, {createdAt})
              """);
     }
