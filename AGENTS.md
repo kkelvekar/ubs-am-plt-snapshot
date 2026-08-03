@@ -72,14 +72,20 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
    payload type is one entry in that constant plus a library rebuild (previously an
    appsettings edit) — never a change to the write pipeline or consumer processing logic.
 5. **Payloads are opaque**: the payload is JSON text, written to blob verbatim, and is
-   never deserialised into a DTO. Exactly two sanctioned touches exist, both a scoped
-   `JsonDocument.Parse` disposed immediately, with nothing ever re-serialised from the
-   parse:
+   never deserialised into a DTO. Exactly three sanctioned touches exist, and none of them
+   ever re-serialises anything. The first two are a scoped `JsonDocument.Parse` disposed
+   immediately:
    - the handler's **syntax-only well-formedness check** before the first write — no field
      is ever inspected, so a broken payload cannot land as an invalid `.json` blob;
    - the **`eventType` extraction** from `header` at completion time — that one value has
      its own filterable column on `snapshot_index`. No other header field may be read; the
      header text is persisted to `display_data` verbatim, byte-identical to the blob.
+
+   The third is not a parse at all:
+   - the read edge's **raw-value embedding** when composing the all-payloads detail
+     response — `Utf8JsonWriter.WriteRawValue` validates the stored text is syntactically
+     well-formed JSON and copies those exact bytes into the response, so no payload is ever
+     parsed into a DTO or re-serialised.
 
 ## Repository layout
 
@@ -115,7 +121,13 @@ org-provided consumer library, and that swap must touch **only the Infrastructur
 
 ## Scope guards
 
-- The daily cleanup job and the Read API are **out of scope** for this repository — do not build them.
+- The daily cleanup job is **out of scope** for this repository — do not build it. The
+  Read API (`src/Clients/UBS.AM.PLT.Snapshot.Api`) **is in scope**, covering both audit
+  screens: the Load-snapshots grid (`GET /snapshot/api/portfolio-snapshots`) and the
+  Screen-2 snapshot-detail read
+  (`GET /snapshot/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`). For the
+  detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.SnapshotIndex`
+  and returns the stored payload blobs verbatim.
 - **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
   K8s manifests, CI/CD pipeline files, or AKS deployment YAML. Deployment is handled
   entirely at the org side after lift-and-shift. This repo's scope ends at local
