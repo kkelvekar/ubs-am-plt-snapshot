@@ -123,9 +123,9 @@ org-provided consumer library, and that swap must touch **only the Infrastructur
 
 - The daily cleanup job is **out of scope** for this repository — do not build it. The
   Read API (`src/Clients/UBS.AM.PLT.Snapshot.Api`) **is in scope**, covering both audit
-  screens: the Load-snapshots grid (`GET /snapshot/api/portfolio-snapshots`) and the
+  screens: the Load-snapshots grid (`GET /snapshots/api/portfolio-snapshots`) and the
   Screen-2 snapshot-detail read
-  (`GET /snapshot/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`). For the
+  (`GET /snapshots/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`). For the
   detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.PortfolioSnapshotIndex`
   and returns the stored payload blobs verbatim.
 - **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
