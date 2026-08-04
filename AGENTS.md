@@ -112,12 +112,26 @@ docs/       solution design document and diagrams
 
 ### Thin Kafka consumer (lift-and-shift constraint)
 
-The Kafka consumer is a deliberately thin, disposable adapter. It deserialises the
-message envelope, calls straight into an Application-layer use case, and commits the
-offset on success — nothing else. No business logic, no branching on `payloadType`, no
-orchestration of its own. At org lift-and-shift time this consumer is replaced by an
-org-provided consumer library, and that swap must touch **only the Infrastructure layer**
-— never Application or Domain. The reviewer role checks this on every slice.
+The inbound Kafka side follows the org consumer library's **command pattern**, split in two:
+
+- `Commands/SnapshotRequestCommand` — an `ACommand<IMessage<string, SnapshotRequest>>` that maps
+  the org DTO onto the domain envelope, calls straight into an Application-layer use case, and
+  returns a `CommandResult`. No business logic, no branching on `payloadType`, no orchestration
+  of its own. This class is what survives lift-and-shift: it is registered with the org library
+  unchanged.
+- `KafkaSnapshotConsumer` — a stand-in for that library (poll, deserialise, dispatch, commit),
+  deleted outright at lift-and-shift. It references no Application or Domain type.
+
+A command's only lever over the offset is its `CommandResult`: `Success` commits, `Fail` does
+not. There is no seek, no requeue and no in-process retry ladder. A `Fail` means the consumer
+logs one Critical alert, leaves the offset uncommitted and exits non-zero, so the pod restarts
+and Kafka redelivers from the last committed offset. A **rejected** message is the one case that
+looks like a failure but returns `Success`: the handler has already written the FAILED tracking
+row and published the Failed response, and the same bytes would fail identically forever, so the
+offset must move past it.
+
+Either way the swap must touch **only the Infrastructure layer** — never Application or Domain.
+The reviewer role checks this on every slice.
 
 ## Scope guards
 

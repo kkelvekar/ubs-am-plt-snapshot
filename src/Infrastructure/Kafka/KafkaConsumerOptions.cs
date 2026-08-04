@@ -15,14 +15,13 @@ public sealed record KafkaConsumerOptions
     public string ConsumerGroup { get; set; } = string.Empty;
 
     /// <summary>
-    /// In-process retry ladder for a failing message (solution design §9): one attempt per
-    /// entry, with delay N preceding attempt N. The total must stay well under Kafka's
-    /// <c>max.poll.interval.ms</c>, because after the last attempt the worker exits non-zero
-    /// and redelivery comes from the pod restart.
+    /// Back-off after a broker-level consume error (no message was consumed, so nothing is
+    /// committed or lost) to stop the loop hot-spinning while the broker is unreachable.
     /// </summary>
     /// <remarks>
-    /// The default must stay empty: the configuration binder appends configured entries onto a
-    /// non-empty default array rather than replacing it, which would double the ladder.
+    /// Deliberately NOT a per-message retry: a command that reports failure is never retried
+    /// in-process. The offset stays uncommitted, the worker exits non-zero, and the restarted
+    /// pod is redelivered the message from the last committed offset.
     /// </remarks>
-    public TimeSpan[] RetryDelays { get; set; } = [];
+    public TimeSpan ConsumeErrorBackoff { get; set; } = TimeSpan.FromSeconds(5);
 }

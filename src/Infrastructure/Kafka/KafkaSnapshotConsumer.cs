@@ -4,26 +4,24 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UBS.Advantage.CommunicationModels.Snapshot;
-using UBS.AM.PLT.Snapshot.Application.Contracts;
-using UBS.AM.PLT.Snapshot.Application.Exceptions;
-using UBS.AM.PLT.Snapshot.Domain;
+using UBS.Advantage.Messaging;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
 /// <summary>
-/// Thin Kafka adapter: deserialise the envelope, call the Application-layer handler, commit
-/// the offset on success. It holds no business logic and does not branch on payload type,
-/// because it is replaced wholesale by the org-provided consumer library and that swap must
-/// touch only the Infrastructure layer.
+/// Stand-in for the org consumer library: poll, deserialise the envelope, hand the message to
+/// the registered command, and commit the offset only when the command reports success. It
+/// knows nothing about snapshots — no payload-type branching, no business logic, no Application
+/// types — so at lift-and-shift this class is deleted outright and
+/// <see cref="Commands.SnapshotRequestCommand"/> is registered with the org library unchanged.
 /// </summary>
 /// <remarks>
-/// Failure semantics per solution design §8/§9: the offset is never committed on a failure
-/// path. A failing message is retried in-process, one attempt per
-/// <see cref="KafkaConsumerOptions.RetryDelays"/> entry. When the last attempt still fails
-/// with anything other than a rejection, the consumer logs a single Critical alert, sets a
-/// non-zero exit code and stops the host, so the pod restarts and Kafka redelivers from the
-/// last committed offset. Recovery is always forward — the consumer never seeks back, which
-/// matches the org consumer wrapper, which has no seek capability.
+/// Failure semantics per solution design §8/§9: the offset is never committed on a failure path.
+/// A command returning <see cref="CommandResult.Fail"/> — or throwing, or an envelope that will
+/// not deserialise — makes the consumer log a single Critical alert, set a non-zero exit code
+/// and stop the host. The pod restarts, and Kafka redelivers from the last committed offset.
+/// Recovery is always forward: the consumer never seeks back, matching the org consumer wrapper,
+/// which has no seek capability and no in-process retry of its own.
 /// </remarks>
 public sealed class KafkaSnapshotConsumer : BackgroundService
 {
@@ -32,7 +30,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IKafkaConsumerFactory _consumerFactory;
-    private readonly ISnapshotMessageHandler _handler;
+    private readonly ACommand<IMessage<string, SnapshotRequest>> _command;
     private readonly KafkaConsumerOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly IHostApplicationLifetime _appLifetime;
@@ -40,14 +38,14 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     public KafkaSnapshotConsumer(
         IKafkaConsumerFactory consumerFactory,
-        ISnapshotMessageHandler handler,
+        ACommand<IMessage<string, SnapshotRequest>> command,
         IOptions<KafkaConsumerOptions> options,
         TimeProvider timeProvider,
         IHostApplicationLifetime appLifetime,
         ILogger<KafkaSnapshotConsumer> logger)
     {
         _consumerFactory = consumerFactory;
-        _handler = handler;
+        _command = command;
         _options = options.Value;
         _timeProvider = timeProvider;
         _appLifetime = appLifetime;
@@ -90,9 +88,9 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                 {
                     _logger.LogError(ex, "Kafka consume error: {Reason}", ex.Error.Reason);
 
-                    // Broker-level errors are not tied to a message, so back off at the
-                    // largest configured retry delay rather than hot-spinning.
-                    if (!await TryDelayAsync(ConsumeErrorBackoff(), stoppingToken))
+                    // Broker-level errors are not tied to a message, so back off rather than
+                    // hot-spinning. Nothing was consumed, so nothing is committed or lost.
+                    if (!await TryDelayAsync(_options.ConsumeErrorBackoff, stoppingToken))
                     {
                         break;
                     }
@@ -105,10 +103,10 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                     continue;
                 }
 
-                if (!await ProcessWithRetriesAsync(consumer, result, stoppingToken))
+                if (!await DispatchAsync(consumer, result, stoppingToken))
                 {
-                    // Shutdown requested during a retry delay, or the retry ladder was
-                    // exhausted and the worker is exiting for a pod restart.
+                    // Shutdown requested, or the command failed and the worker is exiting for
+                    // a pod restart.
                     break;
                 }
             }
@@ -141,100 +139,95 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
     }
 
     /// <summary>
-    /// Runs the in-process retry ladder for one message: one attempt per configured retry
-    /// delay, delay N preceding attempt N. Returns false when the consume loop must stop,
-    /// either because shutdown was requested during a delay or because the ladder was
-    /// exhausted and the worker is exiting for a pod restart.
+    /// Runs the command for one message and commits the offset only when the command reports
+    /// success. Returns false when the consume loop must stop, either because shutdown was
+    /// requested or because the command failed and the worker is exiting for a pod restart.
     /// </summary>
-    private async Task<bool> ProcessWithRetriesAsync(
+    private async Task<bool> DispatchAsync(
         IConsumer<string, string> consumer,
         ConsumeResult<string, string> result,
         CancellationToken stoppingToken)
     {
-        var attempts = Math.Max(_options.RetryDelays.Length, 1);
-
-        for (var attempt = 1; attempt <= attempts; attempt++)
+        CommandResult commandResult;
+        try
         {
-            if (attempt > 1 && !await TryDelayAsync(DelayBeforeAttempt(attempt), stoppingToken))
-            {
-                return false;
-            }
+            var message = new ConsumedMessage<string, SnapshotRequest>(
+                result.Message.Key,
+                Deserialize(result.Message.Value));
 
-            SnapshotMessage? message = null;
-            try
-            {
-                // Deserialisation stays inside the retried block so an envelope failure takes
-                // the same ladder-then-crash path as any other non-rejection failure.
-                var request = JsonSerializer.Deserialize<SnapshotRequest>(result.Message.Value, SerializerOptions)
-                    ?? throw new JsonException("Message envelope deserialised to null.");
-                message = SnapshotRequestMapper.ToDomain(request);
-
-                await _handler.HandleAsync(message, stoppingToken);
-
-                // Committed only after the handler fully succeeded, never on a failure path.
-                consumer.Commit(result);
-
-                _logger.LogInformation(
-                    "Committed offset {TopicPartitionOffset} for snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
-                    result.TopicPartitionOffset,
-                    message.SnapshotId,
-                    message.AccountId,
-                    message.PayloadType);
-
-                return true;
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return false;
-            }
-            catch (SnapshotMessageRejectedException ex)
-            {
-                // Non-retryable: the same bytes fail identically, so retrying would block the
-                // partition forever. Commit past it instead. Logged as an Error because the
-                // message's data is dropped; the handler has already recorded the FAILED
-                // tracking row and notified the publishing application.
-                _logger.LogError(
-                    ex,
-                    "Rejected snapshot message, committing past it reasonCode={ReasonCode} offset={TopicPartitionOffset} snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
-                    ex.ReasonCode,
-                    result.TopicPartitionOffset,
-                    message?.SnapshotId,
-                    message?.AccountId,
-                    message?.PayloadType);
-
-                consumer.Commit(result);
-
-                return true;
-            }
-            catch (Exception ex) when (attempt < attempts)
-            {
-                LogFailure(ex, result, message, attempt);
-            }
-            catch (Exception ex)
-            {
-                LogFailure(ex, result, message, attempt);
-
-                // Ladder exhausted and the offset stays uncommitted: with no seek available,
-                // redelivery comes from the process exiting non-zero and the restarted pod
-                // resuming from the last committed offset. One Critical, so one alert.
-                _logger.LogCritical(
-                    ex,
-                    "Operations alert: message at {TopicPartitionOffset} failed all {Attempts} in-process attempts; worker exiting non-zero so the pod restarts and Kafka redelivers from the last committed offset. snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} messageKey={MessageKey}",
-                    result.TopicPartitionOffset,
-                    attempts,
-                    message?.SnapshotId,
-                    message?.AccountId,
-                    message?.PayloadType,
-                    result.Message.Key);
-
-                StopWorkerForPodRestart();
-
-                return false;
-            }
+            commandResult = await _command.ExecuteAsync(message);
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Either the envelope would not deserialise, or the command threw instead of
+            // returning Fail. Both are the framework's problem, and both mean the same thing
+            // to the offset: not handled.
+            _logger.LogError(
+                ex,
+                "Failed to dispatch message at {TopicPartitionOffset} messageKey={MessageKey}",
+                result.TopicPartitionOffset,
+                result.Message.Key);
+
+            commandResult = CommandResult.Fail(ex.Message);
+        }
+
+        if (!commandResult.IsSuccess)
+        {
+            return FailAndStop(result, commandResult.Error);
+        }
+
+        try
+        {
+            // Committed only after the command reported success, never on a failure path.
+            consumer.Commit(result);
+        }
+        catch (KafkaException ex)
+        {
+            // Design doc §8 scenario 5: the writes are durable but the offset is not, so the
+            // message is redelivered and reprocessed idempotently after the restart.
+            return FailAndStop(result, $"Offset commit failed: {ex.Error.Reason}");
+        }
+
+        _logger.LogInformation(
+            "Committed offset {TopicPartitionOffset} messageKey={MessageKey}",
+            result.TopicPartitionOffset,
+            result.Message.Key);
 
         return true;
     }
+
+    /// <summary>
+    /// Single exit path for a message that was not committed. There is no seek available, so
+    /// redelivery comes from the process exiting non-zero and the restarted pod resuming from
+    /// the last committed offset. One Critical, so one alert. Always returns false, stopping
+    /// the consume loop.
+    /// </summary>
+    private bool FailAndStop(ConsumeResult<string, string> result, string reason)
+    {
+        _logger.LogCritical(
+            "Operations alert: message at {TopicPartitionOffset} was not handled; offset not committed, worker exiting non-zero so the pod restarts and Kafka redelivers from the last committed offset. reason={Reason} messageKey={MessageKey}",
+            result.TopicPartitionOffset,
+            reason,
+            result.Message.Key);
+
+        StopWorkerForPodRestart();
+
+        return false;
+    }
+
+    /// <summary>
+    /// Deserialises the message body into the org request DTO. An empty body — a tombstone, or
+    /// a producer sending nothing — yields <c>null</c> rather than throwing, and the command
+    /// reports it as a failed message through its own null guard.
+    /// </summary>
+    private static SnapshotRequest? Deserialize(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? null
+            : JsonSerializer.Deserialize<SnapshotRequest>(value, SerializerOptions);
 
     /// <summary>
     /// Stops the host with a non-zero exit code. <c>StopApplication()</c> on its own unwinds
@@ -246,44 +239,6 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         Environment.ExitCode = 1;
         _appLifetime.StopApplication();
     }
-
-    private void LogFailure(
-        Exception exception,
-        ConsumeResult<string, string> result,
-        SnapshotMessage? message,
-        int attempt)
-    {
-        if (message is not null)
-        {
-            _logger.LogError(
-                exception,
-                "Failed to process message at {TopicPartitionOffset} (attempt {Attempt}) snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
-                result.TopicPartitionOffset,
-                attempt,
-                message.SnapshotId,
-                message.AccountId,
-                message.PayloadType);
-        }
-        else
-        {
-            _logger.LogError(
-                exception,
-                "Failed to deserialise message envelope at {TopicPartitionOffset} (attempt {Attempt}) messageKey={MessageKey}",
-                result.TopicPartitionOffset,
-                attempt,
-                result.Message.Key);
-        }
-    }
-
-    /// <summary>Delay preceding attempt N (N &gt; 1), i.e. the Nth configured entry.</summary>
-    private TimeSpan DelayBeforeAttempt(int attempt)
-    {
-        var delays = _options.RetryDelays;
-        return delays.Length == 0 ? TimeSpan.Zero : delays[attempt - 1];
-    }
-
-    private TimeSpan ConsumeErrorBackoff()
-        => _options.RetryDelays.Length == 0 ? TimeSpan.Zero : _options.RetryDelays.Max();
 
     /// <summary>Returns false when cancelled, signalling the consume loop to stop.</summary>
     private async Task<bool> TryDelayAsync(TimeSpan delay, CancellationToken stoppingToken)

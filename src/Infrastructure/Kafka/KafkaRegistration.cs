@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using UBS.Advantage.CommunicationModels.Snapshot;
+using UBS.Advantage.Messaging;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
@@ -33,6 +36,11 @@ public static class KafkaRegistration
             .ValidateOnStart();
 
         services.AddSingleton<IKafkaConsumerFactory, KafkaConsumerFactory>();
+
+        // Registered by its framework contract, not its concrete type: the consumer resolves
+        // the command for the message type it consumes, exactly as the org library will once
+        // the consumer below is dropped.
+        services.AddSingleton<ACommand<IMessage<string, SnapshotRequest>>, SnapshotRequestCommand>();
         services.AddHostedService<KafkaSnapshotConsumer>();
 
         services.AddSingleton<IKafkaProducerFactory, KafkaProducerFactory>();
