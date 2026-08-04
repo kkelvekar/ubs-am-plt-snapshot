@@ -65,6 +65,92 @@ public sealed class PortfolioSnapshotIndexRepositoryQueryTests
         Assert.Equal("ModelChange", ParameterValue(parameters, "@event"));
     }
 
+    /// <summary>
+    /// The accountIds-only request reaches BuildQuery with no event type at all. Neither a null
+    /// nor a blank one may leave an <c>EventType = @event</c> clause behind - the clause and the
+    /// parameter have to appear or disappear together, or the command fails on a missing
+    /// parameter at execution time.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Absent_event_type_adds_no_clause_and_no_parameter(string? eventType)
+    {
+        var filter = new SnapshotGridFilter
+        {
+            AccountIds = ["A"],
+            FromDate = From,
+            ToDate = To,
+            EventType = eventType,
+        };
+
+        var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
+
+        Assert.DoesNotContain("EventType = @event", sql);
+        Assert.DoesNotContain("@event", sql);
+        Assert.DoesNotContain(parameters, p => p.ParameterName == "@event");
+
+        // Only the account placeholder and the two window parameters remain.
+        Assert.Equal(3, parameters.Length);
+    }
+
+    /// <summary>
+    /// The accountIds-only request reaches BuildQuery with no date window at all. Neither bound
+    /// may leave a <c>SnapshotDate</c> clause behind, and neither may be bound as SQL NULL - a
+    /// NULL comparison is never true, so a bound NULL would silently return zero rows instead of
+    /// leaving the range open.
+    /// </summary>
+    [Fact]
+    public void Absent_dates_add_no_clause_and_no_parameter()
+    {
+        var filter = new SnapshotGridFilter
+        {
+            AccountIds = ["A"],
+            FromDate = null,
+            ToDate = null,
+        };
+
+        var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
+
+        Assert.DoesNotContain("SnapshotDate >=", sql);
+        Assert.DoesNotContain("SnapshotDate <=", sql);
+        Assert.DoesNotContain("@from", sql);
+        Assert.DoesNotContain("@to", sql);
+        Assert.DoesNotContain(parameters, p => p.ParameterName is "@from" or "@to");
+
+        // Only the single account placeholder remains.
+        Assert.Single(parameters);
+    }
+
+    [Fact]
+    public void From_only_emits_the_lower_bound_clause_alone()
+    {
+        var filter = new SnapshotGridFilter { AccountIds = ["A"], FromDate = From };
+
+        var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
+
+        Assert.Contains("AND SnapshotDate >= @from", sql);
+        Assert.Equal(From, ParameterValue(parameters, "@from"));
+
+        Assert.DoesNotContain("@to", sql);
+        Assert.DoesNotContain(parameters, p => p.ParameterName == "@to");
+    }
+
+    [Fact]
+    public void To_only_emits_the_upper_bound_clause_alone()
+    {
+        var filter = new SnapshotGridFilter { AccountIds = ["A"], ToDate = To };
+
+        var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
+
+        Assert.Contains("AND SnapshotDate <= @to", sql);
+        Assert.Equal(To, ParameterValue(parameters, "@to"));
+
+        Assert.DoesNotContain("@from", sql);
+        Assert.DoesNotContain(parameters, p => p.ParameterName == "@from");
+    }
+
     [Fact]
     public void Query_selects_display_data_aliased_and_orders_by_date_desc()
     {
