@@ -30,14 +30,16 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// </summary>
 public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClassFixture<SnapshotFixture>
 {
-    // Fresh account ids — IT-ACC-001..008 are used by other groups (see MalformedInputTests);
-    // IT-ACC-009 is reserved in appsettings.json's TestAccountIds for this test group.
-    // IT-ACC-010R is a read-only-scratch id deliberately NOT in TestAccountIds' startup-cleanup
-    // list: every row this suite writes is deleted by snapshotId in DisposeAsync regardless
-    // (IntegrationTestBase / IntegrationTestCleanup.CleanupSnapshotAsync), so no separate
-    // account-level cleanup entry is required for it.
-    private const string AccountA = "IT-ACC-009";
-    private const string AccountB = "IT-ACC-010R";
+    // Unlike every other suite here, these tests assert on the SIZE of a result set selected by
+    // account + date range, not on a single row fetched by snapshotId — so any row left behind by
+    // an earlier test method or an earlier run would be counted too. Fixed account ids made that
+    // correctness depend on cleanup having run, and the suite failed as soon as
+    // IntegrationTestSettings.CleanupAfterTest was turned off to keep data for manual testing.
+    // Generating the account ids per test instance (xunit constructs one per test method) makes
+    // the queries structurally incapable of seeing another test's or another run's rows, so the
+    // suite passes with the cleanup flags in any combination.
+    private readonly string _accountA = NewAccountId();
+    private readonly string _accountB = NewAccountId();
 
     public PortfolioSnapshotGridReadTests(SnapshotFixture fixture)
         : base(fixture)
@@ -55,10 +57,10 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         // proves zero-code-change flow-through end to end.
         await InsertIndexRowAsync(
             sidOlder,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountA}/{sidOlder}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidOlder}",
             """{"benchmark":"MSCI World","brandNewField":"xyz"}""",
             new DateTime(2026, 7, 10, 9, 0, 0, DateTimeKind.Utc));
 
@@ -66,20 +68,20 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         // proves fixed-field precedence on collision.
         await InsertIndexRowAsync(
             sidNewer,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
             "CASH_FLOW",
-            $"portfolio_snapshots/accountId={AccountA}/{sidNewer}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidNewer}",
             """{"benchmark":"S&P 500","accountId":"clash-value"}""",
             new DateTime(2026, 7, 12, 9, 0, 0, DateTimeKind.Utc));
 
-        // Different account entirely — must never appear when the filter asks only for AccountA.
+        // Different account entirely — must never appear when the filter asks only for account A.
         await InsertIndexRowAsync(
             sidOtherAccount,
-            AccountB,
+            _accountB,
             new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountB}/{sidOtherAccount}",
+            $"portfolio_snapshots/accountId={_accountB}/{sidOtherAccount}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 11, 9, 0, 0, DateTimeKind.Utc));
 
@@ -87,7 +89,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         var filter = SnapshotGridFilter.Resolve(
             new SnapshotGridFilter
             {
-                AccountIds = [AccountA],
+                AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
             },
@@ -95,9 +97,9 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
-        // Only AccountA rows come back — AccountB's row is excluded by the AccountId IN filter.
+        // Only account A rows come back — account B's row is excluded by the AccountId IN filter.
         Assert.Equal(2, rows.Count);
-        Assert.All(rows, r => Assert.Equal(AccountA, r.AccountId));
+        Assert.All(rows, r => Assert.Equal(_accountA, r.AccountId));
 
         // ORDER BY SnapshotDate DESC — newest first.
         Assert.Equal(sidNewer, rows[0].SnapshotId);
@@ -107,10 +109,10 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         // the DisplayData AS DisplayDataJson alias, correctly bound onto the keyless read DTO.
         var older = rows[1];
         Assert.Equal(sidOlder, older.SnapshotId);
-        Assert.Equal(AccountA, older.AccountId);
+        Assert.Equal(_accountA, older.AccountId);
         Assert.Equal(new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc), older.SnapshotDate);
         Assert.Equal("REBALANCE", older.EventType);
-        Assert.Equal($"portfolio_snapshots/accountId={AccountA}/{sidOlder}", older.AdlsPath);
+        Assert.Equal($"portfolio_snapshots/accountId={_accountA}/{sidOlder}", older.AdlsPath);
         Assert.Equal(new DateTime(2026, 7, 10, 9, 0, 0, DateTimeKind.Utc), older.CreatedAt);
         Assert.Contains("brandNewField", older.DisplayDataJson);
 
@@ -124,7 +126,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         // Fixed-field precedence: the real AccountId column wins over DisplayData's colliding
         // "accountId" key.
         var newerFlat = flattened.Single(f => (string?)f["snapshotId"] == sidNewer);
-        Assert.Equal(AccountA, newerFlat["accountId"]);
+        Assert.Equal(_accountA, newerFlat["accountId"]);
         Assert.NotEqual("clash-value", newerFlat["accountId"]);
     }
 
@@ -136,19 +138,19 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         await InsertIndexRowAsync(
             sidRebalance,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountA}/{sidRebalance}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidRebalance}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc));
 
         await InsertIndexRowAsync(
             sidCashFlow,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 16, 0, 0, 0, DateTimeKind.Utc),
             "CASH_FLOW",
-            $"portfolio_snapshots/accountId={AccountA}/{sidCashFlow}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidCashFlow}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 16, 9, 0, 0, DateTimeKind.Utc));
 
@@ -156,7 +158,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         var filter = SnapshotGridFilter.Resolve(
             new SnapshotGridFilter
             {
-                AccountIds = [AccountA],
+                AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
                 EventType = "CASH_FLOW",
@@ -178,19 +180,19 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         await InsertIndexRowAsync(
             sidBeforeRange,
-            AccountA,
+            _accountA,
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountA}/{sidBeforeRange}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidBeforeRange}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc));
 
         await InsertIndexRowAsync(
             sidInRange,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountA}/{sidInRange}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidInRange}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 20, 9, 0, 0, DateTimeKind.Utc));
 
@@ -198,7 +200,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         var filter = SnapshotGridFilter.Resolve(
             new SnapshotGridFilter
             {
-                AccountIds = [AccountA],
+                AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
             },
@@ -218,19 +220,19 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         await InsertIndexRowAsync(
             sidAccountA,
-            AccountA,
+            _accountA,
             new DateTime(2026, 7, 18, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountA}/{sidAccountA}",
+            $"portfolio_snapshots/accountId={_accountA}/{sidAccountA}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 18, 9, 0, 0, DateTimeKind.Utc));
 
         await InsertIndexRowAsync(
             sidAccountB,
-            AccountB,
+            _accountB,
             new DateTime(2026, 7, 18, 0, 0, 0, DateTimeKind.Utc),
             "REBALANCE",
-            $"portfolio_snapshots/accountId={AccountB}/{sidAccountB}",
+            $"portfolio_snapshots/accountId={_accountB}/{sidAccountB}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 18, 9, 0, 0, DateTimeKind.Utc));
 
@@ -238,7 +240,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
         var filter = SnapshotGridFilter.Resolve(
             new SnapshotGridFilter
             {
-                AccountIds = [AccountB],
+                AccountIds = [_accountB],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
             },
@@ -248,8 +250,15 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
 
         var row = Assert.Single(rows);
         Assert.Equal(sidAccountB, row.SnapshotId);
-        Assert.Equal(AccountB, row.AccountId);
+        Assert.Equal(_accountB, row.AccountId);
     }
+
+    /// <summary>
+    /// Account id owned by a single test method. The <c>IT-ACC-</c> prefix keeps it recognisable
+    /// as integration-test data in the shared dev database; the rows themselves are still cleaned
+    /// up by snapshotId (<see cref="IntegrationTestBase.DisposeAsync"/>) when cleanup is enabled.
+    /// </summary>
+    private static string NewAccountId() => $"IT-ACC-GRID-{Guid.NewGuid():N}";
 
     private async Task InsertIndexRowAsync(
         string snapshotId,
