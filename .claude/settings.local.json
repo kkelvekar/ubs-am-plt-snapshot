@@ -6,7 +6,8 @@
       "Bash(git add *)",
       "Bash(git commit -m 'Initial commit: agent workflow scaffold *)",
       "Bash(gh repo *)",
-      "PowerShell(\\(Get-Command sqlcmd -ErrorAction SilentlyContinue\\).Source; docker ps --format \"{{.Names}}\"; az account show --query \"user.name\" -o tsv 2>&1 | Select-Object -First 3)"
+      "PowerShell(\\(Get-Command sqlcmd -ErrorAction SilentlyContinue\\).Source; docker ps --format \"{{.Names}}\"; az account show --query \"user.name\" -o tsv 2>&1 | Select-Object -First 3)",
+      "Bash(dotnet build *)"
     ]
   }
 }
