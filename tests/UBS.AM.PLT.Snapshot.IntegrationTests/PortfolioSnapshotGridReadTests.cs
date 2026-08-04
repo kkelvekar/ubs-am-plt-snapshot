@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.Snapshot.Application;
+using UBS.AM.PLT.Snapshot.Application.Contracts.Application;
 
 namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 
@@ -92,8 +94,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
                 AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
-            },
-            Fixture.MockTime.Object);
+            });
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
@@ -162,8 +163,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
                 EventType = "CASH_FLOW",
-            },
-            Fixture.MockTime.Object);
+            });
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
@@ -203,8 +203,7 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
                 AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
-            },
-            Fixture.MockTime.Object);
+            });
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
@@ -243,14 +242,68 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
                 AccountIds = [_accountB],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
-            },
-            Fixture.MockTime.Object);
+            });
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
         var row = Assert.Single(rows);
         Assert.Equal(sidAccountB, row.SnapshotId);
         Assert.Equal(_accountB, row.AccountId);
+    }
+
+    /// <summary>
+    /// The accountIds-only request: From, To and Event are all null, and the API imposes no
+    /// default for any of them, so every row of the account comes back however old it is - the
+    /// last-7-days view is a UI convention, achieved by the client sending explicit dates.
+    /// Regression guard for the original defect: a row dated well outside any "recent" window
+    /// used to be filtered away silently by the implicit 7-day default. Goes through
+    /// <see cref="IPortfolioSnapshotGridQueryHandler"/> rather than the read port, because
+    /// Resolve-then-query against real SQL is exactly the composition under test - the other
+    /// methods here Resolve an already-complete window and so never exercise the open one.
+    /// The result no longer depends on "now" at all, so nothing here is clock-sensitive.
+    /// </summary>
+    [Fact]
+    public async Task Grid_handler_applies_no_date_filter_when_only_account_ids_are_supplied()
+    {
+        var sidOld = NewSnapshotId("grid-nodef-old");
+        var sidRecent = NewSnapshotId("grid-nodef-recent");
+
+        await InsertIndexRowAsync(
+            sidOld,
+            _accountA,
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            "REBALANCE",
+            $"portfolio_snapshots/accountId={_accountA}/{sidOld}",
+            """{"benchmark":"MSCI World"}""",
+            new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc));
+
+        await InsertIndexRowAsync(
+            sidRecent,
+            _accountA,
+            new DateTime(2026, 7, 22, 0, 0, 0, DateTimeKind.Utc),
+            "REBALANCE",
+            $"portfolio_snapshots/accountId={_accountA}/{sidRecent}",
+            """{"benchmark":"MSCI World"}""",
+            new DateTime(2026, 7, 22, 9, 0, 0, DateTimeKind.Utc));
+
+        using var scope = BuildGridHandler();
+
+        // Exactly what the controller hands over for ?accountIds=X and nothing else.
+        var requested = new SnapshotGridFilter
+        {
+            AccountIds = [_accountA],
+            FromDate = null,
+            ToDate = null,
+            EventType = null,
+        };
+
+        var rows = await scope.Service.HandleAsync(requested, CancellationToken.None);
+
+        // Both rows come back: no implicit window, so nothing is filtered out by date.
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => (string?)r["snapshotId"] == sidOld);
+        Assert.Contains(rows, r => (string?)r["snapshotId"] == sidRecent);
+        Assert.All(rows, r => Assert.Equal(_accountA, r["accountId"]));
     }
 
     /// <summary>
@@ -285,25 +338,38 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     /// The returned wrapper owns its own <see cref="ServiceProvider"/> and disposes it with the
     /// query, closing the pooled DbContext factory it creates.
     /// </summary>
-    private QueryScope BuildQuery()
+    private ResolvedScope<IPortfolioSnapshotIndexQuery> BuildQuery()
     {
         var services = new ServiceCollection();
         services.AddSqlReadInfrastructure(Fixture.Configuration["Database:ConnectionString"] ?? string.Empty);
-        var provider = services.BuildServiceProvider();
-        return new QueryScope(provider);
+        return new ResolvedScope<IPortfolioSnapshotIndexQuery>(services.BuildServiceProvider());
     }
 
-    private sealed class QueryScope : IDisposable
+    /// <summary>
+    /// Builds the Application-layer grid handler over the same read port, wired exactly the way
+    /// <c>Api/Program.cs</c> wires it. No clock is registered because none is needed: the grid
+    /// filter no longer defaults anything off "now".
+    /// </summary>
+    private ResolvedScope<IPortfolioSnapshotGridQueryHandler> BuildGridHandler()
+    {
+        var services = new ServiceCollection();
+        services.AddPortfolioSnapshotReadFeatures();
+        services.AddSqlReadInfrastructure(Fixture.Configuration["Database:ConnectionString"] ?? string.Empty);
+        return new ResolvedScope<IPortfolioSnapshotGridQueryHandler>(services.BuildServiceProvider());
+    }
+
+    private sealed class ResolvedScope<TService> : IDisposable
+        where TService : notnull
     {
         private readonly ServiceProvider _provider;
 
-        public QueryScope(ServiceProvider provider)
+        public ResolvedScope(ServiceProvider provider)
         {
             _provider = provider;
-            Service = provider.GetRequiredService<IPortfolioSnapshotIndexQuery>();
+            Service = provider.GetRequiredService<TService>();
         }
 
-        public IPortfolioSnapshotIndexQuery Service { get; }
+        public TService Service { get; }
 
         public void Dispose() => _provider.Dispose();
     }

@@ -12,7 +12,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
 
-builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddPortfolioSnapshotReadFeatures();
 builder.Services.AddSqlReadInfrastructure(builder.Configuration["Database:ConnectionString"] ?? string.Empty);
 builder.Services.AddAdlsReadInfrastructure(

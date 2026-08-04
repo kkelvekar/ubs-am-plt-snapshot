@@ -92,9 +92,13 @@ internal sealed class PortfolioSnapshotIndexRepository : IPortfolioSnapshotIndex
 
     /// <summary>
     /// Builds the parameterised grid query. Each account id is bound to a positional
-    /// @pN placeholder generated from its index (never from its value), and the date
-    /// window / optional event type are bound as named parameters - so no caller-supplied
-    /// value is ever interpolated into the SQL text. Internal for direct unit testing of the
+    /// @pN placeholder generated from its index (never from its value), and the optional
+    /// filters are bound as named parameters - so no caller-supplied value is ever
+    /// interpolated into the SQL text. The lower date bound, the upper date bound and the
+    /// event type are three independent conditionals: each clause and its parameter appear
+    /// together only when the caller supplied that value, and are omitted entirely otherwise.
+    /// An absent bound is never bound as SQL NULL - a NULL comparison is never true, so that
+    /// would silently return no rows at all. Internal for direct unit testing of the
     /// parameterisation.
     /// </summary>
     internal static string BuildQuery(SnapshotGridFilter filter, out SqlParameter[] parameters)
@@ -114,15 +118,23 @@ internal sealed class PortfolioSnapshotIndexRepository : IPortfolioSnapshotIndex
             sqlParameters.Add(new SqlParameter(name, accountIds[i]));
         }
 
-        sqlParameters.Add(new SqlParameter("@from", filter.FromDate ?? (object)DBNull.Value));
-        sqlParameters.Add(new SqlParameter("@to", filter.ToDate ?? (object)DBNull.Value));
-
         var sql =
             "SELECT SnapshotId, AccountId, SnapshotDate, EventType, AdlsPath, " +
             "DisplayData AS DisplayDataJson, CreatedAt " +
             "FROM dbo.PortfolioSnapshotIndex " +
-            $"WHERE AccountId IN ({string.Join(", ", placeholders)}) " +
-            "AND SnapshotDate >= @from AND SnapshotDate <= @to";
+            $"WHERE AccountId IN ({string.Join(", ", placeholders)})";
+
+        if (filter.FromDate is not null)
+        {
+            sql += " AND SnapshotDate >= @from";
+            sqlParameters.Add(new SqlParameter("@from", filter.FromDate.Value));
+        }
+
+        if (filter.ToDate is not null)
+        {
+            sql += " AND SnapshotDate <= @to";
+            sqlParameters.Add(new SqlParameter("@to", filter.ToDate.Value));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.EventType))
         {

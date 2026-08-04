@@ -569,7 +569,7 @@ In no failure scenario is permanent audit data deleted or corrupted. The worst o
 
 **Screen 1 -- Load snapshots grid**
 
-The UI enforces that at least one portfolio must be selected before the grid loads. The SQL query always has at least one account_id in the IN clause. It hits the non-clustered index on (account_id, snapshot_date DESC), applies the date range as a row range within the year partition, and optionally filters event_type server-side. The default date range is last 7 days. The Read API deserialises the display_data JSON column in application code before returning to the UI. Typical query across 5-20 accounts returns in under 100ms.
+The UI enforces that at least one portfolio must be selected before the grid loads. The SQL query always has at least one account_id in the IN clause. It hits the non-clustered index on (account_id, snapshot_date DESC), applies the date range as a row range within the year partition, and optionally filters event_type server-side. The last-7-days date range is a UI convention, not API behaviour: the UI sends explicit from/to values when it wants that view. account_id is the only mandatory filter -- the API applies no implicit default to any optional filter, so from, to and event_type each constrain the query only when the caller supplies them, and an omitted date bound is an open bound. The Read API deserialises the display_data JSON column in application code before returning to the UI. Typical query across 5-20 accounts returns in under 100ms.
 
 **Screen 2 -- View a snapshot detail**
 

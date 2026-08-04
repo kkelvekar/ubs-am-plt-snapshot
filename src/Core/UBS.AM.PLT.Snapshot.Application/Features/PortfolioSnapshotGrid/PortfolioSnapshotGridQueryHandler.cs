@@ -13,18 +13,16 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.PortfolioSnapshotGrid;
 public sealed class PortfolioSnapshotGridQueryHandler : IPortfolioSnapshotGridQueryHandler
 {
     private readonly IPortfolioSnapshotIndexQuery _indexQuery;
-    private readonly TimeProvider _timeProvider;
 
-    public PortfolioSnapshotGridQueryHandler(IPortfolioSnapshotIndexQuery indexQuery, TimeProvider timeProvider)
+    public PortfolioSnapshotGridQueryHandler(IPortfolioSnapshotIndexQuery indexQuery)
     {
         _indexQuery = indexQuery;
-        _timeProvider = timeProvider;
     }
 
     public async Task<IReadOnlyList<Dictionary<string, object?>>> HandleAsync(
         SnapshotGridFilter requestedFilter, CancellationToken cancellationToken)
     {
-        var resolved = SnapshotGridFilter.Resolve(requestedFilter, _timeProvider);
+        var resolved = SnapshotGridFilter.Resolve(requestedFilter);
         var rows = await _indexQuery.QueryAsync(resolved, cancellationToken);
         return SnapshotRowFlattener.Flatten(rows);
     }
