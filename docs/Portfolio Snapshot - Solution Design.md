@@ -22,7 +22,7 @@ The business requires the ability to view what decisions led to any given order 
 
 ## 2. Solution Overview
 
-![[Snapshot Solution Final Draft.png]]
+![[Snapshot Solution Final.png]]
 
 The core insight driving this design is that the two screens in the Audit app have fundamentally different access patterns and must be served by different stores.
 
