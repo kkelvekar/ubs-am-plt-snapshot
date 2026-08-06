@@ -3,9 +3,6 @@
 Shared project context for all AI coding agents (GitHub Copilot, Claude Code, and others).
 Read this file fully before making any change in this repository.
 
-Codex-specific execution notes live in `CODEX.md`; they adapt the four-role workflow below
-to a single Codex session while keeping this file as the source of truth.
-
 ## Project
 
 The Snapshot Writer API is the write path of the Portfolio Snapshot solution on the UBS
