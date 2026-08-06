@@ -29,7 +29,7 @@ public sealed record SimulationOptions(
 
         Options:
           --bootstrap-servers <value>      Kafka bootstrap servers. Defaults to Kafka__BootstrapServers or localhost:9092.
-          --topic <value>                  Kafka topic. Defaults to Kafka__Topic or ubs-advantage-snapshots.
+          --topic <value>                  Kafka topic. Defaults to Kafka__Topics__snapshot-request or ubs-advantage-snapshots.
           --snapshots <number>             Number of snapshots to generate. Each snapshot sends 4 payload messages.
           --message-delay <hh:mm:ss>       Delay between payloads in the same snapshot. Defaults to 00:00:30.
           --snapshot-delay-min <hh:mm:ss>  Minimum delay between snapshots. Defaults to 00:01:00.
@@ -44,7 +44,7 @@ public sealed record SimulationOptions(
     public static SimulationOptions Parse(string[] args, Func<string, string?> environment)
     {
         var bootstrapServers = environment("Kafka__BootstrapServers") ?? Default.BootstrapServers;
-        var topic = environment("Kafka__Topic") ?? Default.Topic;
+        var topic = environment("Kafka__Topics__snapshot-request") ?? Default.Topic;
         var snapshotCount = Default.SnapshotCount;
         TimeSpan? messageDelay = null;
         TimeSpan? snapshotDelayMin = null;

@@ -1036,8 +1036,8 @@ public class SnapshotMessageHandlerTests
     [Fact]
     public async Task HandleAsync_propagates_a_publisher_failure_during_rejection_reporting_unchanged()
     {
-        // Not swallowed and not converted into the rejection: the offset is then never
-        // committed, the retry ladder runs, and redelivery re-reports the rejection.
+        // Not swallowed and not converted into the rejection: the command then reports failure,
+        // the offset is never committed, and redelivery re-reports the rejection.
         var boom = new InvalidOperationException("broker unreachable");
         var trackingStore = new FakeSnapshotTrackingStore();
         var responsePublisher = new FakeSnapshotResponsePublisher { ThrowOnPublish = boom };

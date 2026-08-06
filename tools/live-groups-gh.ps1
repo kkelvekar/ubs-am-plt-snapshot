@@ -52,18 +52,17 @@
           --bootstrap-server localhost:9092 --describe --group snapshot-writer-api
 
   CONSUMER FAILURE SEMANTICS (applies to TC-23a/23b/24 below — design doc §8\§9):
-    A failing message is retried IN-PROCESS, one attempt per configured
-    Kafka:RetryDelays entry (0s, 5s, 30s => 3 attempts, ~35s total). On the
-    final failure the worker logs ONE Critical "Operations alert ..." line,
-    does NOT commit the offset, and exits with a NON-ZERO exit code. There is
-    no seek-back and no retry-forever hold at max delay.
+    A message whose command returns CommandResult.Fail is NOT retried
+    in-process. The worker logs the failure, then ONE Critical
+    "Operations alert ..." line, does NOT commit the offset, and exits with a
+    NON-ZERO exit code. There is no seek-back and no in-process retry ladder.
     Consequences for the failure scenarios below:
-      - The observation window is ~35 seconds from the first failure. Have the
+      - The worker exits within a second or two of the first failure. Have the
         verification queries ready before publishing.
-      - The message is not "blocked and retried indefinitely" — it stops being
-        retried when the process dies. Redelivery requires an EXTERNAL PROCESS
-        RESTART (Kubernetes restartPolicy: Always in production; locally you
-        start a new worker yourself, or run it under a supervisor /
+      - The message is not "blocked and retried indefinitely" — it is attempted
+        exactly once per process lifetime. Redelivery requires an EXTERNAL
+        PROCESS RESTART (Kubernetes restartPolicy: Always in production; locally
+        you start a new worker yourself, or run it under a supervisor /
         `while ($true) { dotnet run ... }` loop).
       - A restarted worker re-consumes the same uncommitted message and crashes
         again — so a genuine poison message becomes a crash loop, not a silent
@@ -87,7 +86,7 @@
            not get stuck, this is the one thing Mode A cannot prove: the real
            commit path)
          - worker log shows the message was processed and committed, with NO
-           exception/retry logged for it
+           exception logged for it
 
   --------------------------------------------------------------------------
   TC-23a — envelope missing a required field (raw JSON, no `snapshotId` key)
@@ -99,14 +98,13 @@
          - kafka-consumer-groups.sh --describe shows LAG > 0 and the
            committed offset for that partition unchanged (offset NOT
            committed)
-         - worker log shows "Failed to process message ... (attempt N)" for
-           N = 1..3 at the configured RetryDelays cadence (0s, 5s, 30s), then
+         - worker log shows ONE "Failed to dispatch message at ..." line (the
+           envelope never deserialises, so the command is never reached), then
            EXACTLY ONE Critical "Operations alert ..." line — the message is
-           genuinely retried and then surfaced, not silently skipped (no
-           "Committed offset" line for this message ever appears)
-         - the worker process then EXITS NON-ZERO on its own (~35s after the
-           first failure), with no further retry lines — it does not hang and
-           does not retry forever
+           surfaced, not silently skipped (no "Committed offset" line for this
+           message ever appears)
+         - the worker process then EXITS NON-ZERO on its own, immediately after
+           the failure — it does not hang and does not retry
          - no snapshot_tracking / snapshot_index row for this message (it
            never reached the handler)
        Cleanup: nothing restarts the worker locally, so after the crash the
@@ -125,11 +123,12 @@
        `required` is satisfied — the key is present) but `accountId` is
        JSON null, so SnapshotMessageHandler.ValidateIdentity rejects it
        before any write.
-    2. Verify: same checklist as TC-23a (no commit, lag > 0, 3 retry-ladder
-       attempts, one Critical alert, non-zero process exit, no tracking/index
-       row) — this proves the Application-layer null-identity guard (not just
-       deserialisation) also lands in the consumer's no-commit/retry-ladder/
-       crash-on-exhaustion path, live.
+    2. Verify: same checklist as TC-23a (no commit, lag > 0, one Critical alert,
+       non-zero process exit, no tracking/index row) — EXCEPT that this message
+       does reach the command, so the failure line is
+       "Error processing snapshotId=... ". This proves the Application-layer
+       null-identity guard (not just deserialisation) also lands in the
+       consumer's no-commit/crash path, live.
        NOTE: this message has AccountId = null, so Kafka partitions it by a
        null key (round-robin / random partition, NOT deterministic) —
        identify the affected partition from the consumer-groups --describe
@@ -149,10 +148,10 @@
            COMPLETE
          - no snapshot_index row ever appears for this snapshotId
          - offset for this message NOT committed; kafka-consumer-groups.sh
-           --describe shows lag > 0, worker log shows 3 KeyNotFoundException-
-           driven retry lines (0s, 5s, 30s), then one Critical "Operations
-           alert ..." and a non-zero process exit — the message is retried and
-           surfaced (matches Mode A's GroupHMalformedInputTests
+           --describe shows lag > 0, worker log shows one
+           KeyNotFoundException-driven "Error processing snapshotId=... " line,
+           then one Critical "Operations alert ..." and a non-zero process exit
+           — the message is surfaced (matches Mode A's GroupHMalformedInputTests
            Unknown_snapshotType_writes_blob_and_tracking_but_never_completes),
            NOT silently skipped
     3. This is the expected/designed outcome for an unconfigured type
@@ -254,7 +253,7 @@ function Invoke-TC23a {
     # org schema, so only the missing identity field makes this a poison message.
     $json = "{`"AccountId`":`"$AccountId`",`"SnapshotType`":`"portfolio`",`"PayloadType`":`"orders`",`"PublishedAt`":`"$publishedAt`",`"PublishedBy`":`"LiveGroupGH`",`"Payload`":`"{\`"positions\`":[]}`"}"
     Send-RawMessage -Key $AccountId -Json $json
-    Write-Host 'TC-23a published — this is a poison message; within ~35s expect 3 retry lines, one Critical operations alert, and a non-zero worker exit. Check kafka-consumer-groups.sh --describe for LAG > 0.'
+    Write-Host 'TC-23a published — this is a poison message; expect one dispatch-failure line, one Critical operations alert, and a non-zero worker exit. Check kafka-consumer-groups.sh --describe for LAG > 0.'
 }
 
 function Invoke-TC23b {
@@ -277,7 +276,7 @@ function Invoke-TC24 {
     Write-Host "TC-24: unconfigured snapshotType 'mystery'"
     $orders = '{"positions":[{"isin":"CH0038863350","qty":250}]}'
     Send-RawMessage -Key $AccountId -Json (New-Envelope -SnapshotId $snapshotId -AccountIdValue $AccountId -SnapshotType 'mystery' -PayloadType 'orders' -PayloadJson $orders)
-    Write-Host "TC-24 snapshotId for verification: $snapshotId (expect blob + tracking RECEIVING, no index row, offset never committed, then 3 retries + Critical alert + non-zero worker exit)"
+    Write-Host "TC-24 snapshotId for verification: $snapshotId (expect blob + tracking RECEIVING, no index row, offset never committed, then one failure line + Critical alert + non-zero worker exit)"
 }
 
 switch ($Scenario) {
@@ -289,11 +288,11 @@ switch ($Scenario) {
         Invoke-TC21a
         Invoke-TC24
         Write-Host ''
-        Write-Host 'NOTE: TC-24 also crashes the worker (non-zero exit) ~35s after it is consumed.' -ForegroundColor Yellow
+        Write-Host 'NOTE: TC-24 also crashes the worker (non-zero exit) as soon as it is consumed.' -ForegroundColor Yellow
         Write-Host 'TC-21a is published first and completes before that, but verify TC-21a promptly;' -ForegroundColor Yellow
         Write-Host 'after the crash nothing further is consumed until you start a new worker.' -ForegroundColor Yellow
         Write-Host 'NOTE: TC-23a and TC-23b are poison messages that CRASH the worker (3 in-process' -ForegroundColor Yellow
-        Write-Host 'retries, one Critical alert, non-zero exit, offset never committed). Run them LAST' -ForegroundColor Yellow
+        Write-Host 'one failure line, one Critical alert, non-zero exit, offset never committed). Run them LAST' -ForegroundColor Yellow
         Write-Host 'and separately (./live-groups-gh.ps1 -Scenario TC23a / -Scenario TC23b), one at a' -ForegroundColor Yellow
         Write-Host 'time, after you are done observing TC-21a/TC-24 — once the worker exits nothing' -ForegroundColor Yellow
         Write-Host 'else is consumed at all, and restarting it just re-consumes the poison message.' -ForegroundColor Yellow

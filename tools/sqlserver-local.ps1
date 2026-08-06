@@ -9,7 +9,7 @@
   for each container and never committed to the repo — appsettings.json ships no
   Database:ConnectionString default, so it must come from the Database__ConnectionString
   environment variable this script prints on success. Deployment is handled entirely
-  at the org side after lift-and-shift; nothing here is deployable.
+  outside this repository; nothing here is deployable.
 
 .EXAMPLE
   ./sqlserver-local.ps1 -Up      # start SQL Server on localhost:1433, apply db/scripts, print the connection string

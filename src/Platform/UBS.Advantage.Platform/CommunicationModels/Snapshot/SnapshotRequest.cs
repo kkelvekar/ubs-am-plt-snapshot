@@ -1,6 +1,3 @@
-// Simulated org-shared-library type. At real lift-and-shift: delete this file, add NuGet
-// reference `UBS.Advantage.CommunicationModels`. Never edit to fit our needs — adapt in the
-// mapper instead.
 namespace UBS.Advantage.CommunicationModels.Snapshot;
 
 /// <summary>Request for a snapshot.</summary>

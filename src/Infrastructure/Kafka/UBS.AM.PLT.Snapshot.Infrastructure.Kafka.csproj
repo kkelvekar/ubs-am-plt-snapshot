@@ -2,13 +2,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\UBS.AM.PLT.Snapshot.Application\UBS.AM.PLT.Snapshot.Application.csproj" />
+    <ProjectReference Include="..\..\Platform\UBS.Advantage.Platform\UBS.Advantage.Platform.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Confluent.Kafka" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

@@ -3,21 +3,20 @@ using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Services;
 
 /// <summary>
-/// Maps the domain notification onto the org shared-library <see cref="SnapshotResponse"/>.
-/// The outbound counterpart of <see cref="SnapshotRequestMapper"/> and the seam that keeps the
-/// org type from leaking past Infrastructure.
+/// Maps the domain notification onto the <see cref="SnapshotResponse"/> the response topic
+/// carries, so no transport type reaches the Domain or the Application layer.
 /// </summary>
 /// <remarks>
-/// Every value the org contract carries as text is rendered here rather than in the Domain:
+/// Every value the response contract carries as text is rendered here rather than in the Domain:
 /// the status enum becomes "Receiving"/"Complete"/"Failed", timestamps become ISO-8601
 /// round-trip ("O") UTC, and an absent timestamp becomes an empty string.
 /// </remarks>
 internal static class SnapshotResponseMapper
 {
-    public static SnapshotResponse ToOrgResponse(SnapshotStatusNotification notification)
+    public static SnapshotResponse ToResponse(SnapshotStatusNotification notification)
         => new()
         {
             SnapshotId = notification.SnapshotId,
@@ -42,7 +41,7 @@ internal static class SnapshotResponseMapper
             _ => throw new ArgumentOutOfRangeException(
                 nameof(status),
                 status,
-                "Unmapped snapshot tracking status; the org response contract has no wire value for it."),
+                "Unmapped snapshot tracking status; the response contract has no wire value for it."),
         };
 
     private static string ToWireTimestamp(DateTime? value)

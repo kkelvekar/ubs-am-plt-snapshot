@@ -3,9 +3,6 @@
 Shared project context for all AI coding agents (GitHub Copilot, Claude Code, and others).
 Read this file fully before making any change in this repository.
 
-Codex-specific execution notes live in `CODEX.md`; they adapt the four-role workflow below
-to a single Codex session while keeping this file as the source of truth.
-
 ## Project
 
 The Snapshot Writer API is the write path of the Portfolio Snapshot solution on the UBS
@@ -66,11 +63,10 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 4. **Completeness is driven by a single declarative required-files map**: the required
    file list is one declarative source of truth, never scattered through processing logic.
    The index row is written only when all required files are received.
-   **Exception (post-lift-and-shift reality):** that map lives in the library-owned
-   `SnapshotConfigDefinition` code constant (`Infrastructure.Sql`), not in appsettings,
-   because the org configuration layer cannot carry custom appsettings keys. Adding a new
-   payload type is one entry in that constant plus a library rebuild (previously an
-   appsettings edit) — never a change to the write pipeline or consumer processing logic.
+   That map lives in the library-owned `SnapshotConfigDefinition` code constant
+   (`Infrastructure.Sql`), not in appsettings, because the configuration layer cannot carry
+   custom appsettings keys. Adding a new payload type is one entry in that constant plus a
+   library rebuild — never a change to the write pipeline or consumer processing logic.
 5. **Payloads are opaque**: the payload is JSON text, written to blob verbatim, and is
    never deserialised into a DTO. Exactly three sanctioned touches exist, and none of them
    ever re-serialises anything. The first two are a scoped `JsonDocument.Parse` disposed
@@ -90,7 +86,7 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 ## Repository layout
 
 ```
-src/        Core/ (Domain, Application) | Infrastructure/ (Sql, Adls, Kafka) | Clients/ (Worker)
+src/        Core/ (Domain, Application) | Infrastructure/ (Sql, Adls, Kafka) | Platform/ | Clients/ (Worker, Api)
 tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
@@ -106,18 +102,52 @@ docs/       solution design document and diagrams
   from configuration with environment-variable overrides.
 - **Kafka bootstrap servers are externally configurable** via standard .NET configuration
   binding (`Kafka__BootstrapServers` environment variable overrides appsettings). The
-  worker and all test tooling must point at local Docker Kafka or the org Kafka server
-  purely via config — no code change between environments.
+  worker and all test tooling must point at local Docker Kafka or a real broker purely via
+  config — no code change between environments. Topics are configured by key under
+  `Kafka:Topics` (`snapshot-request`, `snapshot-response`), never hard-coded.
 - `dotnet build` and `dotnet test` must be green before any handoff or commit.
 
-### Thin Kafka consumer (lift-and-shift constraint)
+### Kafka layer
 
-The Kafka consumer is a deliberately thin, disposable adapter. It deserialises the
-message envelope, calls straight into an Application-layer use case, and commits the
-offset on success — nothing else. No business logic, no branching on `payloadType`, no
-orchestration of its own. At org lift-and-shift time this consumer is replaced by an
-org-provided consumer library, and that swap must touch **only the Infrastructure layer**
-— never Application or Domain. The reviewer role checks this on every slice.
+Both directions of the Kafka layer are the platform's **command pattern**, and the layer holds
+nothing else — `Commands/`, `Services/` and `KafkaRegistration.cs`, no consumer loop, no producer
+plumbing, no options of its own. Those come from `Ubs.Advantage.Core.Messaging.Kafka`, registered
+by topic key:
+
+```csharp
+services.AddMessageConsumerService<string, SnapshotRequest, SnapshotRequestCommand>("snapshot-request");
+services.AddMessageProducerService<string, SnapshotResponse, SnapshotResponseCommand>("snapshot-response");
+```
+
+- `Commands/SnapshotRequestCommand` — an `ACommand<IMessage<string, SnapshotRequest>>`. It maps
+  the request onto the domain envelope (a private static method, not a separate mapper class),
+  calls straight into an Application-layer use case, and returns a `CommandResult`. No business
+  logic, no branching on `payloadType`, no orchestration of its own.
+- `Commands/SnapshotResponseCommand` — an
+  `ACommand<CommandStatusParameter<IMessage<string, SnapshotResponse>, bool>>`. The producer
+  service reports the outcome of each send through it, and it turns that `bool` into a
+  `CommandResult`.
+- `Services/KafkaSnapshotResponsePublisher` — the `ISnapshotResponsePublisher` implementation.
+  It maps the domain notification with `SnapshotResponseMapper` and calls `IProducer.Publish`;
+  nothing more.
+
+A consumer command's only lever over the offset is its `CommandResult`: `Success` commits, `Fail`
+does not. There is no seek, no requeue and no in-process retry ladder. A `Fail` means the consumer
+service logs one Critical alert, leaves the offset uncommitted and exits non-zero, so the process
+restarts and Kafka redelivers from the last committed offset. A **rejected** message is the one
+case that looks like a failure but returns `Success`: the handler has already written the FAILED
+tracking row and published the Failed response, and the same bytes would fail identically forever,
+so the offset must move past it.
+
+Publishing is fire-and-forget. `Publish` queues the message and returns, so a response that cannot
+be sent is reported to `SnapshotResponseCommand` and logged — it never fails the message being
+written, and redelivery republishes it.
+
+`src/Platform/UBS.Advantage.Platform` is a local build of the platform contracts these commands
+are written against (`Ubs.Advantage.Core.Infrastructure.Commands`,
+`Ubs.Advantage.Core.Messaging.Kafka`, `UBS.Advantage.CommunicationModels.Snapshot`), so the
+service compiles and runs against a local broker. Its types, namespaces and signatures match the
+platform packages; see that project's README before changing anything in it.
 
 ## Scope guards
 
@@ -129,9 +159,8 @@ org-provided consumer library, and that swap must touch **only the Infrastructur
   detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.PortfolioSnapshotIndex`
   and returns the stored payload blobs verbatim.
 - **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
-  K8s manifests, CI/CD pipeline files, or AKS deployment YAML. Deployment is handled
-  entirely at the org side after lift-and-shift. This repo's scope ends at local
-  development and local testing.
+  K8s manifests, CI/CD pipeline files, or AKS deployment YAML. This repo's scope ends at
+  local development and local testing.
 - No speculative abstractions. Build only what the current approved slice needs.
 
 ## Development workflow — four-role pipeline

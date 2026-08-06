@@ -1,11 +1,11 @@
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace Ubs.Advantage.Core.Messaging.Kafka;
 
 /// <summary>
 /// Surfaces librdkafka's internal error/log signal into application logging. Shared by the
-/// consumer and producer factories: without these handlers, broker-unreachable and auth
+/// consumer and producer services: without these handlers, broker-unreachable and auth
 /// failures only reach stderr via librdkafka defaults ("nothing consuming, zero log signal"
 /// in production).
 /// </summary>
