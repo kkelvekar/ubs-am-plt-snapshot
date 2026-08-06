@@ -8,8 +8,15 @@
   demand. Deployment is handled outside this repository; nothing
   here is deployable.
 
+.PARAMETER AdvertisedHost
+  Hostname the broker advertises to clients. Defaults to localhost, which is what a
+  worker running directly on this machine needs. Pass host.docker.internal when clients
+  live inside containers or Kubernetes pods — Docker Desktop resolves that name from
+  both the host and from pods, so a single advertised address serves every client.
+
 .EXAMPLE
   ./kafka-local.ps1 -Up         # start broker on localhost:9092 and create both topics
+  ./kafka-local.ps1 -Up -AdvertisedHost host.docker.internal   # also reachable from pods
   ./kafka-local.ps1 -Responses  # dump the response topic from the beginning (Mode B check)
   ./kafka-local.ps1 -Down       # remove the broker container
 #>
@@ -17,7 +24,8 @@
 param(
     [switch]$Up,
     [switch]$Down,
-    [switch]$Responses
+    [switch]$Responses,
+    [string]$AdvertisedHost = 'localhost'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,8 +61,23 @@ if ($existing) {
     exit 1
 }
 
-Write-Host "Starting single-node KRaft Kafka ($image) on localhost:9092..."
-docker run -d --name $containerName -p 9092:9092 $image | Out-Null
+Write-Host "Starting single-node KRaft Kafka ($image) on localhost:9092 (advertised as ${AdvertisedHost}:9092)..."
+# The image's built-in KRaft defaults advertise localhost only. Overriding the advertised
+# listener means overriding the whole listener/KRaft env set the image builds it from.
+docker run -d --name $containerName -p 9092:9092 `
+    -e KAFKA_NODE_ID=1 `
+    -e KAFKA_PROCESS_ROLES=broker,controller `
+    -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093 `
+    -e KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${AdvertisedHost}:9092" `
+    -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT `
+    -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER `
+    -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT `
+    -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 `
+    -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 `
+    -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 `
+    -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 `
+    -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 `
+    $image | Out-Null
 
 Write-Host 'Waiting for the broker to become ready...'
 $deadline = (Get-Date).AddSeconds(90)
@@ -76,6 +99,6 @@ foreach ($t in @($topic, $responseTopic)) {
         --bootstrap-server localhost:9092
 }
 
-Write-Host "Kafka is up on localhost:9092 with topics '$topic' and '$responseTopic' ($partitions partitions each)."
+Write-Host "Kafka is up on localhost:9092 (advertised as ${AdvertisedHost}:9092) with topics '$topic' and '$responseTopic' ($partitions partitions each)."
 Write-Host "Read published responses with: ./kafka-local.ps1 -Responses"
 Write-Host "Tear down with: ./kafka-local.ps1 -Down"

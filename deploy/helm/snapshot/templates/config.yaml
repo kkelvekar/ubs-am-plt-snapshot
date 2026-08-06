@@ -1,0 +1,29 @@
+# Shared configuration for both services. Keys are .NET configuration paths in
+# environment-variable form (double underscore = section separator), so they override
+# the matching appsettings.json values with no code change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "snapshot.fullname" . }}-config
+  labels:
+    {{- include "snapshot.labels" . | nindent 4 }}
+data:
+  DOTNET_ENVIRONMENT: Development
+  ASPNETCORE_ENVIRONMENT: Development
+  Kafka__BootstrapServers: {{ .Values.kafka.bootstrapServers | quote }}
+  Kafka__ConsumerGroup: {{ .Values.kafka.consumerGroup | quote }}
+  # Topic keys (snapshot-request / snapshot-response) contain a dash, which is not a
+  # legal environment-variable name, so topics stay in the image's appsettings.json.
+  BlobStorage__ServiceUri: {{ .Values.blobStorage.serviceUri | quote }}
+  BlobStorage__ContainerName: {{ .Values.blobStorage.containerName | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "snapshot.fullname" . }}-secret
+  labels:
+    {{- include "snapshot.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  Database__ConnectionString: {{ required "database.connectionString must be set" .Values.database.connectionString | quote }}
+  BlobStorage__ConnectionString: {{ .Values.blobStorage.connectionString | quote }}
