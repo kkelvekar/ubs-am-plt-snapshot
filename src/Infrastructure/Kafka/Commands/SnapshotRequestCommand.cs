@@ -3,6 +3,7 @@ using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.Advantage.Messaging;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Exceptions;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Mapping;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 

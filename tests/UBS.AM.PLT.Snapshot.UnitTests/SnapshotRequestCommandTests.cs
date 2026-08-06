@@ -125,7 +125,7 @@ public class SnapshotRequestCommandTests
         => new(logger ?? new CapturingLogger<SnapshotRequestCommand>(), handler);
 
     private static IMessage<string, SnapshotRequest> CreateMessage(SnapshotRequest? request)
-        => new ConsumedMessage<string, SnapshotRequest>("00675442A", request);
+        => new MessageEnvelope<string, SnapshotRequest>("00675442A", request);
 
     private static SnapshotRequest CreateRequest()
         => new()

@@ -3,7 +3,7 @@ using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Mapping;
 
 /// <summary>
 /// Maps the domain notification onto the org shared-library <see cref="SnapshotResponse"/>.

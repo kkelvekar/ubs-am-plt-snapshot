@@ -4,6 +4,9 @@ using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.Advantage.Messaging;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Configuration;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Consuming;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Publishing;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
@@ -35,16 +38,19 @@ public static class KafkaRegistration
                 "Kafka:ResponseTopic must be configured (non-empty).")
             .ValidateOnStart();
 
-        services.AddSingleton<IKafkaConsumerFactory, KafkaConsumerFactory>();
-
-        // Registered by its framework contract, not its concrete type: the consumer resolves
-        // the command for the message type it consumes, exactly as the org library will once
-        // the consumer below is dropped.
+        // Commands are registered by their framework contract, not their concrete type: each is
+        // resolved for the message type it handles, exactly as the org library will resolve them
+        // once the consumer and publisher below are dropped. Both are singletons — the publish
+        // command owns the one long-lived producer for the process and is disposed with the host.
         services.AddSingleton<ACommand<IMessage<string, SnapshotRequest>>, SnapshotRequestCommand>();
+        services.AddSingleton<ACommand<IMessage<string, SnapshotResponse>>, SnapshotPublishCommand>();
+
+        // Inbound: the stand-in for the org consumer library, deleted at lift-and-shift.
+        services.AddSingleton<IKafkaConsumerFactory, KafkaConsumerFactory>();
         services.AddHostedService<KafkaSnapshotConsumer>();
 
+        // Outbound: the Application port, adapted onto the publish command.
         services.AddSingleton<IKafkaProducerFactory, KafkaProducerFactory>();
-        // Singleton: one long-lived producer per process, disposed with the host.
         services.AddSingleton<ISnapshotResponsePublisher, KafkaSnapshotResponsePublisher>();
 
         return services;

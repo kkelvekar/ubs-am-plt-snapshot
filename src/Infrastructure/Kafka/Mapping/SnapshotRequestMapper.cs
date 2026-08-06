@@ -1,7 +1,7 @@
 using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Domain;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Mapping;
 
 /// <summary>
 /// Adapts the org shared-library <see cref="SnapshotRequest"/> onto our domain envelope.

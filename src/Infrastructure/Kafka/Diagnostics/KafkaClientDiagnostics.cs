@@ -1,7 +1,7 @@
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Diagnostics;
 
 /// <summary>
 /// Surfaces librdkafka's internal error/log signal into application logging. Shared by the

@@ -17,7 +17,7 @@ public interface IMessage<out TKey, out TValue>
 
 /// <summary>
 /// Framework-side implementation of <see cref="IMessage{TKey, TValue}"/>. Also supplied by the
-/// org library at lift-and-shift — it lives here only because our stand-in consumer has to
-/// construct the messages it hands to a command.
+/// org library at lift-and-shift — it lives here only because our stand-in consumer and
+/// publisher have to construct the messages they hand to a command.
 /// </summary>
-public sealed record ConsumedMessage<TKey, TValue>(TKey Key, TValue? Value) : IMessage<TKey, TValue>;
+public sealed record MessageEnvelope<TKey, TValue>(TKey Key, TValue? Value) : IMessage<TKey, TValue>;

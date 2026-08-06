@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.Advantage.Messaging;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Configuration;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Consuming;
 
 /// <summary>
 /// Stand-in for the org consumer library: poll, deserialise the envelope, hand the message to
@@ -151,7 +153,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         CommandResult commandResult;
         try
         {
-            var message = new ConsumedMessage<string, SnapshotRequest>(
+            var message = new MessageEnvelope<string, SnapshotRequest>(
                 result.Message.Key,
                 Deserialize(result.Message.Value));
 

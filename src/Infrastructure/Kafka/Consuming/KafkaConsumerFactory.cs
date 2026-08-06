@@ -1,8 +1,10 @@
 using Confluent.Kafka;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Configuration;
+using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Diagnostics;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Consuming;
 
 public sealed class KafkaConsumerFactory : IKafkaConsumerFactory
 {

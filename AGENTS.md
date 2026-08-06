@@ -130,8 +130,19 @@ looks like a failure but returns `Success`: the handler has already written the 
 row and published the Failed response, and the same bytes would fail identically forever, so the
 offset must move past it.
 
+The outbound side mirrors it: `Commands/SnapshotPublishCommand` is an
+`ACommand<IMessage<string, SnapshotResponse>>` that owns the producer and reports a
+`CommandResult`, and `KafkaSnapshotResponsePublisher` is the `ISnapshotResponsePublisher` adapter
+that maps the domain notification and delegates to it. Every message this service publishes goes
+through that command. A `Fail` there is logged, never thrown: a notification that could not be
+queued must not fail the message being written, and redelivery republishes it.
+
 Either way the swap must touch **only the Infrastructure layer** — never Application or Domain.
 The reviewer role checks this on every slice.
+
+The Kafka project is laid out by role, not flat: `Commands/`, `Consuming/`, `Publishing/`,
+`Mapping/`, `Configuration/`, `Diagnostics/`, `OrgSimulated/` (org DTOs plus the simulated
+`Messaging/` framework types), with only `KafkaRegistration` at the root.
 
 ## Scope guards
 

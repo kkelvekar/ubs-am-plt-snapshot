@@ -1,4 +1,4 @@
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
+namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Configuration;
 
 /// <summary>
 /// Bound from the same <c>Kafka</c> configuration section as
