@@ -1,6 +1,3 @@
-// Stand-in for the org shared-library type: delete this file and reference the
-// UBS.Advantage.CommunicationModels package once it is available. Do not edit it to fit this
-// service — adapt in SnapshotResponseMapper instead.
 namespace UBS.Advantage.CommunicationModels.Snapshot;
 
 /// <summary>Response for a snapshot.</summary>

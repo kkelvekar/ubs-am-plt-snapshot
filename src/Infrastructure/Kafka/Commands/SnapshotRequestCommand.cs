@@ -1,20 +1,20 @@
 using Microsoft.Extensions.Logging;
+using Ubs.Advantage.Core.Infrastructure.Commands;
+using Ubs.Advantage.Core.Messaging.Kafka.Models;
 using UBS.Advantage.CommunicationModels.Snapshot;
-using UBS.Advantage.Messaging;
 using UBS.AM.PLT.Snapshot.Application.Contracts;
 using UBS.AM.PLT.Snapshot.Application.Exceptions;
-using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Mapping;
+using UBS.AM.PLT.Snapshot.Domain;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 
 /// <summary>
-/// The command the consumer runs for one snapshot request: map the org DTO onto our domain
-/// envelope, call the Application-layer handler, report the outcome. No business logic, no
-/// branching on payload type, no orchestration — at lift-and-shift this class is registered
-/// with the org consumer library unchanged, and only the consumer around it is deleted.
+/// Runs the write pipeline for one snapshot request: map the request onto the domain envelope,
+/// call the Application-layer handler, report the outcome. No business logic, no branching on
+/// payload type, no orchestration of its own.
 /// </summary>
 /// <remarks>
-/// A command's only lever is the <see cref="CommandResult"/> it returns, so every outcome
+/// The <see cref="CommandResult"/> is the command's only lever over the offset, so every outcome
 /// collapses onto commit-or-don't:
 /// <list type="bullet">
 /// <item><description><b>Handled</b> — <see cref="CommandResult.Success"/>: the write pipeline
@@ -25,29 +25,22 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 /// would fail identically forever, so the offset must move past the message rather than block
 /// its partition.</description></item>
 /// <item><description><b>Anything else</b> — <see cref="CommandResult.Fail"/>: the offset stays
-/// uncommitted and the consumer stops, so the restarted pod is redelivered the message.</description></item>
+/// uncommitted and the process stops, so the message is redelivered after the restart.</description></item>
 /// </list>
 /// </remarks>
-public sealed class SnapshotRequestCommand : ACommand<IMessage<string, SnapshotRequest>>
+public class SnapshotRequestCommand(ILogger<SnapshotRequestCommand> logger, ISnapshotMessageHandler handler)
+    : ACommand<IMessage<string, SnapshotRequest>>
 {
-    private readonly ILogger<SnapshotRequestCommand> _logger;
-    private readonly ISnapshotMessageHandler _handler;
-
-    public SnapshotRequestCommand(
-        ILogger<SnapshotRequestCommand> logger,
-        ISnapshotMessageHandler handler)
-    {
-        _logger = logger;
-        _handler = handler;
-    }
+    private readonly ILogger<SnapshotRequestCommand> _logger = logger;
+    private readonly ISnapshotMessageHandler _handler = handler;
 
     public override async Task<CommandResult> ExecuteAsync(IMessage<string, SnapshotRequest> message)
     {
-        var snapshotRequest = message.Value;
+        SnapshotRequest? snapshotRequest = message.Value;
 
         if (snapshotRequest is null)
         {
-            _logger.LogWarning("Received null snapshot request messageKey={MessageKey}", message.Key);
+            _logger.LogWarning("Received null snapshot request");
             return CommandResult.Fail("Snapshot request is null");
         }
 
@@ -59,12 +52,8 @@ public sealed class SnapshotRequestCommand : ACommand<IMessage<string, SnapshotR
 
         try
         {
-            var snapshotMessage = SnapshotRequestMapper.ToDomain(snapshotRequest);
+            SnapshotMessage snapshotMessage = MapSnapshotMessage(snapshotRequest);
 
-            // No cancellation token: the framework's command contract has none, and a token
-            // cancelled mid-write would abandon the message between two of the four ordered
-            // writes. The uncommitted offset is what makes that safe — the restarted pod is
-            // redelivered the message and every write is idempotent.
             await _handler.HandleAsync(snapshotMessage, CancellationToken.None);
 
             _logger.LogInformation(
@@ -99,4 +88,21 @@ public sealed class SnapshotRequestCommand : ACommand<IMessage<string, SnapshotR
             return CommandResult.Fail(ex.Message);
         }
     }
+
+    /// <summary>
+    /// Straight 1:1 assignment. <see cref="SnapshotRequest.Payload"/> is carried across as the
+    /// same string reference — never parsed, never re-serialised, so the blob write stays
+    /// byte-identical to what was published.
+    /// </summary>
+    private static SnapshotMessage MapSnapshotMessage(SnapshotRequest snapshotRequest)
+        => new()
+        {
+            SnapshotId = snapshotRequest.SnapshotId,
+            AccountId = snapshotRequest.AccountId,
+            SnapshotType = snapshotRequest.SnapshotType,
+            PayloadType = snapshotRequest.PayloadType,
+            PublishedAt = snapshotRequest.PublishedAt,
+            PublishedBy = snapshotRequest.PublishedBy,
+            Payload = snapshotRequest.Payload,
+        };
 }

@@ -163,7 +163,7 @@ public sealed class InfrastructureFailureDuringWriteSteps
     private ServiceProvider BuildFaultInjectedProvider(Dictionary<string, string?> overrides)
     {
         // Same production object graph the fixture builds, but with one dependency's config repointed
-        // at an unreachable endpoint. No IHost is started, so the registered KafkaSnapshotConsumer
+        // at an unreachable endpoint. No IHost is started, so the registered message consumer service
         // hosted service never runs — the step calls the handler directly.
         var configuration = new ConfigurationBuilder()
             .AddConfiguration(_fixture.Configuration)

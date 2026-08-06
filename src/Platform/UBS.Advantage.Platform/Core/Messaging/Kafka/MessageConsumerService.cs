@@ -1,57 +1,42 @@
-using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using UBS.Advantage.CommunicationModels.Snapshot;
-using UBS.Advantage.Messaging;
-using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
-using UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Configuration;
+using Ubs.Advantage.Core.Infrastructure.Commands;
 
-namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Consuming;
+namespace Ubs.Advantage.Core.Messaging.Kafka;
 
 /// <summary>
-/// Stand-in for the org consumer library: poll, deserialise the envelope, hand the message to
-/// the registered command, and commit the offset only when the command reports success. It
-/// knows nothing about snapshots — no payload-type branching, no business logic, no Application
-/// types — so at lift-and-shift this class is deleted outright and
-/// <see cref="Commands.SnapshotRequestCommand"/> is registered with the org library unchanged.
+/// Consumes one topic and runs the registered command for each message. Offsets are committed
+/// manually and only when the command reports success.
 /// </summary>
 /// <remarks>
-/// Failure semantics per solution design §8/§9: the offset is never committed on a failure path.
-/// A command returning <see cref="CommandResult.Fail"/> — or throwing, or an envelope that will
-/// not deserialise — makes the consumer log a single Critical alert, set a non-zero exit code
-/// and stop the host. The pod restarts, and Kafka redelivers from the last committed offset.
-/// Recovery is always forward: the consumer never seeks back, matching the org consumer wrapper,
-/// which has no seek capability and no in-process retry of its own.
+/// A command that reports failure — or throws, or a message body that will not deserialise —
+/// leaves the offset uncommitted, logs a single Critical alert and stops the host with a
+/// non-zero exit code, so the restarted process is redelivered the message from the last
+/// committed offset. There is no seek and no in-process retry: recovery is always forward.
 /// </remarks>
-public sealed class KafkaSnapshotConsumer : BackgroundService
+internal sealed class MessageConsumerService<TKey, TValue, TCommand> : BackgroundService
+    where TCommand : ACommand<Models.IMessage<TKey, TValue>>
 {
-    // Web defaults enable case-insensitive binding, which is what maps the PascalCase wire
-    // contract (docs/snapshot-request.schema.json) onto SnapshotRequest.
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-
-    private readonly IKafkaConsumerFactory _consumerFactory;
-    private readonly ACommand<IMessage<string, SnapshotRequest>> _command;
-    private readonly KafkaConsumerOptions _options;
-    private readonly TimeProvider _timeProvider;
+    private readonly string _topicKey;
+    private readonly TCommand _command;
+    private readonly KafkaOptions _options;
     private readonly IHostApplicationLifetime _appLifetime;
-    private readonly ILogger<KafkaSnapshotConsumer> _logger;
+    private readonly ILogger _logger;
 
-    public KafkaSnapshotConsumer(
-        IKafkaConsumerFactory consumerFactory,
-        ACommand<IMessage<string, SnapshotRequest>> command,
-        IOptions<KafkaConsumerOptions> options,
-        TimeProvider timeProvider,
+    public MessageConsumerService(
+        string topicKey,
+        TCommand command,
+        IOptions<KafkaOptions> options,
         IHostApplicationLifetime appLifetime,
-        ILogger<KafkaSnapshotConsumer> logger)
+        ILoggerFactory loggerFactory)
     {
-        _consumerFactory = consumerFactory;
+        _topicKey = topicKey;
         _command = command;
         _options = options.Value;
-        _timeProvider = timeProvider;
         _appLifetime = appLifetime;
-        _logger = logger;
+        _logger = loggerFactory.CreateLogger($"{typeof(KafkaOptions).Namespace}.MessageConsumerService");
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -64,15 +49,16 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         // Create() and Subscribe() sit inside the guarded region so a bad bootstrap config is
         // caught by the outer catch and logged with context.
         IConsumer<string, string>? consumer = null;
+        var topic = _options.ResolveTopic(_topicKey);
 
         try
         {
-            consumer = _consumerFactory.Create();
-            consumer.Subscribe(_options.Topic);
+            consumer = CreateConsumer();
+            consumer.Subscribe(topic);
 
             _logger.LogInformation(
-                "Kafka consumer subscribed to topic {Topic} as consumer group {ConsumerGroup}",
-                _options.Topic,
+                "Consumer subscribed to topic {Topic} as consumer group {ConsumerGroup}",
+                topic,
                 _options.ConsumerGroup);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -88,7 +74,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
                 }
                 catch (ConsumeException ex)
                 {
-                    _logger.LogError(ex, "Kafka consume error: {Reason}", ex.Error.Reason);
+                    _logger.LogError(ex, "Consume error on topic {Topic}: {Reason}", topic, ex.Error.Reason);
 
                     // Broker-level errors are not tied to a message, so back off rather than
                     // hot-spinning. Nothing was consumed, so nothing is committed or lost.
@@ -107,8 +93,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
                 if (!await DispatchAsync(consumer, result, stoppingToken))
                 {
-                    // Shutdown requested, or the command failed and the worker is exiting for
-                    // a pod restart.
+                    // Shutdown requested, or the command failed and the process is exiting.
                     break;
                 }
             }
@@ -120,21 +105,21 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         catch (Exception ex)
         {
             // The loop terminated unexpectedly. Log once, stop the host and return cleanly
-            // rather than rethrowing: a rethrow faults the BackgroundService task, and the
-            // host then logs the same exception again under its own category, so operations
-            // would see two or three alerts for one incident.
+            // rather than rethrowing: a rethrow faults the BackgroundService task, and the host
+            // then logs the same exception again under its own category, so operations would
+            // see two or three alerts for one incident.
             _logger.LogCritical(
                 ex,
-                "Kafka consume loop terminated unexpectedly; worker will stop and the pod will restart. topic={Topic} consumerGroup={ConsumerGroup}",
-                _options.Topic,
+                "Consume loop terminated unexpectedly; the process will stop and be restarted. topic={Topic} consumerGroup={ConsumerGroup}",
+                topic,
                 _options.ConsumerGroup);
 
-            StopWorkerForPodRestart();
+            StopForRestart();
         }
         finally
         {
             // Close commits nothing (auto-commit is disabled) but leaves the consumer group
-            // cleanly. Both calls are null-guarded because Create() may have thrown.
+            // cleanly. Both calls are null-guarded because CreateConsumer() may have thrown.
             consumer?.Close();
             consumer?.Dispose();
         }
@@ -142,8 +127,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     /// <summary>
     /// Runs the command for one message and commits the offset only when the command reports
-    /// success. Returns false when the consume loop must stop, either because shutdown was
-    /// requested or because the command failed and the worker is exiting for a pod restart.
+    /// success. Returns false when the consume loop must stop.
     /// </summary>
     private async Task<bool> DispatchAsync(
         IConsumer<string, string> consumer,
@@ -153,9 +137,10 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         CommandResult commandResult;
         try
         {
-            var message = new MessageEnvelope<string, SnapshotRequest>(
-                result.Message.Key,
-                Deserialize(result.Message.Value));
+            var message = new Models.Message<TKey, TValue>(
+                MessageSerialization.ToKey<TKey>(result.Message.Key),
+                MessageSerialization.Deserialize<TValue>(result.Message.Value),
+                ToHeaders(result.Message.Headers));
 
             commandResult = await _command.ExecuteAsync(message);
         }
@@ -165,9 +150,8 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         }
         catch (Exception ex)
         {
-            // Either the envelope would not deserialise, or the command threw instead of
-            // returning Fail. Both are the framework's problem, and both mean the same thing
-            // to the offset: not handled.
+            // Either the body would not deserialise, or the command threw instead of reporting
+            // failure. Both mean the same thing to the offset: not handled.
             _logger.LogError(
                 ex,
                 "Failed to dispatch message at {TopicPartitionOffset} messageKey={MessageKey}",
@@ -189,8 +173,8 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
         }
         catch (KafkaException ex)
         {
-            // Design doc §8 scenario 5: the writes are durable but the offset is not, so the
-            // message is redelivered and reprocessed idempotently after the restart.
+            // The work is durable but the offset is not, so the message is redelivered and
+            // reprocessed after the restart.
             return FailAndStop(result, $"Offset commit failed: {ex.Error.Reason}");
         }
 
@@ -204,46 +188,58 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
     /// <summary>
     /// Single exit path for a message that was not committed. There is no seek available, so
-    /// redelivery comes from the process exiting non-zero and the restarted pod resuming from
-    /// the last committed offset. One Critical, so one alert. Always returns false, stopping
-    /// the consume loop.
+    /// redelivery comes from the process exiting non-zero and the restarted process resuming
+    /// from the last committed offset. One Critical, so one alert. Always returns false,
+    /// stopping the consume loop.
     /// </summary>
     private bool FailAndStop(ConsumeResult<string, string> result, string reason)
     {
         _logger.LogCritical(
-            "Operations alert: message at {TopicPartitionOffset} was not handled; offset not committed, worker exiting non-zero so the pod restarts and Kafka redelivers from the last committed offset. reason={Reason} messageKey={MessageKey}",
+            "Operations alert: message at {TopicPartitionOffset} was not handled; offset not committed, process exiting non-zero so it is restarted and the message is redelivered from the last committed offset. reason={Reason} messageKey={MessageKey}",
             result.TopicPartitionOffset,
             reason,
             result.Message.Key);
 
-        StopWorkerForPodRestart();
+        StopForRestart();
 
         return false;
     }
 
-    /// <summary>
-    /// Deserialises the message body into the org request DTO. An empty body — a tombstone, or
-    /// a producer sending nothing — yields <c>null</c> rather than throwing, and the command
-    /// reports it as a failed message through its own null guard.
-    /// </summary>
-    private static SnapshotRequest? Deserialize(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            ? null
-            : JsonSerializer.Deserialize<SnapshotRequest>(value, SerializerOptions);
+    private IConsumer<string, string> CreateConsumer()
+    {
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = _options.BootstrapServers,
+            GroupId = _options.ConsumerGroup,
+            // Offsets are committed manually, only after the command reports success.
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+        };
+
+        return new ConsumerBuilder<string, string>(config)
+            .SetErrorHandler((_, error) => KafkaClientDiagnostics.HandleError(_logger, error))
+            .SetLogHandler((_, logMessage) => KafkaClientDiagnostics.HandleLog(_logger, logMessage))
+            .Build();
+    }
+
+    private static IReadOnlyList<Models.MessageHeader> ToHeaders(Headers? headers)
+        => headers is null
+            ? []
+            : [.. headers.Select(header => new Models.MessageHeader(header.Key, System.Text.Encoding.UTF8.GetString(header.GetValueBytes() ?? [])))];
 
     /// <summary>
     /// Stops the host with a non-zero exit code. <c>StopApplication()</c> on its own unwinds
     /// <c>host.Run()</c> to exit code 0, which Kubernetes treats as a clean stop rather than a
     /// crash; exit 1 is what makes the pod restart.
     /// </summary>
-    private void StopWorkerForPodRestart()
+    private void StopForRestart()
     {
         Environment.ExitCode = 1;
         _appLifetime.StopApplication();
     }
 
     /// <summary>Returns false when cancelled, signalling the consume loop to stop.</summary>
-    private async Task<bool> TryDelayAsync(TimeSpan delay, CancellationToken stoppingToken)
+    private static async Task<bool> TryDelayAsync(TimeSpan delay, CancellationToken stoppingToken)
     {
         if (delay <= TimeSpan.Zero)
         {
@@ -252,7 +248,7 @@ public sealed class KafkaSnapshotConsumer : BackgroundService
 
         try
         {
-            await Task.Delay(delay, _timeProvider, stoppingToken);
+            await Task.Delay(delay, stoppingToken);
             return true;
         }
         catch (OperationCanceledException)

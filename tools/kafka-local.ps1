@@ -5,7 +5,7 @@
   Spins up a single-node KRaft Kafka broker ad hoc via `docker run` for local
   development and testing, creates the ubs-advantage-snapshots request topic and the
   ubs-advantage-snapshot-responses response topic, and tears everything down again on
-  demand. Deployment is handled entirely at the org side after lift-and-shift; nothing
+  demand. Deployment is handled outside this repository; nothing
   here is deployable.
 
 .EXAMPLE

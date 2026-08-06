@@ -31,11 +31,10 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 - **Domain / Application** carry no framework dependencies — Application defines the
   ports (Kafka consumer contract, blob store, SQL repositories) that Infrastructure implements.
 - **Infrastructure** is split by concern (`Sql`, `Adls`, `Kafka`) so each adapter can be
-  swapped independently — notably the Kafka side, which follows the org consumer library's
-  command pattern: `SnapshotRequestCommand` holds the per-message work and is registered with
-  the org library unchanged at lift-and-shift, while `KafkaSnapshotConsumer` (the stand-in for
-  that library: poll, deserialise, dispatch, commit) is deleted. Neither swap touches
-  Application or Domain.
+  swapped independently. The Kafka layer is the platform command pattern in both directions:
+  `SnapshotRequestCommand` holds the per-message write work, `SnapshotResponseCommand` reports
+  the outcome of each published response, and the consumer and producer services they run under
+  come from `Ubs.Advantage.Core.Messaging.Kafka`.
 - **Worker** is the composition root: hosting, DI wiring, configuration.
 
 Every write is idempotent, the write order per message is fixed (blob → tracking →

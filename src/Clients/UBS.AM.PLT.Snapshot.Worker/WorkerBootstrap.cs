@@ -33,7 +33,7 @@ public static class WorkerBootstrap
                     builder.Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
                     builder.Configuration["BlobStorage:ContainerName"] ?? string.Empty,
                     builder.Configuration["BlobStorage:ConnectionString"])
-                .AddKafkaInfrastructure(builder.Configuration)
+                .AddKafkaInfrastructure()
                 .AddSnapshotConfigInfrastructure();
 
             var host = builder.Build();
@@ -73,7 +73,7 @@ public static class WorkerBootstrap
             // single Critical. Rethrowing would let it escape the process, firing both the
             // AppDomain.UnhandledException hook above (a duplicate Critical) and the CLR's default
             // unhandled-exception handler (a raw, non-JSON stderr stack-trace dump) — the exact
-            // duplicate-logging mistake already fixed in KafkaSnapshotConsumer.ConsumeLoopAsync.
+            // duplicate-logging mistake already fixed in the consumer service's own loop.
             // Environment.ExitCode = 1 (not a value returned from Main) still surfaces as the
             // process exit code when the top-level program returns normally, so k8s sees a
             // crash-like exit and restarts the pod — with clean single-line JSON logging.

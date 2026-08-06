@@ -9,9 +9,9 @@ namespace UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 /// </summary>
 /// <remarks>
 /// Every notification is published before the Kafka offset is committed. Publishing is
-/// fire-and-forget, matching the org publisher's own synchronous contract: the call queues
-/// the notification and returns immediately, so a delivery failure surfaces only in the
-/// publisher's own logging, not as an exception the caller can react to.
+/// fire-and-forget: the call queues the notification and returns immediately, so a delivery
+/// failure surfaces only in the publisher's own logging, not as an exception the caller can
+/// react to.
 ///
 /// The interface takes no <see cref="CancellationToken"/> because the publisher implementation
 /// does not accept one.

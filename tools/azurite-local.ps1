@@ -6,7 +6,7 @@
   ADLS Gen2) for local development and testing, and tears it down again on
   demand. The worker creates the blob container itself on first write — this
   script only provides the endpoint. Deployment is handled entirely at the org
-  side after lift-and-shift; nothing here is deployable.
+  outside this repository; nothing here is deployable.
 
 .EXAMPLE
   ./azurite-local.ps1 -Up      # start Azurite blob endpoint on localhost:10000

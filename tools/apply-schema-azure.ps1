@@ -5,7 +5,7 @@
   Applies the hand-written, idempotent schema scripts under db/scripts/ to the
   dev Azure SQL database using the caller's Entra identity (az login). Safe to
   re-run at any time — the scripts are idempotent. Deployment is handled
-  entirely at the org side after lift-and-shift; nothing here is deployable.
+  outside this repository; nothing here is deployable.
 
 .EXAMPLE
   ./apply-schema-azure.ps1
