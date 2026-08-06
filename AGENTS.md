@@ -91,6 +91,7 @@ tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
 docs/       solution design document and diagrams
+deploy/     local-only Docker Desktop Kubernetes run (Dockerfiles + minimal Helm chart)
 ```
 
 ## Conventions
@@ -158,9 +159,15 @@ platform packages; see that project's README before changing anything in it.
   (`GET /snapshots/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`). For the
   detail read the server resolves `snapshotId` to its `AdlsPath` from `dbo.PortfolioSnapshotIndex`
   and returns the stored payload blobs verbatim.
-- **No deployment artifacts anywhere in this repo**: no Bicep, ARM templates, Helm charts,
-  K8s manifests, CI/CD pipeline files, or AKS deployment YAML. This repo's scope ends at
-  local development and local testing.
+- **No production deployment artifacts**: no Bicep, ARM templates, CI/CD pipeline files, or
+  AKS deployment YAML. Real deployment is owned by the org, outside this repository.
+  The one exception is `deploy/`, which exists purely to run the two services on a local
+  Docker Desktop Kubernetes cluster: two Dockerfiles and a deliberately minimal Helm chart
+  (a Deployment plus Service for the API, a three-replica Deployment for the consumer, and
+  one shared ConfigMap/Secret). It targets host-local Kafka, Azurite and SQL Server via
+  `host.docker.internal` and must never grow production concerns — no ingress, no TLS, no
+  autoscaling, no cloud identity. See `deploy/README.md`. Nothing in `deploy/` is a
+  template for how the org deploys this service.
 - No speculative abstractions. Build only what the current approved slice needs.
 
 ## Development workflow — four-role pipeline
@@ -200,9 +207,12 @@ green.
 
 ## Local environment
 
-No committed docker-compose or Dockerfile — local infrastructure is spun up **ad hoc**
-via small setup/teardown scripts under `tools/` (`docker run` on demand). These are dev
-convenience scripts, not infra artifacts.
+No committed docker-compose — local infrastructure (Kafka, Azurite, SQL Server) is spun up
+**ad hoc** via small setup/teardown scripts under `tools/` (`docker run` on demand). These
+are dev convenience scripts, not infra artifacts. The only committed Dockerfiles are the
+two under `deploy/docker/`, which build the API and consumer images for the local
+Kubernetes run described in `deploy/README.md`; the services themselves are still run
+with `dotnet run` for everyday development.
 
 - Kafka: ad-hoc container via `tools/` setup script, started when a dev or the
   tester-e2e role needs a broker, torn down after

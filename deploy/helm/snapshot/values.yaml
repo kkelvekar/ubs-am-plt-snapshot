@@ -1,0 +1,49 @@
+# Defaults target Docker Desktop Kubernetes. Everything that points outside the
+# cluster uses host.docker.internal, which Docker Desktop resolves from pods to the
+# host machine (verified: 192.168.65.254).
+
+image:
+  pullPolicy: IfNotPresent
+  api:
+    repository: ubs-snapshot-api
+    tag: local
+  consumer:
+    repository: ubs-snapshot-consumer
+    tag: local
+
+api:
+  replicaCount: 1
+  service:
+    # LoadBalancer is what Docker Desktop publishes on the host: the API answers on
+    # http://localhost:8080. A NodePort is NOT reachable from the host with the
+    # kind-based Docker Desktop cluster — the node ports are not published.
+    type: LoadBalancer
+    port: 8080
+    # Only used when type is NodePort.
+    nodePort: 30080
+
+consumer:
+  replicaCount: 3
+
+kafka:
+  bootstrapServers: host.docker.internal:9092
+  consumerGroup: snapshot-writer-api
+  topics:
+    request: ubs-advantage-snapshots
+    response: ubs-advantage-snapshot-responses
+
+blobStorage:
+  containerName: ubsadvsnapshots
+  # Blank ServiceUri forces the connection-string (Azurite) path in
+  # BlobContainerClientFactory instead of DefaultAzureCredential, which pods do not have.
+  serviceUri: ""
+  # Azurite's well-known development account, reached on the host.
+  connectionString: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://host.docker.internal:10000/devstoreaccount1;"
+
+database:
+  # Host SQL Server over TCP with SQL authentication — Linux containers cannot use
+  # Trusted_Connection. Supply at install time, e.g.
+  #   helm install ... -f deploy/values.local.yaml
+  connectionString: ""
+
+resources: {}

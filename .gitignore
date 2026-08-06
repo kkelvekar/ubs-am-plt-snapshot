@@ -13,6 +13,7 @@ out/
 # Local environment
 .env.local
 CLAUDE.local.md
+deploy/values.local.yaml
 
 # Test coverage
 coverage/

@@ -1,0 +1,10 @@
+# Keeps host build output (Windows paths in obj/) out of the Linux container build.
+**/bin/
+**/obj/
+**/out/
+.git/
+.vs/
+.claude/
+tests/
+tools/
+docs/

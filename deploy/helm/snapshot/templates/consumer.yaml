@@ -1,0 +1,35 @@
+# The Kafka consumer worker. No Service: it has no inbound traffic — it only consumes
+# from Kafka and writes to blob storage and SQL. Three replicas match the three
+# partitions of the request topic, so each pod owns one partition.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "snapshot.fullname" . }}-consumer
+  labels:
+    {{- include "snapshot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: consumer
+spec:
+  replicas: {{ .Values.consumer.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: consumer
+  template:
+    metadata:
+      labels:
+        {{- include "snapshot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: consumer
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: consumer
+          image: "{{ .Values.image.consumer.repository }}:{{ .Values.image.consumer.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "snapshot.fullname" . }}-config
+            - secretRef:
+                name: {{ include "snapshot.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
