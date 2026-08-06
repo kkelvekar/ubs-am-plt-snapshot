@@ -23,7 +23,7 @@ design-level question back instead of improvising.
 
 1. `AGENTS.md` — stack, layout, conventions, invariants (all binding)
 2. The brief passed to you in the delegation message
-3. `docs/Portfolio Snapshot - Solution Design - Final Draft.md` sections relevant to the slice
+3. `docs/Portfolio Snapshot - Solution Design.md` sections relevant to the slice
 4. Existing code in the projects you will touch
 
 ## Hard rules

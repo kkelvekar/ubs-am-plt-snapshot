@@ -18,13 +18,13 @@ before reading anything else.
 
 Validate a proposed implementation approach for one slice against the signed-off
 architecture BEFORE the dev role starts. You do not redesign — the architecture in
-`docs/Portfolio Snapshot - Solution Design - Final Draft.md` is final. Your job is
+`docs/Portfolio Snapshot - Solution Design.md` is final. Your job is
 conformance checking and producing an unambiguous brief.
 
 ## Must read before acting
 
 1. `AGENTS.md` — stack, layout, conventions, invariants
-2. `docs/Portfolio Snapshot - Solution Design - Final Draft.md` — the functional contract
+2. `docs/Portfolio Snapshot - Solution Design.md` — the functional contract
 3. Existing code in `src/` relevant to the slice
 
 ## Validation checklist

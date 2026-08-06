@@ -1,0 +1,48 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Snapshot Response",
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+        "SnapshotId": {
+            "type": "string"
+        },
+        "AccountId": {
+            "type": "string"
+        },
+        "ReceivedFiles": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "MissingFiles": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "Status": {
+            "type": "string",
+            "enum": ["Receiving", "Complete", "Failed"]
+        },
+        "FirstReceivedAt": {
+            "type": "string"
+        },
+        "LastUpdatedAt": {
+            "type": "string"
+        },
+        "CompletedAt": {
+            "type": "string"
+        },
+        "DeclaredFailedAt": {
+            "type": "string"
+        },
+        "ReasonCode": {
+            "type": "string"
+        },
+        "ReasonDetail": {
+            "type": "string"
+        }
+    }
+}

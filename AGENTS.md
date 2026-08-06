@@ -12,7 +12,7 @@ JSON file to ADLS Gen2, tracks completeness per snapshot in an Azure SQL trackin
 and — once all required files for a snapshot are received — builds and writes the permanent
 Azure SQL index row that makes the snapshot visible in the audit UI.
 
-The full functional contract is `docs/Portfolio Snapshot - Solution Design - Final Draft.md`.
+The full functional contract is `docs/Portfolio Snapshot - Solution Design.md`.
 The design doc wins over any assumption in this file or in code. The architecture is
 signed off — do not redesign it.
 
@@ -27,7 +27,7 @@ signed off — do not redesign it.
 - **Database**: Azure SQL (local SQL Server for development). EF Core mapped to
   hand-written schema in `db/scripts/` — never add EF migrations; a schema change means
   updating the `.sql` script and the EF mapping together
-- **Serialization**: `System.Text.Json`. The wire contract is the org-approved JSON schema
+- **Serialization**: `System.Text.Json`. The wire contract is the approved JSON schema
   (`docs/snapshot-request.schema.json`): seven string properties, **PascalCase** on the
   wire. `JsonSerializerDefaults.Web` (case-insensitive) binds it, and camelCase and unknown
   extra properties keep binding too. Message payloads arrive as opaque JSON **text** in a

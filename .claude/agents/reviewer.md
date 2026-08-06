@@ -20,7 +20,7 @@ before reading anything else.
 
 1. `AGENTS.md` — invariants and conventions
 2. The brief and the dev's change summary passed in the delegation message
-3. `docs/Portfolio Snapshot - Solution Design - Final Draft.md` sections relevant to the slice
+3. `docs/Portfolio Snapshot - Solution Design.md` sections relevant to the slice
 4. The full diff / changed files
 
 ## Review checklist (priority order)

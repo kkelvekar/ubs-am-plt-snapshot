@@ -20,7 +20,7 @@ do it before reading anything else, and do not drop it under pressure.
 
 1. `AGENTS.md` — invariants, layout, local environment
 2. The brief and its acceptance criteria passed in the delegation message
-3. `docs/Portfolio Snapshot - Solution Design - Final Draft.md` §4 (message contract),
+3. `docs/Portfolio Snapshot - Solution Design.md` §4 (message contract),
    §6 (write flow), §8 (failure scenarios)
 
 ## Mode A — in-process integration tests (committed, in `tests/`)
