@@ -173,7 +173,8 @@ platform packages; see that project's README before changing anything in it.
 ## Development workflow — four-role pipeline
 
 All non-trivial changes flow through four roles, in order. Any AI tool (or human) can play
-a role; the contract between roles is the same everywhere.
+a role; the current agent session carries each structured response to the next role. Do not
+create workspace handshake files for this workflow.
 
 1. **architect-validator** (read-only) — before implementation starts, validates the
    proposed approach for a slice against the design doc and the Clean Architecture

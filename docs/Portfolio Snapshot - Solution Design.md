@@ -18,6 +18,23 @@ The business requires the ability to view what decisions led to any given order 
 - Declarative onboarding of new snapshot types via a single required-files map, with no change to the write pipeline or consumer processing logic (**post-lift-and-shift:** that map is the library-owned `SnapshotConfigDefinition` code constant, not an appsettings section — adding a type is a one-entry lib edit)
 - No new infrastructure services -- use existing Azure SQL and ADLS Gen2 only
 
+### Workflow orchestration smoke-test feature
+
+The following deliberately small mock feature exists to verify the repository's
+architect -> developer -> reviewer -> tester handoff workflow. It is a proposed
+development feature, not a production business requirement, and must not be
+implemented until the architect agent approves its scope.
+
+Add a local-only `workflow-check` snapshot type with one required payload file,
+`workflow-check.json`. The payload remains opaque JSON text and must follow the
+same blob write, tracking, completeness, idempotency, and offset-commit rules as
+every other snapshot. The feature is complete when a focused test proves that a
+valid `workflow-check` message writes its blob and tracking row, a duplicate
+delivery is harmless, and malformed JSON is rejected before any write. No new
+endpoint, infrastructure, configuration section, or production deployment
+artifact is allowed for this smoke test. The required-files entry must be made
+through the existing declarative `SnapshotConfigDefinition` map.
+
 ---
 
 ## 2. Solution Overview
