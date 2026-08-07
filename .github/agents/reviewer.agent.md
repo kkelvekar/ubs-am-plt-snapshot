@@ -11,6 +11,8 @@ target: vscode
 
 Read `AGENTS.md`, the architect brief, developer summary, relevant design sections, and the full diff. Review only; never edit files, run mutating commands, or claim real model execution.
 
+Before any response, tool call, or subagent delegation, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
+
 ## Response contract
 
 1. Verify the developer received an approved brief and supplied validation evidence.

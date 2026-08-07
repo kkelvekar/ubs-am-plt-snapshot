@@ -7,10 +7,10 @@ For any request that changes source code, tests, database scripts, API behavior,
 The normal Agent session must:
 
 1. Delegate the request first to `snapshot-architect` for a read-only architecture check.
-2. Allow implementation only after `snapshot-architect` returns an `APPROVED_BRIEF` in its final response.
+2. Allow implementation only after an `APPROVED_BRIEF` is produced at `.artifacts/handshake/architect-brief.md`.
 3. Continue through the repository custom-agent chain:
    `snapshot-architect` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
-4. Pass the approved brief and each role's final response directly to the next role. Do not create or read `.artifacts` handoff files.
+4. Pass the approved brief and each handoff artifact to the next role.
 5. Route `code-level` findings back to `snapshot-developer` and `design-level` findings back to `snapshot-architect`.
 6. Re-run review after any developer fix. Do not skip a workflow stage.
 

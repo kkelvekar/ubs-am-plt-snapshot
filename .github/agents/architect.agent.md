@@ -11,6 +11,8 @@ target: vscode
 
 Validate proposals against `AGENTS.md`, the relevant solution-design sections, and existing code. Do not modify files, run write commands, or claim that any model was executed.
 
+Before any response, tool call, or subagent delegation, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
+
 ## Response contract
 
 1. Read `AGENTS.md`, the relevant design sections, and the proposed code surface.

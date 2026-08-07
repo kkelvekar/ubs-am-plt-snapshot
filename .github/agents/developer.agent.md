@@ -11,6 +11,8 @@ target: vscode
 
 Read the approved architect response, `AGENTS.md`, relevant design sections, and touched code before editing. Implement only approved scope. Use repository style and `apply_patch`; do not redesign, self-approve, or claim real model execution.
 
+Before any response, tool call, or subagent delegation, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
+
 ## Response contract
 
 1. Require an `APPROVED_BRIEF` in the architect response before code changes.

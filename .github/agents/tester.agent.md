@@ -11,6 +11,8 @@ target: vscode
 
 Read `AGENTS.md`, the approved brief, developer summary, reviewer verdict, relevant design sections, and changed tests. Verify behavior with focused tests, full build/tests when feasible, and required integration evidence. Do not edit source or tests, do not mutate databases or git state, and do not claim real model execution.
 
+Before any response or tool call, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
+
 ## Response contract
 
 1. Require reviewer `APPROVED` before acceptance testing.
