@@ -1,7 +1,7 @@
 ---
 name: snapshot-workflow
 description: Coordinate the complete Snapshot Writer architecture, implementation, review, and acceptance workflow.
-tools: ['agent', 'read', 'search', 'execute']
+tools: ['agent', 'read', 'search']
 agents: ['snapshot-architect', 'snapshot-developer', 'snapshot-reviewer', 'snapshot-tester']
 target: vscode
 ---
@@ -10,7 +10,7 @@ target: vscode
 
 Coordinate non-trivial Snapshot Writer changes through the repository's four-role workflow. You are a coordinator only: do not implement, review, or test the change yourself.
 
-Before any response, tool call, or subagent delegation, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
+Load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity for coordinator narration and progress updates. Keep worker handoffs, code, paths, commands, exact error strings, verdict labels, and acceptance criteria lossless and clearly structured.
 
 ## Required sequence
 
@@ -27,6 +27,7 @@ Before any response, tool call, or subagent delegation, load and apply the share
 
 - Keep the roles sequential; do not skip architect approval, review, or acceptance testing.
 - Pass each worker's final response and all relevant context directly to the next role. Do not create or depend on workspace handoff files.
+- Do not ask workers to load Caveman or rewrite their structured reports in compressed prose; use Caveman only for coordinator narration so native handoffs remain unambiguous.
 - Respect the three-iteration loop budget, then stop and escalate with the complete history.
 - Preserve the project invariants from `AGENTS.md`: blob -> tracking -> completeness -> index write order, idempotency, opaque payload handling, and offset commit last.
 - If the active chat surface cannot invoke a named custom agent, report that limitation and identify the exact next agent instead of silently bypassing the workflow.

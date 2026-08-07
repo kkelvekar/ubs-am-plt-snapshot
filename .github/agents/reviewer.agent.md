@@ -3,15 +3,13 @@ name: snapshot-reviewer
 description: Review a Snapshot Writer implementation for architecture, invariants, correctness, and tests. Read-only.
 user-invocable: false
 model: GPT-5.6 Terra (copilot)
-tools: ['read', 'search', 'execute', 'agent']
+tools: ['read', 'search', 'execute']
 target: vscode
 ---
 
 # Snapshot Reviewer
 
 Read `AGENTS.md`, the architect brief, developer summary, relevant design sections, and the full diff. Review only; never edit files, run mutating commands, or claim real model execution.
-
-Before any response, tool call, or subagent delegation, load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra` intensity. Keep its Auto-Clarity exceptions.
 
 ## Response contract
 
