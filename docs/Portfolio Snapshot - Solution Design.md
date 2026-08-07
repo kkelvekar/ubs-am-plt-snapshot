@@ -35,6 +35,33 @@ endpoint, infrastructure, configuration section, or production deployment
 artifact is allowed for this smoke test. The required-files entry must be made
 through the existing declarative `SnapshotConfigDefinition` map.
 
+### Local mock read endpoint
+
+`GET /snapshots/api/mock/portfolio-snapshots` is a development-only Read API route that
+returns one deterministic, hard-coded grid row as a smoke-test fixture for local UI and
+tooling work, independent of any real Kafka, ADLS or Azure SQL data. It is available only
+when the API host's environment is Development; in any other environment the route
+returns HTTP 404 as if it did not exist. The endpoint performs no durable writes and
+bypasses Kafka, ADLS Gen2, Azure SQL, tracking, completeness and index logic entirely. It
+is not a production read path, carries no filtering or query parameters, and is not part
+of the audit UI's screens described in section 10. A Development request returns HTTP 200
+with this exact JSON body:
+
+```json
+[
+  {
+    "snapshotId": "mock-snapshot-001",
+    "accountId": "MOCK-ACCOUNT-001",
+    "snapshotDate": "2026-08-01T00:00:00Z",
+    "eventType": "REBALANCE",
+    "benchmark": "MSCI World",
+    "baseCcy": "CHF",
+    "numOrders": 4,
+    "ptcAlerts": 0
+  }
+]
+```
+
 ---
 
 ## 2. Solution Overview
@@ -601,6 +628,13 @@ On Orders tab click -- fetch orders.json.
 On Calculations section open -- fetch calculations.json. This is the only heavy fetch and most audit users never trigger it.
 
 No server-side search is required within a snapshot detail. All filtering is client-side on already-loaded data.
+
+The two production routes above (`GET /snapshots/api/portfolio-snapshots` and
+`GET /snapshots/api/portfolio-snapshots/{snapshotId}/payloads[/{payloadType}]`) always read
+real Azure SQL and ADLS Gen2 data and are available in every environment. The
+development-only `GET /snapshots/api/mock/portfolio-snapshots` route (section 1, Local mock
+read endpoint) is a separate, unrelated fixture endpoint gated to Development and returns
+canned data with no backing store — it is never used to serve either audit screen.
 
 ---
 
