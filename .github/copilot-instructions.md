@@ -2,16 +2,16 @@
 
 ## Required workflow for non-trivial changes
 
-For any request that changes source code, tests, database scripts, API behavior, worker behavior, infrastructure behavior, or the approved solution design, automatically start the repository workflow at `snapshot-architect`. The user should not need to select the architect agent or repeat this instruction.
+For any request that changes source code, tests, database scripts, API behavior, worker behavior, infrastructure behavior, or the approved solution design, automatically start the repository workflow at `snapshot-planner`. The user should not need to select the planner agent or repeat this instruction.
 
 The normal Agent session must:
 
-1. Delegate the request first to `snapshot-architect` for a read-only architecture check.
-2. Allow implementation only after `snapshot-architect` returns an `APPROVED_BRIEF` in its native Copilot response.
+1. Delegate the request first to `snapshot-planner` for a read-only implementation plan and architecture check.
+2. Allow implementation only after `snapshot-planner` returns `Verdict: READY_FOR_IMPLEMENTATION` in its native Copilot response.
 3. Continue through the repository custom-agent chain:
-   `snapshot-architect` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
-4. Pass the approved brief, implementation summary, review verdict, and tester evidence directly through native Copilot agent context.
-5. Route `code-level` findings back to `snapshot-developer` and `design-level` findings back to `snapshot-architect`.
+   `snapshot-planner` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
+4. Pass the ready plan, implementation summary, review verdict, and tester evidence directly through native Copilot agent context.
+5. Route `code-level` findings back to `snapshot-developer` and `design-level` or `acceptance-contract` findings back to `snapshot-planner`.
 6. Re-run review after any developer fix. Do not skip a workflow stage.
 
 Do not create `.artifacts/`, handoff files, or other workspace files solely to transfer workflow state between agents. Native Copilot agent responses are the source of truth for workflow handoffs. Create workspace files only when they are part of the requested product, source, test, or documentation change.

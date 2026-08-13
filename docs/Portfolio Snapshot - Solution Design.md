@@ -21,9 +21,10 @@ The business requires the ability to view what decisions led to any given order 
 ### Workflow orchestration smoke-test feature
 
 The following deliberately small mock feature exists to verify the repository's
-architect -> developer -> reviewer -> tester handoff workflow. It is a proposed
-development feature, not a production business requirement, and must not be
-implemented until the architect agent approves its scope.
+planner -> developer -> reviewer -> tester handoff workflow. It is a proposed
+development feature, not a production business requirement. The planner must assess
+its scope and return `READY_FOR_IMPLEMENTATION` before it is implemented; a compatible
+feature is not rejected merely because it was absent from this document.
 
 Add a local-only `workflow-check` snapshot type with one required payload file,
 `workflow-check.json`. The payload remains opaque JSON text and must follow the

@@ -2,7 +2,7 @@
 name: snapshot-workflow
 description: Coordinate the complete Snapshot Writer architecture, implementation, review, and acceptance workflow.
 tools: ['agent', 'read', 'search']
-agents: ['snapshot-architect', 'snapshot-developer', 'snapshot-reviewer', 'snapshot-tester']
+agents: ['snapshot-planner', 'snapshot-developer', 'snapshot-reviewer', 'snapshot-tester']
 target: vscode
 ---
 
@@ -14,18 +14,18 @@ Load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra`
 
 ## Required sequence
 
-1. Invoke `snapshot-architect` first with the user's request and the relevant repository context.
-2. Continue only when the architect's final response contains `Verdict: APPROVED_BRIEF`.
-3. Invoke `snapshot-developer` with the approved brief and the original request. Require focused tests and a structured implementation summary.
-4. Invoke `snapshot-reviewer` with the approved brief, developer summary, and full diff. Require a structured verdict.
+1. Invoke `snapshot-planner` first with the user's request and the relevant repository context.
+2. Continue only when the planner's final response contains `Verdict: READY_FOR_IMPLEMENTATION`.
+3. Invoke `snapshot-developer` with the ready plan and the original request. Require focused tests, documentation updates named by the plan, and a structured implementation summary.
+4. Invoke `snapshot-reviewer` with the ready plan, developer summary, and full diff. Require a structured verdict.
 5. If the reviewer returns `CHANGES_REQUESTED`, treat every finding as blocking. Route `code-level` findings to `snapshot-developer`; after each developer fix, require an updated implementation summary and invoke `snapshot-reviewer` again.
-6. Route any `design-level` finding to `snapshot-architect` and stop progression until the architect returns a fresh `APPROVED_BRIEF`. Then invoke `snapshot-developer` with the fresh brief and invoke `snapshot-reviewer` again before continuing.
-7. Invoke `snapshot-tester` only after the reviewer returns `Verdict: APPROVED`. Pass the current approved brief, developer summary, reviewer verdict, and changed-file context.
+6. Route any `design-level` or acceptance-contract finding to `snapshot-planner` and stop progression until the planner returns a fresh `READY_FOR_IMPLEMENTATION` plan. Then invoke `snapshot-developer` with the fresh plan and invoke `snapshot-reviewer` again before continuing.
+7. Invoke `snapshot-tester` only after the reviewer returns `Verdict: APPROVED`. Pass the current ready plan, developer summary, reviewer verdict, and changed-file context.
 8. Treat the tester report as the terminal workflow result. Do not claim a verdict or evidence that a worker did not produce.
 
 ## Coordination rules
 
-- Keep the roles sequential; do not skip architect approval, review, or acceptance testing.
+- Keep the roles sequential; do not skip planning, review, or acceptance testing.
 - Pass each worker's final response and all relevant context directly to the next role. Do not create or depend on workspace handoff files.
 - Do not ask workers to load Caveman or rewrite their structured reports in compressed prose; use Caveman only for coordinator narration so native handoffs remain unambiguous.
 - Respect the three-iteration loop budget, then stop and escalate with the complete history.

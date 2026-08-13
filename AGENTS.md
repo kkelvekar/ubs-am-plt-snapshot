@@ -173,23 +173,27 @@ platform packages; see that project's README before changing anything in it.
 ## Development workflow — four-role pipeline
 
 All non-trivial changes flow through four roles, in order. The canonical GitHub workflow is
-`snapshot-architect` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
-The equivalent Claude roles are `architect-validator` -> `dev` -> `reviewer` -> `tester-e2e`.
+`snapshot-planner` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
+The equivalent Claude roles are `planner` -> `dev` -> `reviewer` -> `tester-e2e`.
 The current agent session carries each structured response directly to the next role; do not
 create workspace handshake files for this workflow.
 
-1. **snapshot-architect** (read-only) — validates the proposed slice against this file, the
-  solution design, and the Clean Architecture boundaries. It does not redesign the approved
-  architecture. It must return `Verdict: APPROVED_BRIEF` with scope, placement, invariants,
-  and acceptance criteria before implementation can start. Design-level findings return here.
-2. **snapshot-developer** — requires the approved brief, implements only that scope, and adds
+1. **snapshot-planner** (read-only) — plans the proposed slice against this file, the
+  solution design, existing code, and Clean Architecture boundaries. It provides
+  implementation-ready direction rather than rejecting a legitimate feature merely because
+  it is not yet documented. Compatible undocumented features include required design
+  documentation updates in the plan; architecture or invariant changes pause for clarification.
+  It must return `Verdict: READY_FOR_IMPLEMENTATION`, `NEEDS_CLARIFICATION`, or `BLOCKED`, with
+  scope, placement, invariants, implementation direction, and acceptance criteria before
+  implementation can start.
+2. **snapshot-developer** — requires the ready plan, implements only that scope, and adds
   focused tests. It runs focused validation immediately after edits and returns the changed
   files, validation evidence, open issues, and reviewer focus. It never self-approves.
-3. **snapshot-reviewer** (read-only) — verifies the approved brief, implementation evidence,
+3. **snapshot-reviewer** (read-only) — verifies the ready plan, implementation evidence,
   full diff, Clean Architecture boundaries, core invariants, configuration, scope, and tests.
   It returns `Verdict: APPROVED` or `Verdict: CHANGES_REQUESTED`; every finding is blocking
-  and is tagged `level: code` or `level: design`. Code-level findings return to
-  snapshot-developer; design-level findings return to snapshot-architect. After every
+  and is tagged `level: code`, `level: design`, or `level: acceptance-contract`. Code-level findings return to
+  snapshot-developer; design-level or acceptance-contract findings return to snapshot-planner. After every
   developer fix, snapshot-reviewer runs again.
 4. **snapshot-tester** (read-only) — runs only after reviewer `APPROVED` and reports evidence
   with `Verdict: PASS` or `Verdict: FAIL`. It must not edit source or tests, mutate databases
@@ -223,11 +227,11 @@ create workspace handshake files for this workflow.
      with `curl` against its configured `localhost` endpoint; do not call external, shared, or
      cloud endpoints or replace curl request/response evidence with browser automation.
 
-**Coordination rules**: do not skip architect approval, review, or acceptance testing. Pass
-the approved brief, implementation summary, review verdict, changed-file context, and tester
+**Coordination rules**: do not skip planning, review, or acceptance testing. Pass
+the ready plan, implementation summary, review verdict, changed-file context, and tester
 evidence directly through native agent context. Treat every reviewer `CHANGES_REQUESTED`
-finding as blocking. Route code-level findings to snapshot-developer and design-level findings
-to snapshot-architect; after a fresh approved brief, return through snapshot-developer and
+finding as blocking. Route code-level findings to snapshot-developer and design-level or
+acceptance-contract findings to snapshot-planner; after a fresh ready plan, return through snapshot-developer and
 snapshot-reviewer before testing. Respect a three-iteration loop budget, then stop and escalate
 to a human with the complete history.
 
