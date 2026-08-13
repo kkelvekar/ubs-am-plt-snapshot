@@ -32,3 +32,10 @@ Load and apply the shared [caveman skill](../skills/caveman/SKILL.md) at `ultra`
 - Preserve the project invariants from `AGENTS.md`: blob -> tracking -> completeness -> index write order, idempotency, opaque payload handling, and offset commit last.
 - If the active chat surface cannot invoke a named custom agent, report that limitation and identify the exact next agent instead of silently bypassing the workflow.
 - The coordinator may inspect repository state and run non-mutating validation commands, but only the developer may edit implementation files within the approved scope.
+
+## Lean handoffs
+
+- Do not repeat repository discovery performed by a worker.
+- Handoff prompts contain only: verdict, approved scope or blocking findings, changed files, validation evidence, and next-role focus. Refer to native responses already in session instead of quoting them.
+- Use one short progress update between roles. Do not restate the plan, implementation summary, or verdict in narration.
+- Invoke each role once per required pass. Additional invocations occur only for a routed blocking finding.

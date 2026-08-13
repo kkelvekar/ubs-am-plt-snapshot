@@ -20,3 +20,11 @@ Read the approved architect response, `AGENTS.md`, relevant design sections, and
 5. Handoff target is `snapshot-reviewer`. Never mark the slice approved; reviewer owns that verdict.
 
 Reviewer findings tagged `code-level` return to `snapshot-developer`. Findings tagged `design-level` or `acceptance-contract` return to `snapshot-planner`.
+
+## Efficient execution
+
+- Use the ready plan and changed-file scope as the discovery index. Exclude `bin/`, `obj/`, `.git/`, and generated files from searches.
+- Read each target file once, batch coherent edits, then run one focused validation pass. Do not rediscover files already named by the plan.
+- Run each required build or test command once. Repeat only after a relevant edit or an environment failure with a concrete corrective action.
+- Default budget: at most 16 tool calls before the implementation summary. If exceeded, identify the blocking uncertainty instead of continuing open-ended exploration.
+- Keep the summary under 500 words. Report decisive command result lines, not raw logs or a narrative of tool use.

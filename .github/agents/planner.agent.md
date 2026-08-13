@@ -27,3 +27,11 @@ Return exactly one structured plan containing:
 Use `READY_FOR_IMPLEMENTATION` when the developer has enough direction to implement safely. Use `NEEDS_CLARIFICATION` for an unresolved product or design choice. Use `BLOCKED` for a prerequisite or constraint that prevents implementation. Do not use rejection merely because the feature is absent from the current design document.
 
 The response is the contract for the current agent session. The developer implements only the ready plan, updates documentation named in the plan, and routes new design ambiguity back to `snapshot-planner`.
+
+## Efficient discovery
+
+- Start from the requested surface and its directly referenced types, tests, and governing design section. Do not inventory the repository.
+- Exclude `bin/`, `obj/`, `.git/`, and generated files from every search.
+- Do not reopen a file or repeat a search unless a specific unresolved question requires it.
+- Default budget: at most 12 combined read/search calls. Exceed it only for a named architecture ambiguity and state why.
+- Keep the final plan implementation-ready but compact: each required response field appears once; no recap after acceptance criteria.
