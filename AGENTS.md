@@ -41,7 +41,7 @@ signed off — do not redesign it.
 
 Clean Architecture. Dependencies point inward only:
 
-```
+```text
 Domain  <--  Application  <--  Infrastructure  <--  Worker
 ```
 
@@ -85,7 +85,7 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 
 ## Repository layout
 
-```
+```text
 src/        Core/ (Domain, Application) | Infrastructure/ (Sql, Adls, Kafka) | Platform/ | Clients/ (Worker, Api)
 tests/      test projects (unit + in-process integration)
 tools/      developer utilities (e.g. Kafka test message producer)
@@ -172,20 +172,28 @@ platform packages; see that project's README before changing anything in it.
 
 ## Development workflow — four-role pipeline
 
-All non-trivial changes flow through four roles, in order. Any AI tool (or human) can play
-a role; the current agent session carries each structured response to the next role. Do not
+All non-trivial changes flow through four roles, in order. The canonical GitHub workflow is
+`snapshot-architect` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
+The equivalent Claude roles are `architect-validator` -> `dev` -> `reviewer` -> `tester-e2e`.
+The current agent session carries each structured response directly to the next role; do not
 create workspace handshake files for this workflow.
 
-1. **architect-validator** (read-only) — before implementation starts, validates the
-   proposed approach for a slice against the design doc and the Clean Architecture
-   boundaries above. Does not redesign; the architecture is signed off. Output: an
-   approved brief (scope, layer placement, invariants to hold, acceptance criteria).
-2. **dev** — implements the approved brief exactly, including unit tests. Raises a
-   design-level question back to architect-validator instead of improvising.
-3. **reviewer** (read-only) — reviews the diff for Clean Architecture layering violations
-   and the core invariants (write order, idempotency, offset-last). Produces findings;
-   never fixes code. Verdict: APPROVED or CHANGES_REQUESTED.
-4. **tester-e2e** — two distinct testing modes, both required:
+1. **snapshot-architect** (read-only) — validates the proposed slice against this file, the
+  solution design, and the Clean Architecture boundaries. It does not redesign the approved
+  architecture. It must return `Verdict: APPROVED_BRIEF` with scope, placement, invariants,
+  and acceptance criteria before implementation can start. Design-level findings return here.
+2. **snapshot-developer** — requires the approved brief, implements only that scope, and adds
+  focused tests. It runs focused validation immediately after edits and returns the changed
+  files, validation evidence, open issues, and reviewer focus. It never self-approves.
+3. **snapshot-reviewer** (read-only) — verifies the approved brief, implementation evidence,
+  full diff, Clean Architecture boundaries, core invariants, configuration, scope, and tests.
+  It returns `Verdict: APPROVED` or `Verdict: CHANGES_REQUESTED`; every finding is blocking
+  and is tagged `level: code` or `level: design`. Code-level findings return to
+  snapshot-developer; design-level findings return to snapshot-architect. After every
+  developer fix, snapshot-reviewer runs again.
+4. **snapshot-tester** (read-only) — runs only after reviewer `APPROVED` and reports evidence
+  with `Verdict: PASS` or `Verdict: FAIL`. It must not edit source or tests, mutate databases
+  or git state, or claim evidence it did not produce. It performs two distinct testing modes:
    - **Mode A — in-process integration tests** (committed to `tests/`): builds
      `SnapshotMessage` envelopes in code and feeds them directly into the
      message-handling pipeline, bypassing real Kafka; asserts on resulting ADLS Gen2 blob
@@ -193,35 +201,35 @@ create workspace handshake files for this workflow.
      dev resources (`DefaultAzureCredential`), configured via `appsettings.json` in the
      integration test project. Fast, deterministic, CI-friendly.
    - **Mode B — live worker run** (repeatable tooling in `tools/`, not committed tests):
-     starts the actual worker process, publishes real messages onto a real Kafka topic via
-     the producer utility, verifies actual end-to-end output (blobs in ADLS Gen2/Azurite,
-     rows in SQL, per local environment configuration). Exercises the real
-     consume-and-commit path.
+     exercises the real consume-and-commit path end to end. The tester must:
+     - use the client project's existing configuration and already-available local services;
+       inspect the documented settings and record the configuration source used;
+     - verify Kafka, blob storage, database, and worker/API readiness before publishing;
+     - start the actual worker process and publish real messages to the configured Kafka topic
+       through the producer utility, without bypassing Kafka or substituting another endpoint;
+     - verify the resulting blobs, tracking rows, completeness outcome, index row, and any
+       applicable response using the configured storage and SQL services;
+     - verify that the successful processing path reaches offset commit only after the writes
+       succeed, and that failure evidence does not claim a commit or successful completion;
+     - report the exact commands or actions, readiness checks, observed results, and any
+       unavailable dependency or failed assertion. An unavailable required dependency means
+       the result is blocked or `FAIL`, never an inferred `PASS`.
 
-**Feedback routing**: reviewer/tester findings tagged **code-level** go back to dev with
-full context; findings that imply a gap in the agreed design are tagged **design-level**
-and go to architect-validator. After any dev fix, the change goes through reviewer again.
-Loop budget: 3 iterations, then stop and escalate to a human with the full history.
+     For live tests, do not invent, overwrite, regenerate, or manually substitute connection
+     values. Do not start, replace, or tear down services that are already available. Use setup
+     tools only when a required dependency is unavailable or the approved test explicitly
+     requires creating a missing database, schema, or equivalent resource; report the reason
+     and resource mutation. When the slice includes an API, test the locally running API only
+     with `curl` against its configured `localhost` endpoint; do not call external, shared, or
+     cloud endpoints or replace curl request/response evidence with browser automation.
 
-**Definition of done**: reviewer APPROVED, tester-e2e PASS on both modes, build and tests
-green.
+**Coordination rules**: do not skip architect approval, review, or acceptance testing. Pass
+the approved brief, implementation summary, review verdict, changed-file context, and tester
+evidence directly through native agent context. Treat every reviewer `CHANGES_REQUESTED`
+finding as blocking. Route code-level findings to snapshot-developer and design-level findings
+to snapshot-architect; after a fresh approved brief, return through snapshot-developer and
+snapshot-reviewer before testing. Respect a three-iteration loop budget, then stop and escalate
+to a human with the complete history.
 
-## Local environment
-
-No committed docker-compose — local infrastructure (Kafka, Azurite, SQL Server) is spun up
-**ad hoc** via small setup/teardown scripts under `tools/` (`docker run` on demand). These
-are dev convenience scripts, not infra artifacts. The only committed Dockerfiles are the
-two under `deploy/docker/`, which build the API and consumer images for the local
-Kubernetes run described in `deploy/README.md`; the services themselves are still run
-with `dotnet run` for everyday development.
-
-- Kafka: ad-hoc container via `tools/` setup script, started when a dev or the
-  tester-e2e role needs a broker, torn down after
-- Azurite standing in for ADLS Gen2 (same ad-hoc-on-demand principle) — used for manual/
-  Worker-level local runs (Mode B) and unit tests
-- SQL Server in an ad-hoc container; schema applied from `db/scripts/` only
-- All endpoints (Kafka bootstrap, blob connection string, SQL connection string)
-  overridable via environment variables
-- Exception: the committed Mode A integration test project (`tests/UBS.AM.PLT.Snapshot.IntegrationTests`)
-  is configured to target real Azure dev ADLS Gen2 + Azure SQL resources (`DefaultAzureCredential`) rather
-  than this local Azurite/SQL-container stack — see its `appsettings.json` and `SnapshotFixture`
+**Definition of done**: snapshot-reviewer `APPROVED`, snapshot-tester `PASS` on both required
+modes, and build and tests green. The tester report is the terminal workflow result.
