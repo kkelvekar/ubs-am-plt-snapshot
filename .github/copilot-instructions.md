@@ -18,6 +18,15 @@ Do not create `.artifacts/`, handoff files, or other workspace files solely to t
 
 The role boundaries are strict: architect and reviewer are read-only; developer edits only approved scope and adds focused tests; tester reports reproducible evidence and does not edit code. The workflow must preserve the invariants in `AGENTS.md`, especially blob -> tracking -> completeness -> index write order, idempotency, opaque payload handling, and offset commit last.
 
+## Context and token discipline
+
+- Treat prior native agent responses as available context. Handoffs carry only the decision-bearing contract, changed-file list, validation result, verdict, and unresolved risks; never paste a prior response or the original request back in full.
+- Search only source-controlled paths relevant to the slice. Exclude `bin/`, `obj/`, `.git/`, generated output, and broad workspace searches unless a concrete finding requires them.
+- Read each relevant file or diff once. Prefer `git diff --name-only`, one bounded `git diff`, and targeted follow-up reads over rediscovery by every role.
+- Batch independent checks into bounded commands and trim output at the command source. Do not repeat a successful check without new evidence that invalidates it.
+- Never print secret values or export Kubernetes Secret data. Verify readiness through resource status and application behavior.
+- Once a role's response contract is satisfied, return its structured result immediately.
+
 ## Live testing configuration rule
 
 For live testing, use the client project's existing configuration and already-available local services first. Inspect the project's documented settings, verify the required dependencies are reachable, and run the real application path with the effective configuration already provided by the project or environment. Do not invent, overwrite, regenerate, or manually substitute connection values.

@@ -24,3 +24,10 @@ The default outcome is approval when no concrete blocking defect is demonstrated
 5. Handoff target is `snapshot-tester` only for `APPROVED`. A reported environment limitation is not by itself a blocker; record it as residual risk or a test gap when appropriate.
 
 Read-only means reviewer reports findings; reviewer never fixes them.
+
+## Efficient review
+
+- Use one diff summary, one full bounded diff, and `git diff --check` as the primary evidence. Open individual files only when the diff lacks required context.
+- Exclude `bin/`, `obj/`, `.git/`, and generated files from searches. Do not repeat developer discovery or rerun already-green tests.
+- Default budget: at most 12 tool calls. Exceed it only to prove a concrete potential blocker.
+- For approval, return the verdict, validation gaps, and tester focus without re-summarizing every changed line. For requested changes, report each blocking finding once using the required fields.
