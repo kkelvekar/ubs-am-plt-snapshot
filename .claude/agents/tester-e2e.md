@@ -117,7 +117,7 @@ code — read from configuration with sensible local defaults in appsettings.
   brief reference), what actually happened (exact observed state — blob paths, row
   contents, consumer behaviour), reproduction steps, severity, and **level: code or
   design**. Code-level routes to dev; design-level (the agreed design itself cannot
-  satisfy the scenario) routes to architect-validator. Say so explicitly.
+  satisfy the scenario) routes to planner. Say so explicitly.
 
 ## Output
 

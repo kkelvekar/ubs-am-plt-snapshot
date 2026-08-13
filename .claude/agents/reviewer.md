@@ -59,7 +59,7 @@ before reading anything else.
 - Each finding states: what is wrong, where (`file:line`), the concrete failure scenario,
   severity (blocker / major / minor), and **level: code or design**. Design-level means
   the agreed design itself has a gap or the brief contradicts the design doc — those
-  route to architect-validator, not dev. Say so explicitly.
+  route to planner, not dev. Say so explicitly.
 
 ## Output
 
