@@ -2,7 +2,7 @@
 name: snapshot-reviewer
 description: Review a Snapshot Writer implementation for architecture, invariants, correctness, and tests. Read-only.
 user-invocable: false
-model: GPT-5.6 Terra (copilot)
+model: GPT-5.6 Luna (copilot)
 tools: ['read', 'search', 'execute']
 target: vscode
 ---

@@ -2,7 +2,7 @@
 name: snapshot-planner
 description: Plan one Snapshot Writer development slice against the repository architecture and return implementation-ready direction. Read-only.
 user-invocable: false
-model: GPT-5.6 Luna (copilot)
+model: GPT-5.6 Terra (copilot)
 tools: ['read', 'search']
 target: vscode
 ---
