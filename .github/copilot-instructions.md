@@ -1,42 +1,21 @@
 # Copilot Instructions
 
-## Required workflow for non-trivial changes
+Use the GitHub Copilot in VS Code workflow defined in `AGENTS.md` for every non-trivial
+source, test, schema, API, worker, infrastructure, or solution-design change:
+`snapshot-planner` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
+Implementation requires the planner's `Verdict: READY_FOR_IMPLEMENTATION`; acceptance testing
+requires reviewer `Verdict: APPROVED`.
 
-For any request that changes source code, tests, database scripts, API behavior, worker behavior, infrastructure behavior, or the approved solution design, automatically start the repository workflow at `snapshot-planner`. The user should not need to select the planner agent or repeat this instruction.
+Invoke the named repository custom agents with the `agent` tool. Pass native responses directly
+between roles; never create workspace handoff files. Route only reviewer `Findings`: `level: code`
+to `snapshot-developer`, and `level: design` or `level: acceptance-contract` to
+`snapshot-planner`. Never route `Suggestions`. Re-run review after every developer fix.
 
-The normal Agent session must:
+Preserve the invariants and role boundaries in `AGENTS.md`. Never print secrets or export secret
+data. Live testing must use documented existing configuration and services; do not invent,
+overwrite, regenerate, or manually substitute connection values. An unavailable required
+dependency means `Verdict: FAIL`. Use local `curl` evidence for API slices.
 
-1. Delegate the request first to `snapshot-planner` for a read-only implementation plan and architecture check.
-2. Allow implementation only after `snapshot-planner` returns `Verdict: READY_FOR_IMPLEMENTATION` in its native Copilot response.
-3. Continue through the repository custom-agent chain:
-   `snapshot-planner` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
-4. Pass the ready plan, implementation summary, review verdict, and tester evidence directly through native Copilot agent context.
-5. Route `code-level` findings back to `snapshot-developer` and `design-level` or `acceptance-contract` findings back to `snapshot-planner`.
-6. Re-run review after any developer fix. Do not skip a workflow stage.
-
-Do not create `.artifacts/`, handoff files, or other workspace files solely to transfer workflow state between agents. Native Copilot agent responses are the source of truth for workflow handoffs. Create workspace files only when they are part of the requested product, source, test, or documentation change.
-
-The role boundaries are strict: architect and reviewer are read-only; developer edits only approved scope and adds focused tests; tester reports reproducible evidence and does not edit code. The workflow must preserve the invariants in `AGENTS.md`, especially blob -> tracking -> completeness -> index write order, idempotency, opaque payload handling, and offset commit last.
-
-## Context and token discipline
-
-- Treat prior native agent responses as available context. Handoffs carry only the decision-bearing contract, changed-file list, validation result, verdict, and unresolved risks; never paste a prior response or the original request back in full.
-- Search only source-controlled paths relevant to the slice. Exclude `bin/`, `obj/`, `.git/`, generated output, and broad workspace searches unless a concrete finding requires them.
-- Read each relevant file or diff once. Prefer `git diff --name-only`, one bounded `git diff`, and targeted follow-up reads over rediscovery by every role.
-- Batch independent checks into bounded commands and trim output at the command source. Do not repeat a successful check without new evidence that invalidates it.
-- Never print secret values or export Kubernetes Secret data. Verify readiness through resource status and application behavior.
-- Once a role's response contract is satisfied, return its structured result immediately.
-
-## Live testing configuration rule
-
-For live testing, use the client project's existing configuration and already-available local services first. Inspect the project's documented settings, verify the required dependencies are reachable, and run the real application path with the effective configuration already provided by the project or environment. Do not invent, overwrite, regenerate, or manually substitute connection values.
-
-Use setup tools only when a required dependency is unavailable or the approved test explicitly requires creating a missing database, schema, or equivalent test resource. Do not start, replace, or tear down services that are already available. Live-test evidence must state the configuration source used, readiness checks performed, commands or actions executed, observed result, and the reason for any provisioning or resource mutation.
-
-When the slice includes an API, test the locally running API only through `curl` against its configured `localhost` endpoint. Keep API live testing local; do not call external, shared, or cloud endpoints, and do not substitute browser automation for the `curl` request and response evidence.
-
-For simple questions, explanations, read-only exploration, documentation lookups, and status checks, answer directly without starting the implementation workflow. When the user explicitly asks to bypass the workflow, explain the repository rule and ask for confirmation before proceeding.
-
-## Custom-agent invocation
-
-Use the `agent` tool to invoke the named repository custom agents. Do not silently substitute built-in agents with similar names. If the current chat surface cannot invoke custom agents automatically, state that limitation and provide the exact next agent name rather than editing implementation files directly.
+Answer simple questions, explanations, read-only exploration, documentation lookups, and status
+checks directly. If custom agents cannot be invoked on the active surface, state the limitation
+and identify the exact next agent instead of bypassing the workflow.

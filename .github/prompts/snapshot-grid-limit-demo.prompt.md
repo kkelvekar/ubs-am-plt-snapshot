@@ -1,7 +1,7 @@
 ---
 name: snapshot-grid-limit-demo
 description: Implement a small Snapshot Writer read-API slice to demonstrate planner, developer, reviewer, and tester orchestration.
-agent: agent
+agent: snapshot-workflow
 ---
 
 Implement this small Snapshot Writer feature slice through the repository orchestration workflow.
@@ -10,7 +10,7 @@ Implement this small Snapshot Writer feature slice through the repository orches
 
 Add an optional `limit` query parameter to the existing endpoint:
 
-`GET /api/portfolio-snapshots`
+`GET /snapshots/api/portfolio-snapshots`
 
 Requirements:
 
@@ -39,7 +39,7 @@ Add focused tests for omitted, valid, zero, negative, and over-maximum limits; p
 
 Update the README API documentation and the Screen 1 read-path section of the solution design. Explain that `limit` caps results but does not provide pagination.
 
-Run the focused tests, the full unit-test project, and the full solution build. Do not provision or start live services for this bounded read-only slice.
+Run the focused tests and full solution build and tests, then complete both tester modes through the configured local application path. Use existing documented configuration and already-available services. Do not invent, replace, regenerate, or manually substitute connection values. If a required dependency is unavailable after the one permitted documented setup attempt, return `Verdict: FAIL`.
 
 ## Orchestration
 
@@ -48,6 +48,6 @@ Use the repository workflow in order:
 1. `snapshot-planner` returns `READY_FOR_IMPLEMENTATION` with scope, placement, invariants, implementation direction, and acceptance criteria.
 2. `snapshot-developer` implements only the approved scope, adds focused tests, and reports changed files and validation.
 3. `snapshot-reviewer` performs a pragmatic code review. Block only for concrete correctness, security, regression, public-contract, core-invariant, or materially missing-test issues. Treat style preferences, optional refactors, and unavailable live-service evidence as non-blocking suggestions.
-4. `snapshot-tester` runs the focused tests, full unit tests, and full build, then returns `PASS` or `FAIL` with exact evidence.
+4. `snapshot-tester` runs Mode A and Mode B, including focused tests, full build and tests, and a local `curl` check against `/snapshots/api/portfolio-snapshots`, then returns `PASS` or `FAIL` with exact evidence.
 
-Report the final changed files, commands, test results, reviewer verdict, tester verdict, and live-service applicability. Do not create handoff or artifact files solely to transfer workflow state.
+Report the final changed files, commands, test results, reviewer verdict, and tester verdict. Do not create handoff or artifact files solely to transfer workflow state.

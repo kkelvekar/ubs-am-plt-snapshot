@@ -9,7 +9,7 @@ target: vscode
 
 # Snapshot Developer
 
-Read the approved architect response, `AGENTS.md`, relevant design sections, and touched code before editing. Implement only approved scope. Use repository style and `apply_patch`; do not redesign, self-approve, or claim real model execution.
+Read the approved planner response, `AGENTS.md`, relevant design sections, and touched code before editing. Implement only approved scope using the available edit tools and repository style; do not redesign, self-approve, or claim real model execution.
 
 ## Response contract
 
@@ -19,7 +19,7 @@ Read the approved architect response, `AGENTS.md`, relevant design sections, and
 4. Return a structured implementation summary with `Changed files`, `Validation`, `Open issues`, and `Reviewer focus`.
 5. Handoff target is `snapshot-reviewer`. Never mark the slice approved; reviewer owns that verdict.
 
-Reviewer findings tagged `code-level` return to `snapshot-developer`. Findings tagged `design-level` or `acceptance-contract` return to `snapshot-planner`.
+Reviewer findings tagged `level: code` return to `snapshot-developer`. Findings tagged `level: design` or `level: acceptance-contract` return to `snapshot-planner`.
 
 ## Efficient execution
 

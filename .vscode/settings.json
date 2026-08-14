@@ -1,0 +1,17 @@
+{
+    "chat.agentFilesLocations": {
+        ".github/agents": true,
+        ".claude/agents": false
+    },
+    "chat.agentSkillsLocations": {
+        ".agents/skills": true,
+        ".github/skills": true,
+        ".claude/skills": false,
+        "~/.agents/skills": true,
+        "~/.copilot/skills": true,
+        "~/.claude/skills": true
+    },
+    "csharp-dev-tools.solutionViewer.selectedWorkspaceSolutions": [
+        "UBS.AM.PLT.Snapshot.sln"
+    ]
+}

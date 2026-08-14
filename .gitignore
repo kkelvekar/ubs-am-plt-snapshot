@@ -5,7 +5,8 @@ out/
 
 # IDE
 .vs/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.user
 *.suo
 *.sln.docstates
@@ -13,6 +14,7 @@ out/
 # Local environment
 .env.local
 CLAUDE.local.md
+.claude/settings.local.json
 deploy/values.local.yaml
 
 # Test coverage
