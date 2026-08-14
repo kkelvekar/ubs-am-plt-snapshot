@@ -40,7 +40,7 @@ public static class WorkerBootstrap
                     builder.Configuration["BlobStorage:ServiceUri"] ?? string.Empty,
                     builder.Configuration["BlobStorage:ContainerName"] ?? string.Empty,
                     builder.Configuration["BlobStorage:ConnectionString"])
-                .AddKafkaInfrastructure()
+                .AddKafkaInfrastructure(builder.Environment.IsDevelopment())
                 .AddSnapshotConfigInfrastructure();
 
             WorkerLiveTesting.AddServices(builder);

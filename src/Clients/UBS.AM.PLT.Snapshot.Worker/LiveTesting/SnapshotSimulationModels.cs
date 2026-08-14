@@ -3,19 +3,6 @@ using UBS.Advantage.CommunicationModels.Snapshot;
 
 namespace UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
-public sealed record SnapshotSimulationRequest
-{
-    public int SnapshotCount { get; init; } = 1;
-
-    public TimeSpan MessageDelay { get; init; } = TimeSpan.FromSeconds(30);
-
-    public TimeSpan SnapshotDelayMin { get; init; } = TimeSpan.FromMinutes(1);
-
-    public TimeSpan SnapshotDelayMax { get; init; } = TimeSpan.FromMinutes(2);
-
-    public string TemplateFileName { get; init; } = "snapshot-simulation-data.json";
-}
-
 public sealed record SnapshotTemplate(
     IReadOnlyList<string> AccountIds,
     IReadOnlyList<PayloadTemplate> Payloads);
@@ -25,18 +12,15 @@ public sealed record PayloadTemplate(
     string PublishedBy,
     JsonElement Payload);
 
-public sealed record SnapshotSimulationDelivery(
+public sealed record SnapshotSimulationCaseResult(
+    string CaseName,
     string SnapshotId,
-    string AccountId,
-    string PayloadType,
-    string Topic,
-    int Partition,
-    long Offset);
+    string ExpectedStatus,
+    string ExpectedReasonCode);
 
 public sealed record SnapshotSimulationResult(
-    IReadOnlyList<string> SnapshotIds,
-    int MessageCount,
-    IReadOnlyList<SnapshotSimulationDelivery> Deliveries);
+    IReadOnlyList<SnapshotSimulationCaseResult> Cases,
+    int MessageCount);
 
 internal sealed record GeneratedSnapshotMessage(string AccountId, SnapshotRequest Request);
 

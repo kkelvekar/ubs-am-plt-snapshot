@@ -12,7 +12,7 @@ Two integration surfaces:
    failure notifications on the response topic.
 2. **HTTP Read API** — query the snapshot audit index and fetch stored payload JSON.
 
-### Development live-test publisher
+### Development live-test suite
 
 In the `Development` environment only, the Worker listens on `http://localhost:5106`
 by default and can publish the bundled data-driven simulation through its configured
@@ -20,16 +20,17 @@ Kafka broker and request topic:
 
 ```bash
 curl -X POST http://localhost:5106/api/live-tests/snapshots \
-  -H "Content-Type: application/json" \
-  -d '{"snapshotCount":1,"messageDelay":"00:00:00"}'
 ```
 
-The optional body fields are `snapshotCount` (default `1`), `messageDelay` (default
-`00:00:30`), `snapshotDelayMin` (default `00:01:00`), `snapshotDelayMax` (default
-`00:02:00`), and `templateFileName` (default `snapshot-simulation-data.json`). The
-response is returned only after Kafka acknowledges every generated message and includes
-the snapshot IDs, message count, and delivery metadata. Invalid input returns `400`;
-Kafka delivery failure returns `503`. This endpoint is absent outside Development.
+The bodyless endpoint queues a fixed ordered suite of six one-snapshot templates: normal
+completion, unknown header fields, PascalCase `EventType`, missing `eventType`, over-long
+`accountId`, and path-unsafe `accountId`. It returns each case name, generated snapshot ID,
+expected status/reason code, and a total message count of `24`. Messages are queued through the
+platform `IProducer`; the endpoint does not await Kafka delivery or return broker metadata.
+
+The Development-only Kafka registration creates the temporary request producer and response
+observer automatically. Delivery outcomes and status/missing/failure responses are logged with
+snapshot/account identifiers. Neither service is registered outside Development.
 
 ---
 

@@ -9,11 +9,19 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 
 public static class KafkaRegistration
 {
-    public static IServiceCollection AddKafkaInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddKafkaInfrastructure(
+        this IServiceCollection services,
+        bool enableDevelopmentLiveTesting)
     {
         services.AddTransient<ISnapshotResponsePublisher, KafkaSnapshotResponsePublisher>();
         services.AddMessageConsumerService<string, SnapshotRequest, SnapshotRequestCommand>("snapshot-request");
         services.AddMessageProducerService<string, SnapshotResponse, SnapshotResponseCommand>("snapshot-response");
+
+        if (enableDevelopmentLiveTesting)
+        {
+            services.AddMessageProducerService<string, SnapshotRequest, LiveTestSnapshotRequestProducerCommand>("snapshot-request");
+            services.AddMessageConsumerService<string, SnapshotResponse, LiveTestSnapshotResponseConsumerCommand>("snapshot-response");
+        }
 
         return services;
     }

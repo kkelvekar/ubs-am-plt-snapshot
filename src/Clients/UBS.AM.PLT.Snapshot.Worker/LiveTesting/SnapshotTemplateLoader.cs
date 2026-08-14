@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
-internal sealed class SnapshotTemplateLoader(IHostEnvironment environment)
+public sealed class SnapshotTemplateLoader(IHostEnvironment environment)
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
     private static readonly string[] ExpectedPayloadTypes = ["header", "orders", "calculations", "settings"];
