@@ -1,5 +1,7 @@
-using Confluent.Kafka;
 using Microsoft.AspNetCore.Mvc;
+using Ubs.Advantage.Core.Messaging.Kafka;
+using Ubs.Advantage.Core.Messaging.Kafka.Models;
+using UBS.Advantage.CommunicationModels.Snapshot;
 using UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
 namespace UBS.AM.PLT.Snapshot.Worker.Controllers;
@@ -7,43 +9,44 @@ namespace UBS.AM.PLT.Snapshot.Worker.Controllers;
 [ApiController]
 [Route("api/live-tests/snapshots")]
 public sealed class SnapshotSimulationController(
-    ISnapshotSimulationPublisher publisher,
+    IProducer<string, SnapshotRequest> producer,
+    SnapshotTemplateLoader templateLoader,
+    TimeProvider timeProvider,
     ILogger<SnapshotSimulationController> logger) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType<SnapshotSimulationResult>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> PublishAsync(
-        [FromBody] SnapshotSimulationRequest? request,
-        CancellationToken cancellationToken)
+    public IActionResult Publish(CancellationToken cancellationToken)
     {
-        try
-        {
-            var result = await publisher.PublishAsync(request ?? new SnapshotSimulationRequest(), cancellationToken);
-            return Ok(result);
-        }
-        catch (SnapshotSimulationValidationException ex)
-        {
-            return Problem(
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Invalid live-test request.",
-                detail: ex.Message);
-        }
-        catch (ProduceException<string, string> ex)
-        {
-            logger.LogError(ex, "Kafka delivery failed while publishing live-test snapshots.");
-            return ServiceUnavailable(ex.Error.Reason);
-        }
-        catch (KafkaException ex)
-        {
-            logger.LogError(ex, "Kafka was unavailable while publishing live-test snapshots.");
-            return ServiceUnavailable(ex.Error.Reason);
-        }
-    }
+        var cases = new List<SnapshotSimulationCaseResult>(LiveTestManifest.Cases.Count);
+        var messageCount = 0;
 
-    private ObjectResult ServiceUnavailable(string detail) => Problem(
-        statusCode: StatusCodes.Status503ServiceUnavailable,
-        title: "Kafka delivery unavailable.",
-        detail: detail);
+        foreach (var testCase in LiveTestManifest.Cases)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var template = templateLoader.Load(testCase.TemplateFileName);
+            var messages = SnapshotGenerator.Generate(template, timeProvider.GetUtcNow());
+
+            foreach (var message in messages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                producer.Publish(new Message<string, SnapshotRequest>(message.AccountId, message.Request, []));
+
+                logger.LogInformation(
+                    "Queued live-test payload; snapshotId={SnapshotId}, accountId={AccountId}, payloadType={PayloadType}",
+                    message.Request.SnapshotId,
+                    message.Request.AccountId,
+                    message.Request.PayloadType);
+            }
+
+            cases.Add(new SnapshotSimulationCaseResult(
+                testCase.Name,
+                messages[0].Request.SnapshotId,
+                testCase.ExpectedStatus,
+                testCase.ExpectedReasonCode));
+            messageCount += messages.Count;
+        }
+
+        return Ok(new SnapshotSimulationResult(cases, messageCount));
+    }
 }

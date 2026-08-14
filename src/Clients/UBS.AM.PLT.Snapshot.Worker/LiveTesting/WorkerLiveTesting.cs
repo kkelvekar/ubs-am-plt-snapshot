@@ -11,7 +11,6 @@ internal static class WorkerLiveTesting
 
         builder.Services.AddControllers();
         builder.Services.AddSingleton<SnapshotTemplateLoader>();
-        builder.Services.AddSingleton<ISnapshotSimulationPublisher, KafkaSnapshotSimulationPublisher>();
     }
 
     public static void MapEndpoints(WebApplication app)
