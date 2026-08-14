@@ -44,21 +44,12 @@ through the existing declarative `SnapshotConfigDefinition` map.
 
 When the Worker runs in the `Development` environment it exposes
 `POST /api/live-tests/snapshots` (default address `http://localhost:5106`). The endpoint
-loads a fixed ordered suite of six bundled templates. Each template creates one zero-delay
-snapshot with four payloads: normal completion, unknown header fields, PascalCase `EventType`,
-missing `eventType`, over-long `accountId`, and path-unsafe `accountId`. The endpoint queues all
-24 requests through `IProducer<string, SnapshotRequest>` for the configured Kafka request topic
-and returns each case's generated snapshot ID and expected status/reason code. It does not await
-delivery or return broker metadata. Kafka broker and topic values always come from Worker
-configuration and cannot be supplied by the caller. The controller and its services are not
-registered or mapped outside Development; this is a development verification surface, not part of
-the production business API.
-
-In Development, `KafkaRegistration` registers the local request producer command to log
-asynchronous broker delivery outcomes and the response consumer command to log each response
-status, missing files, and failure details. The response observer always reports success, so
-observing a test result cannot block the response topic or crashloop the Worker. Neither local
-test service is registered in a non-Development host.
+loads one of the bundled JSON templates, generates the same ordered portfolio payload
+sequence used for live testing, and awaits acknowledged delivery to the configured Kafka
+request topic. Kafka broker and topic values always come from Worker configuration and
+cannot be supplied by the caller. The controller and its services are not registered or
+mapped outside Development; this is a development verification surface, not part of the
+production business API.
 
 ![[Snapshot Solution Final.png]]
 
