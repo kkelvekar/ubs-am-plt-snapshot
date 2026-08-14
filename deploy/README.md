@@ -20,8 +20,8 @@ through `host.docker.internal`, which Docker Desktop resolves from inside pods.
 
 | Dependency | Runs as | Pods reach it at |
 | --- | --- | --- |
-| Kafka | `tools/kafka-local.ps1` container | `host.docker.internal:9092` |
-| Blob storage (Azurite) | `tools/azurite-local.ps1` container | `http://host.docker.internal:10000` |
+| Kafka | host-provided broker | `host.docker.internal:9092` |
+| Blob storage (Azurite) | host-provided emulator | `http://host.docker.internal:10000` |
 | SQL Server | the host machine's own instance | `host.docker.internal,1433` |
 
 ### Host SQL Server from a container
@@ -43,18 +43,10 @@ database:
   connectionString: "Server=host.docker.internal,1433;Database=platform-core-db-dev;User Id=<login>;Password=<password>;TrustServerCertificate=True;Encrypt=False"
 ```
 
-## Start the dependencies
+## Dependency prerequisites
 
-Kafka must advertise a hostname the pods can resolve, so start it with `-AdvertisedHost`
-(the same name also resolves on the host, so host-side tooling keeps working):
-
-```bash
-pwsh ./tools/kafka-local.ps1 -Up -AdvertisedHost host.docker.internal
-```
-
-```bash
-pwsh ./tools/azurite-local.ps1 -Up
-```
+Kafka and Azurite must already be running on the host at the addresses above. Kafka
+must advertise `host.docker.internal`, which resolves both on the host and from the pods.
 
 ## Build the images
 

@@ -88,7 +88,6 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 ```text
 src/        Core/ (Domain, Application) | Infrastructure/ (Sql, Adls, Kafka) | Platform/ | Clients/ (Worker, Api)
 tests/      test projects (unit + in-process integration)
-tools/      developer utilities (e.g. Kafka test message producer)
 db/scripts/ hand-written SQL schema (source of truth for tables/indexes)
 docs/       solution design document and diagrams
 deploy/     local-only Docker Desktop Kubernetes run (Dockerfiles + minimal Helm chart)
@@ -103,7 +102,7 @@ deploy/     local-only Docker Desktop Kubernetes run (Dockerfiles + minimal Helm
   from configuration with environment-variable overrides.
 - **Kafka bootstrap servers are externally configurable** via standard .NET configuration
   binding (`Kafka__BootstrapServers` environment variable overrides appsettings). The
-  worker and all test tooling must point at local Docker Kafka or a real broker purely via
+  worker and its Development-only live-testing endpoint must point at local Kafka or a real broker purely via
   config — no code change between environments. Topics are configured by key under
   `Kafka:Topics` (`snapshot-request`, `snapshot-response`), never hard-coded.
 - `dotnet build` and `dotnet test` must be green before any handoff or commit.

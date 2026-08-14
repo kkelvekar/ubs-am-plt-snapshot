@@ -1,6 +1,6 @@
-# The Kafka consumer worker. No Service: it has no inbound traffic — it only consumes
-# from Kafka and writes to blob storage and SQL. Three replicas match the three
-# partitions of the request topic, so each pod owns one partition.
+# The Kafka consumer worker. No Service: its live-test controller is mapped only in
+# Development, while this deployment only consumes from Kafka and writes to blob storage
+# and SQL. Three replicas match the request topic's three partitions.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

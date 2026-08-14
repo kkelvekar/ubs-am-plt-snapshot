@@ -9,7 +9,7 @@ COPY src/ src/
 RUN dotnet publish src/Clients/UBS.AM.PLT.Snapshot.Worker/UBS.AM.PLT.Snapshot.Worker.csproj \
     -c Release -o /app
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app ./
 

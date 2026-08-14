@@ -19,8 +19,8 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// commits the offset — recovery is forward, via redelivery) and leaves no durable state in the
 /// system of record. The retry / Critical operations-alert half of §9 lives in the consumer — 3
 /// in-process attempts, then one Critical alert and a non-zero process exit so the pod restarts and
-/// Kafka redelivers from the last committed offset — and is proved live in Mode B
-/// (<c>tools/fault-injection.ps1</c>), since Mode A bypasses the consumer entirely.
+/// Kafka redelivers from the last committed offset — and is proved live in Mode B,
+/// since Mode A bypasses the consumer entirely.
 ///
 /// Each scenario builds a SECOND, fault-injected object graph (the same
 /// <c>AddApplication</c>/<c>AddInfrastructure</c> wiring the fixture uses, with one dependency's
