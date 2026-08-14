@@ -7,8 +7,7 @@ Feature: Redelivery after a failed offset commit
     # the completing (header) message for an already-COMPLETE snapshot, simulating design doc §8
     # Scenario 5 where the index write and MarkComplete both succeed but the subsequent offset
     # commit fails, so the consumer redelivers the same message. The remaining fault-injection
-    # cases require the live Kafka consume/commit path and are exercised in Mode B via
-    # tools/fault-injection.ps1.
+    # cases require the live Kafka consume/commit path and are exercised in Mode B.
 
 Scenario: Redelivery of the completing header after a failed offset commit is a harmless no-op
     Given a failure-scenario snapshot for account "IT-ACC-006"

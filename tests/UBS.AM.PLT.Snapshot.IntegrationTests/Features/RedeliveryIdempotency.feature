@@ -9,7 +9,7 @@ Feature: Redelivery and idempotency
     # byte-identical, tracking row touched only on last_updated_at, index UPSERT produces no
     # duplicate). The second proves that a same-payloadType duplicate arriving BEFORE completion is
     # de-duplicated in received_files and does not block the remaining files from completing. Full
-    # offset-commit-under-redelivery proof is Mode B only (tools/fault-injection.ps1).
+    # offset-commit-under-redelivery proof is Mode B only.
 
 Scenario: Redelivering a non-header payload after completion leaves everything but last-updated intact
     Given a redelivery snapshot for account "IT-ACC-007"

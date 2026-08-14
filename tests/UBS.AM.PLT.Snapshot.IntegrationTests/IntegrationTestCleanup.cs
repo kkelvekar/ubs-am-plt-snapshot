@@ -168,7 +168,7 @@ internal sealed class IntegrationTestCleanup
     }
 
     /// <summary>
-    /// The worker creates the blob container itself on first write (see azurite-local.ps1);
+    /// The worker creates the blob container itself on first write;
     /// against a freshly started local Azurite it may not exist yet when cleanup runs before
     /// any test has written anything, so a missing container is treated as "nothing to clean"
     /// rather than an error.

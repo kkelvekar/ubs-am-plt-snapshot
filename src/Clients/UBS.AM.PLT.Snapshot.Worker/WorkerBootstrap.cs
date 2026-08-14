@@ -3,6 +3,7 @@ using UBS.AM.PLT.Snapshot.Application;
 using UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 using UBS.AM.PLT.Snapshot.Infrastructure.Kafka;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
+using UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
 namespace UBS.AM.PLT.Snapshot.Worker;
 
@@ -18,7 +19,13 @@ public static class WorkerBootstrap
     {
         try
         {
-            var builder = Host.CreateApplicationBuilder(args);
+            var builder = WebApplication.CreateBuilder(args);
+
+            if (builder.Environment.IsDevelopment()
+                && string.IsNullOrWhiteSpace(builder.Configuration["urls"]))
+            {
+                builder.WebHost.UseUrls("http://localhost:5106");
+            }
 
             // Consumer death must kill the pod so Kubernetes restarts it — never a silently-dead
             // worker that stays Running while consuming nothing.
@@ -36,13 +43,16 @@ public static class WorkerBootstrap
                 .AddKafkaInfrastructure()
                 .AddSnapshotConfigInfrastructure();
 
-            var host = builder.Build();
+            WorkerLiveTesting.AddServices(builder);
+
+            var app = builder.Build();
+            WorkerLiveTesting.MapEndpoints(app);
 
             // Last-resort hook for exceptions on threads we don't own (e.g. third-party callback
             // threads) that would otherwise crash the process with no structured signal. This is
             // a safety net for failure modes RunAsync's own try/catch can never see; it must NOT
             // fire for exceptions this method already handles below.
-            var appDomainLogger = host.Services
+            var appDomainLogger = app.Services
                 .GetRequiredService<ILoggerFactory>()
                 .CreateLogger("UBS.AM.PLT.Snapshot.Worker");
             AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -51,7 +61,7 @@ public static class WorkerBootstrap
                     "Unhandled exception on a non-owned thread; isTerminating={IsTerminating}",
                     e.IsTerminating);
 
-            await host.RunAsync();
+            await app.RunAsync();
         }
         catch (OperationCanceledException)
         {

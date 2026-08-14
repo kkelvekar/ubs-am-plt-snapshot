@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\Infrastructure\Sql\UBS.AM.PLT.Snapshot.Infrastructure.Sql.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Adls\UBS.AM.PLT.Snapshot.Infrastructure.Adls.csproj" />
     <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.Api\UBS.AM.PLT.Snapshot.Api.csproj" />
+    <ProjectReference Include="..\..\src\Clients\UBS.AM.PLT.Snapshot.Worker\UBS.AM.PLT.Snapshot.Worker.csproj" />
   </ItemGroup>
 
   <ItemGroup>

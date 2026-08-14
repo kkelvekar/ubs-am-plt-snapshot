@@ -11,8 +11,8 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// only the deterministic, Kafka-independent slice: redelivering the completing (header) message
 /// for an already-COMPLETE snapshot (design doc §8 Scenario 5: index write and MarkComplete
 /// succeed, the following offset commit fails, the consumer redelivers). The remaining
-/// fault-injection cases require the live Kafka consume/commit path and live in Mode B
-/// (<c>tools/fault-injection.ps1</c>). The clock is anchored to a fixed-but-arbitrary instant
+/// fault-injection cases require the live Kafka consume/commit path and live in Mode B.
+/// The clock is anchored to a fixed-but-arbitrary instant
 /// inside the "failure-scenario snapshot" step. The run-scoped <see cref="SnapshotFixture"/>
 /// and scenario-scoped <see cref="ScenarioFixtureContext"/> are constructor-injected by Reqnroll,
 /// which creates one instance of this class per scenario, so instance fields hold per-scenario

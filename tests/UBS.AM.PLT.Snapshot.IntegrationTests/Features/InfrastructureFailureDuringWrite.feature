@@ -15,7 +15,7 @@ Feature: Infrastructure failure during the write order
     # attempts (0s/5s/30s), then a single Critical alert and a non-zero process exit so the pod is
     # restarted and Kafka redelivers from the last committed offset. Mode A bypasses the consumer
     # entirely, so it never exercised that path — only described it. The crash-restart behaviour is
-    # verified live by Mode B tooling: tools/fault-injection.ps1.
+    # verified through the live worker in Mode B.
 
 Scenario: SQL unreachable during the tracking write fails forward and leaves no durable state
     Given a fault-injected graph with SQL repointed to an unreachable endpoint

@@ -12,6 +12,25 @@ Two integration surfaces:
    failure notifications on the response topic.
 2. **HTTP Read API** — query the snapshot audit index and fetch stored payload JSON.
 
+### Development live-test publisher
+
+In the `Development` environment only, the Worker listens on `http://localhost:5106`
+by default and can publish the bundled data-driven simulation through its configured
+Kafka broker and request topic:
+
+```bash
+curl -X POST http://localhost:5106/api/live-tests/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{"snapshotCount":1,"messageDelay":"00:00:00"}'
+```
+
+The optional body fields are `snapshotCount` (default `1`), `messageDelay` (default
+`00:00:30`), `snapshotDelayMin` (default `00:01:00`), `snapshotDelayMax` (default
+`00:02:00`), and `templateFileName` (default `snapshot-simulation-data.json`). The
+response is returned only after Kafka acknowledges every generated message and includes
+the snapshot IDs, message count, and delivery metadata. Invalid input returns `400`;
+Kafka delivery failure returns `503`. This endpoint is absent outside Development.
+
 ---
 
 ## 1. Publishing a snapshot (Kafka request topic)

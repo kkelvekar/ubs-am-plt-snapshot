@@ -40,6 +40,17 @@ through the existing declarative `SnapshotConfigDefinition` map.
 
 ## 2. Solution Overview
 
+### Development-only live testing
+
+When the Worker runs in the `Development` environment it exposes
+`POST /api/live-tests/snapshots` (default address `http://localhost:5106`). The endpoint
+loads one of the bundled JSON templates, generates the same ordered portfolio payload
+sequence used for live testing, and awaits acknowledged delivery to the configured Kafka
+request topic. Kafka broker and topic values always come from Worker configuration and
+cannot be supplied by the caller. The controller and its services are not registered or
+mapped outside Development; this is a development verification surface, not part of the
+production business API.
+
 ![[Snapshot Solution Final.png]]
 
 The core insight driving this design is that the two screens in the Audit app have fundamentally different access patterns and must be served by different stores.
