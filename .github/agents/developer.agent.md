@@ -17,9 +17,7 @@ Read the approved planner response, `AGENTS.md`, relevant design sections, and t
 2. Implement the plan, focused unit tests, and every documentation update named in the plan.
 3. Run focused validation immediately after edits, then build and relevant tests when feasible.
 4. Return a structured implementation summary with `Changed files`, `Validation`, `Open issues`, and `Reviewer focus`.
-5. Handoff target is `snapshot-reviewer`. Never mark the slice approved; reviewer owns that verdict.
-
-Reviewer findings tagged `level: code` return to `snapshot-developer`. Findings tagged `level: design` or `level: acceptance-contract` return to `snapshot-planner`.
+5. Never mark the slice approved; return the implementation evidence to the invoking coordinator.
 
 ## Efficient execution
 

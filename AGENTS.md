@@ -170,80 +170,9 @@ platform packages; see that project's README before changing anything in it.
   template for how the org deploys this service.
 - No speculative abstractions. Build only what the current approved slice needs.
 
-## GitHub Copilot in VS Code workflow — four-role pipeline
+## Repository AI workflow
 
-All non-trivial changes flow through four roles, in order. The canonical GitHub workflow is
-`snapshot-planner` -> `snapshot-developer` -> `snapshot-reviewer` -> `snapshot-tester`.
-The equivalent Claude roles are `planner` -> `dev` -> `reviewer` -> `tester-e2e`.
-The current agent session carries each structured response directly to the next role; do not
-create workspace handshake files for this workflow.
-
-1. **snapshot-planner** (read-only) — plans the proposed slice against this file, the
-  solution design, existing code, and Clean Architecture boundaries. It provides
-  implementation-ready direction rather than rejecting a legitimate feature merely because
-  it is not yet documented. Compatible undocumented features include required design
-  documentation updates in the plan; architecture or invariant changes pause for clarification.
-  It must return `Verdict: READY_FOR_IMPLEMENTATION`, `NEEDS_CLARIFICATION`, or `BLOCKED`, with
-  scope, placement, invariants, implementation direction, and acceptance criteria before
-  implementation can start.
-2. **snapshot-developer** — requires the ready plan, implements only that scope, and adds
-  focused tests. It runs focused validation immediately after edits and returns the changed
-  files, validation evidence, open issues, and reviewer focus. It never self-approves.
-3. **snapshot-reviewer** (read-only) — requires and verifies the ready plan, implementation evidence,
-   full diff, Clean Architecture boundaries, core invariants, configuration, scope, and tests.
-   It returns `Verdict: APPROVED` or `Verdict: CHANGES_REQUESTED`. Every item under `Findings`
-   is blocking and is tagged `level: code`, `level: design`, or `level: acceptance-contract`;
-   optional improvements belong under `Suggestions` and never change the verdict or routing.
-   Code findings return to snapshot-developer; design or acceptance-contract findings return
-   to snapshot-planner. After every developer fix, snapshot-reviewer runs again.
-4. **snapshot-tester** (read-only) — runs only after reviewer `APPROVED` and reports evidence
-   with `Verdict: PASS` or `Verdict: FAIL`. Read-only means it must not edit source, tests,
-   documentation, configuration, or Git state; scoped test-data writes through the approved
-   application path are allowed when they use unique identifiers. It must not claim evidence
-   it did not produce. Application slices require two distinct testing modes:
-   - **Mode A — in-process integration tests** (committed to `tests/`): builds
-     `SnapshotMessage` envelopes in code and feeds them directly into the
-     message-handling pipeline, bypassing real Kafka; asserts on resulting ADLS Gen2 blob
-     writes and Azure SQL `snapshot_tracking` / `snapshot_index` rows against real Azure
-     dev resources (`DefaultAzureCredential`), configured via `appsettings.json` in the
-     integration test project. Fast, deterministic, CI-friendly.
-   - **Mode B — live worker run** (repeatable tooling in `tools/`, not committed tests):
-     exercises the real consume-and-commit path end to end. The tester must:
-     - use the client project's existing configuration and already-available local services;
-       inspect the documented settings and record the configuration source used;
-     - verify Kafka, blob storage, database, and worker/API readiness before publishing;
-     - start the actual worker process and publish real messages to the configured Kafka topic
-       through the producer utility, without bypassing Kafka or substituting another endpoint;
-     - verify the resulting blobs, tracking rows, completeness outcome, index row, and any
-       applicable response using the configured storage and SQL services;
-     - verify that the successful processing path reaches offset commit only after the writes
-       succeed, and that failure evidence does not claim a commit or successful completion;
-     - report the exact commands or actions, readiness checks, observed results, and any
-       unavailable dependency or failed assertion. An unavailable required dependency means
-       `Verdict: FAIL`, never an inferred `PASS`.
-
-     For live tests, do not invent, overwrite, regenerate, or manually substitute connection
-     values. Do not start, replace, or tear down services that are already available. Use setup
-     tools only when a required dependency is unavailable or the approved test explicitly
-     requires creating a missing database, schema, or equivalent resource; report the reason
-     and resource mutation. When the slice includes an API, test the locally running API only
-     with `curl` against its configured `localhost` endpoint; do not call external, shared, or
-     cloud endpoints or replace curl request/response evidence with browser automation.
-
-   For a repository-customization-only slice that does not change application behavior, the
-   planner selects bounded static evidence in place of Modes A and B. That evidence must verify
-   the changed customization files and repository build/test health without inventing a live
-   application scenario.
-
-**Coordination rules**: do not skip planning, review, or acceptance testing. Pass
-the ready plan, implementation summary, review verdict, changed-file context, and tester
-evidence directly through native agent context. Treat every item under reviewer `Findings`
-as blocking; never route `Suggestions`. Route `level: code` findings to snapshot-developer
-and `level: design` or `level: acceptance-contract` findings to snapshot-planner; after a fresh ready plan, return through snapshot-developer and
-snapshot-reviewer before testing. Respect a three-iteration loop budget, then stop and escalate
-to a human with the complete history.
-
-**Definition of done**: snapshot-reviewer `APPROVED`, snapshot-tester `PASS`, and build and
-tests green. Both tester modes are mandatory for application slices; planner-selected static
-evidence replaces them only for repository-customization-only slices. The tester report is the
-terminal workflow result.
+[workflow.agent.md](.github/agents/workflow.agent.md) is the single authority for automatic request classification,
+role orchestration, gates, rerouting, testing-mode selection, and workflow completion. Keep this
+file focused on shared project architecture, constraints, and conventions; do not duplicate the
+workflow lifecycle here.
