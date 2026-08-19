@@ -217,8 +217,8 @@ agent by hand, the coordinator picks that up on its own:
 
 > **Type into Copilot Chat:**
 > ```
-> Add an optional payloadType query filter to the Load-snapshots grid
-> endpoint, so the audit UI can filter the grid by payload type.
+> Add an optional limit query parameter to the Load-snapshots grid endpoint,
+> so callers can cap the number of records returned in one response.
 > ```
 
 While it's thinking, narrate what's actually happening rather than sitting
