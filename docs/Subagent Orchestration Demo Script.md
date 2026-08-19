@@ -269,10 +269,14 @@ Because self-review isn't independent — same context, same blind spots.
 This isn't better instructions, it's removing the edit tool from the roles
 that shouldn't have it in the first place.
 
-**Doesn't this cost more time and tokens than one prompt?**
-Yes — you're paying for a plan, a review, and a test pass instead of one
-shot. The trade is catching problems before merge instead of after, which
-is almost always cheaper.
+**Doesn't this use way more tokens than one prompt? Most of us are on the
+standard Copilot plan.**
+In practice, no — it nets out about the same. A single prompt rarely gets
+it right first try either. You catch a bug, ask it to fix it, ask it to
+add tests — that's several rounds too, just manual instead of automatic.
+This pipeline spends the same tokens, but bounded: it stops after 3
+retries instead of going back and forth forever. And catching a bug
+before it's merged is a lot cheaper than fixing it after it ships.
 
 **Does this work outside GitHub Copilot?**
 Same pattern, different file format. This repo actually ships both:
