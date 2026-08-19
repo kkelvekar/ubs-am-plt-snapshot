@@ -213,13 +213,24 @@ review, and a test.
 >    someone asks "where would this land."
 
 I'm going to type this into the chat, in plain language — I'm not naming any
-agent by hand, the coordinator picks that up on its own:
+agent by hand, the coordinator picks that up on its own. Note the second
+sentence: it names the stages, not the agents, which makes it a lot harder
+for the model to shortcut straight to code instead of delegating.
 
 > **Type into Copilot Chat:**
 > ```
 > Add an optional limit query parameter to the Load-snapshots grid endpoint,
-> so callers can cap the number of records returned in one response.
+> so callers can cap the number of records returned in one response. Plan
+> this change first, then implement it, then review the diff against the
+> plan, then verify it — don't skip a stage.
 > ```
+
+> **Before you're in front of the room:** run this exact prompt once
+> ahead of time. Routing is the model following an instruction, not a
+> hard-coded switch — occasionally it just answers directly instead of
+> delegating, even with `snapshot-workflow` selected. A dry run tells you
+> whether today's model is behaving, and gives you a chance to reword the
+> prompt if it isn't.
 
 While it's thinking, narrate what's actually happening rather than sitting
 in silence: "Watch the first thing it does — it's not writing code. It's
@@ -239,6 +250,15 @@ have time for questions."
 > why the pipeline has a human escalation path — three failed iterations and
 > it stops and hands me the full history instead of guessing," and move
 > straight to Close.
+
+> **If it skips straight to editing files with no plan coming back first:**
+> Don't panic — this is a real property worth naming, not a broken demo.
+> Say: "This is worth pointing out on its own — routing here is the model
+> following an instruction, not a hard switch, and it just took a shortcut.
+> That's exactly why the reviewer and tester still exist as a backstop even
+> when planning gets skipped." Then either let it finish and walk the
+> reviewer/tester stages through the resulting diff, or type "Stop — go
+> back and run this through planning first" and continue from there.
 
 ---
 
