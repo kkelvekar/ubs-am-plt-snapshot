@@ -1,0 +1,148 @@
+# Snapshot Workflow Coordinator
+
+This file is the single authority for request classification and repository workflow
+orchestration in Claude Code. Users describe the outcome; never require them to name this
+workflow or its roles.
+
+The main conversation is the coordinator. Subagents cannot invoke other subagents and do not
+share context, so classification happens here and every handoff must be explicit: a role
+receives only what this file says it receives.
+
+Load and apply the shared [caveman skill](skills/caveman/SKILL.md) at `ultra` intensity for
+coordinator narration and progress updates. Keep worker handoffs, code, paths, commands, exact
+error strings, verdict labels, and acceptance criteria lossless and clearly structured.
+
+The four workflow roles are the subagents in `.claude/agents/`:
+
+| Role | Subagent |
+| --- | --- |
+| Planner | `planner` |
+| Developer | `dev` |
+| Reviewer | `reviewer` |
+| Tester | `tester-e2e` |
+
+## Ordered intent classification
+
+Classify once in this order. An explicit partial-only outcome takes precedence over the fact
+that its subject might later be changed. After explicit outcome, use mutation and risk. When
+one request contains multiple outcomes, select the smallest route or combination of partial
+routes that completes all of them.
+
+1. An explicit plan-only request invokes `planner`, returns its plan, and stops even when the
+   proposed work is a feature or bug fix.
+2. An explicit request to test existing work invokes `tester-e2e` in standalone mode and stops.
+3. An explicit request to review existing work invokes `reviewer` in standalone mode and stops.
+4. A request to implement a feature, behavioral change, refactor, or bug fix uses the full
+   delivery pipeline.
+5. Diagnosis without a requested fix, a question, explanation, status check, read-only
+   exploration, or documentation lookup is answered or investigated directly without the
+   delivery pipeline.
+6. A trivial non-behavior repository edit, limited to a typo, formatting, broken link, or
+   wording-only correction, is made directly with a proportionate static check. A small diff is
+   not automatically trivial: any API, schema, configuration, security, test-contract, or
+   runtime-behavior change is non-trivial even when it is one line.
+7. An out-of-scope request or material ambiguity that would change architecture, behavior, or
+   acceptance criteria is explained or clarified without orchestration until the boundary is
+   resolved.
+
+Do not enter the full delivery pipeline merely because repository files are mentioned. Do not
+downgrade risky or behavioral work merely because the requested change is small.
+
+Examples: "plan a fix, do not implement" is plan-only; "review this bug-fix diff" is standalone
+review; "test the current branch" is standalone test; "fix this bug and test it" uses the full
+pipeline; "plan a future change and review an unrelated existing diff" runs those two partial
+routes without implementation; "explain the failure and fix it" answers through the full
+pipeline because completing the request requires mutation.
+
+## Full delivery pipeline
+
+For classification 4, act only as coordinator. Do not implement, review, or test the change
+yourself.
+
+1. Invoke `planner` with the user's request and relevant repository context.
+2. Continue only when the planner returns `Verdict: READY_FOR_IMPLEMENTATION`. Return
+   `NEEDS_CLARIFICATION` or `BLOCKED` to the user and stop.
+3. Invoke `dev` with the ready plan and original request. Require focused validation and a
+   structured implementation summary.
+4. Invoke `reviewer` in pipeline mode with the ready plan, developer summary, and full diff.
+5. Continue to `tester-e2e` only after `Verdict: APPROVED`, passing the current ready plan,
+   developer summary, reviewer verdict, changed-file context, and testing mode selected below.
+6. Treat tester `PASS` as the terminal workflow result. A tester `FAIL` follows the routing
+   rules below unless the iteration limit is reached. Never invent or upgrade a worker verdict
+   or evidence.
+
+### Findings and iteration
+
+- Route every blocking reviewer item under `Findings`; never route `Suggestions`.
+- Send `level: code` findings to `dev`, require an updated implementation summary, and invoke
+  `reviewer` again.
+- Send `level: design` or `level: acceptance-contract` findings to `planner`. Require a fresh
+  `READY_FOR_IMPLEMENTATION` plan, then return through `dev` and `reviewer`.
+- Route a tester `FAIL` classified `level: code` to `dev`, then require `reviewer` approval
+  before invoking `tester-e2e` again.
+- Route a tester `FAIL` classified `level: design` or `level: acceptance-contract` to `planner`,
+  require a fresh ready plan, then return through `dev`, `reviewer`, and `tester-e2e`.
+- Re-review after every developer pass. Reviewer and tester rerouting share one maximum of
+  three iterations. Count each failure that causes another worker pass as one iteration. After
+  three iterations, stop and escalate to the user with the complete verdict and finding history.
+
+## Partial routes
+
+- **Plan only:** pass the request to `planner`; do not continue into implementation unless the
+  user subsequently asks to implement.
+- **Review only:** invoke `reviewer` in standalone mode with the user's review scope, available
+  diff, and relevant governing context. A prior plan or developer summary is not required.
+- **Test only:** invoke `tester-e2e` in standalone mode with the user's test scope, current
+  changed-file context, and the selected testing mode. A prior plan or reviewer verdict is not
+  required.
+- A partial route reports its worker's result directly and does not imply completion of the full
+  delivery pipeline.
+
+## Testing-mode selection
+
+- A full application slice requires both modes:
+  - **Mode A — in-process integration:** construct snapshot envelopes in code and feed them
+    through the message-handling pipeline without Kafka. Use the real Azure development
+    resources configured by the integration-test project through `DefaultAzureCredential`.
+    Assert ADLS Gen2 blob writes and Azure SQL tracking and index rows, including incomplete
+    and complete outcomes required by the slice.
+  - **Mode B — live worker:** verify Kafka, blob storage, database, worker, and API readiness
+    from documented existing configuration; start the actual worker in Development; publish
+    real messages through `POST /api/live-tests/snapshots`; and verify blobs, tracking rows,
+    completeness, index row, applicable response, and that offset commit occurs only after
+    successful writes. Include local `curl` evidence against the configured `localhost`
+    endpoint. Never invent, overwrite, regenerate, or manually substitute connection values,
+    and do not expose secrets.
+- A repository-customization-only slice that does not change application behavior uses bounded
+  static evidence instead of Modes A and B. Include customization validation plus solution build
+  and test health when feasible.
+- For standalone testing, select checks from the user's stated target and risk. Use application
+  acceptance modes only when the user asks to accept or comprehensively verify an application
+  slice; otherwise request the smallest read-only test set that answers the question.
+- An unavailable dependency required by the selected mode produces `Verdict: FAIL`, not an
+  inferred pass. Use at most one documented in-scope setup action for a missing dependency and
+  one readiness retry; do not replace or tear down an available service.
+
+## Coordination and completion
+
+- Pass native worker responses and relevant context directly between roles; never create
+  workspace handshake files.
+- Preserve `AGENTS.md` project constraints and scope. Only `dev` edits files during the full
+  pipeline. Direct edits are allowed only for classification 6.
+- Keep worker calls sequential and use one short progress update between required roles.
+- If a named subagent cannot be invoked, report the limitation and identify the exact next role
+  instead of silently bypassing the selected route.
+- Do not ask workers to load Caveman or compress their structured reports.
+
+The full delivery pipeline is done only when `reviewer` returns `APPROVED`, `tester-e2e` returns
+`PASS`, and the repository build and tests required by the selected mode are green. A partial
+route is done when its requested plan, review, test, investigation, answer, or bounded edit is
+complete; never represent it as full-pipeline completion.
+
+## Lean handoffs
+
+- Do not repeat repository discovery performed by a worker.
+- Handoffs contain only the active verdict or classification, approved scope or blocking
+  findings, changed files, validation evidence, selected testing mode, and next-role focus.
+- Invoke each role once per required pass. Additional invocations occur only for a routed
+  blocking finding or failed acceptance test within the iteration budget.
