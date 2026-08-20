@@ -13,9 +13,10 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 /// commits the offset and redelivery retries the message.
 /// </summary>
 /// <remarks>
-/// A message refused by the pre-write envelope guards never enters that order: it is recorded
-/// as a FAILED tracking row, reported to the publishing application, and the rejection is
-/// rethrown for the consumer to commit past. No blob and no index row is touched on that path.
+/// A message refused by the pre-write envelope guards, or by an invalid completed header, is
+/// recorded as a FAILED tracking row, reported to the publishing application, and rethrown for
+/// the consumer to commit past. The pre-write path touches no blob; a completed-header
+/// rejection retains the payloads already written to durable storage.
 /// </remarks>
 public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 {
@@ -51,74 +52,66 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         {
             SnapshotEnvelopeValidator.ValidateEnvelope(message);
             SnapshotEnvelopeValidator.ValidatePayloadType(message, _requiredFilesProvider);
+
+            // The root folder is pinned to the first payload's arrival time and reused by every
+            // later or redelivered payload, so a snapshot whose messages straddle a month or year
+            // boundary never splits across two folders. The lookup mutates nothing, so the write
+            // order still starts at the blob write below.
+            var rootPath = await _trackingStore.GetRootPathAsync(message.SnapshotId, cancellationToken)
+                ?? SnapshotBlobPath.RootFolder(message, _timeProvider.GetUtcNow());
+            await _blobStore.WriteAsync(message, rootPath, cancellationToken);
+            var tracking = await _trackingStore.UpsertReceivedAsync(message, rootPath, cancellationToken);
+
+            // A redelivery arriving after the snapshot already completed or failed does nothing
+            // beyond the blob write and tracking upsert above.
+            if (tracking.Status == SnapshotTrackingStatus.Receiving)
+            {
+                var required = _requiredFilesProvider.GetRequiredFiles(message.SnapshotType);
+                if (SnapshotCompleteness.IsComplete(tracking.ReceivedFiles, required))
+                {
+                    var headerJson = await _blobStore.ReadHeaderAsync(tracking.AdlsRootPath, cancellationToken);
+                    var eventType = PortfolioSnapshotIndexEntryBuilder.ExtractEventType(headerJson);
+
+                    var indexEntry = PortfolioSnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
+
+                    // The index UPSERT must precede the status flip: if it fails, tracking must
+                    // still read RECEIVING so redelivery retries this branch.
+                    await _indexStore.UpsertAsync(indexEntry, cancellationToken);
+
+                    // Publishing must also precede the flip: once the row reads COMPLETE this
+                    // branch stops firing, so a notification that failed after the flip could
+                    // never be retried.
+                    await PublishCompletedAsync(message, tracking);
+
+                    await _trackingStore.MarkCompleteAsync(message.SnapshotId, cancellationToken);
+
+                    _logger.LogInformation(
+                        "Snapshot complete: index row upserted and tracking marked complete snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} adlsRootPath={AdlsRootPath} eventType={EventType}",
+                        message.SnapshotId,
+                        message.AccountId,
+                        message.PayloadType,
+                        tracking.AdlsRootPath,
+                        eventType);
+                }
+                else if (tracking.ReceivedFiles.Count == 1)
+                {
+                    await PublishReceivingAsync(message, tracking, required);
+                }
+            }
+
+            _logger.LogInformation(
+                "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
+                message.SnapshotId,
+                message.AccountId,
+                message.PayloadType,
+                rootPath,
+                tracking.ReceivedFiles.Count);
         }
         catch (SnapshotMessageRejectedException ex)
         {
             await RecordAndPublishRejectionAsync(message, ex, cancellationToken);
             throw; // the consumer must still see the rejection and commit past it
         }
-
-        // The root folder is pinned to the first payload's arrival time and reused by every
-        // later or redelivered payload, so a snapshot whose messages straddle a month or year
-        // boundary never splits across two folders. The lookup mutates nothing, so the write
-        // order still starts at the blob write below.
-        var rootPath = await _trackingStore.GetRootPathAsync(message.SnapshotId, cancellationToken)
-            ?? SnapshotBlobPath.RootFolder(message, _timeProvider.GetUtcNow());
-        await _blobStore.WriteAsync(message, rootPath, cancellationToken);
-        var tracking = await _trackingStore.UpsertReceivedAsync(message, rootPath, cancellationToken);
-
-        // A redelivery arriving after the snapshot already completed or failed does nothing
-        // beyond the blob write and tracking upsert above.
-        if (tracking.Status == SnapshotTrackingStatus.Receiving)
-        {
-            var required = _requiredFilesProvider.GetRequiredFiles(message.SnapshotType);
-            if (SnapshotCompleteness.IsComplete(tracking.ReceivedFiles, required))
-            {
-                var headerJson = await _blobStore.ReadHeaderAsync(tracking.AdlsRootPath, cancellationToken);
-                var eventType = PortfolioSnapshotIndexEntryBuilder.ExtractEventType(headerJson);
-                if (eventType.Length == 0)
-                {
-                    _logger.LogWarning(
-                        "Header has no usable eventType; writing the index row with an empty EventType snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
-                        message.SnapshotId,
-                        message.AccountId,
-                        message.PayloadType);
-                }
-
-                var indexEntry = PortfolioSnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
-
-                // The index UPSERT must precede the status flip: if it fails, tracking must
-                // still read RECEIVING so redelivery retries this branch.
-                await _indexStore.UpsertAsync(indexEntry, cancellationToken);
-
-                // Publishing must also precede the flip: once the row reads COMPLETE this
-                // branch stops firing, so a notification that failed after the flip could
-                // never be retried.
-                await PublishCompletedAsync(message, tracking);
-
-                await _trackingStore.MarkCompleteAsync(message.SnapshotId, cancellationToken);
-
-                _logger.LogInformation(
-                    "Snapshot complete: index row upserted and tracking marked complete snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} adlsRootPath={AdlsRootPath} eventType={EventType}",
-                    message.SnapshotId,
-                    message.AccountId,
-                    message.PayloadType,
-                    tracking.AdlsRootPath,
-                    eventType);
-            }
-            else if (tracking.ReceivedFiles.Count == 1)
-            {
-                await PublishReceivingAsync(message, tracking, required);
-            }
-        }
-
-        _logger.LogInformation(
-            "Wrote snapshot payload blob and upserted tracking snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} rootPath={RootPath} receivedFileCount={ReceivedFileCount}",
-            message.SnapshotId,
-            message.AccountId,
-            message.PayloadType,
-            rootPath,
-            tracking.ReceivedFiles.Count);
     }
 
     /// <summary>

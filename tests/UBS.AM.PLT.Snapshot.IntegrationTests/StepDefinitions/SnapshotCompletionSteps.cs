@@ -47,9 +47,9 @@ public sealed class SnapshotCompletionSteps
     public Task WhenTheOrdersPayloadIsReceived() =>
         SendPayloadAsync("orders", TestPayloads.OrdersJson);
 
-    [When("the calculations payload is received")]
-    public Task WhenTheCalculationsPayloadIsReceived() =>
-        SendPayloadAsync("calculations", TestPayloads.CalculationsJson);
+    [When("the portfolio payload is received")]
+    public Task WhenThePortfolioPayloadIsReceived() =>
+        SendPayloadAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("the settings payload is received")]
     public Task WhenTheSettingsPayloadIsReceived() =>
@@ -107,7 +107,7 @@ public sealed class SnapshotCompletionSteps
 
         Assert.Equal(_accountId, notification.AccountId);
         Assert.Equal(["orders.json"], notification.ReceivedFiles);
-        Assert.Equal(["calculations.json", "header.json", "settings.json"], notification.MissingFiles);
+        Assert.Equal(["header.json", "portfolio.json", "settings.json"], notification.MissingFiles);
         Assert.Null(notification.CompletedAt);
     }
 
@@ -122,7 +122,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(_accountId, notification.AccountId);
         Assert.Empty(notification.MissingFiles);
         Assert.Equal(
-            new[] { "calculations.json", "header.json", "orders.json", "settings.json" },
+            new[] { "header.json", "orders.json", "portfolio.json", "settings.json" },
             notification.ReceivedFiles.Order());
         Assert.Equal(tracking.FirstReceivedAt, notification.FirstReceivedAt);
         Assert.NotNull(notification.CompletedAt);
@@ -136,7 +136,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
         Assert.NotNull(tracking.CompletedAt);
 
-        foreach (var fileName in new[] { "header.json", "orders.json", "calculations.json", "settings.json" })
+        foreach (var fileName in new[] { "header.json", "orders.json", "portfolio.json", "settings.json" })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/{fileName}").ExistsAsync(),

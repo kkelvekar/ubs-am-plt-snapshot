@@ -59,9 +59,9 @@ public sealed class RedeliveryAfterOffsetCommitFailureSteps
     public Task WhenTheSnapshotReceivesAnOrdersPayload() =>
         DeliverAsync("orders", TestPayloads.OrdersJson);
 
-    [When("the snapshot receives a calculations payload")]
-    public Task WhenTheSnapshotReceivesACalculationsPayload() =>
-        DeliverAsync("calculations", TestPayloads.CalculationsJson);
+    [When("the snapshot receives a portfolio payload")]
+    public Task WhenTheSnapshotReceivesAPortfolioPayload() =>
+        DeliverAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("the snapshot receives a settings payload")]
     public Task WhenTheSnapshotReceivesASettingsPayload() =>

@@ -10,23 +10,27 @@ internal static class TestPayloads
 {
     public const string HeaderJson = """
         {
-          "eventType": "REBALANCE",
-          "portfolioStatus": "APPROVED",
-          "orderStatus": "SENT",
-          "benchmark": "MSCI World",
-          "baseCcy": "CHF",
-          "programId": "PRG-7",
-          "batchId": "BATCH-2026-07-13",
-          "numOrders": 17,
-          "ptcAlerts": 2,
-          "orderApprovedBy": "approver@ubs.com",
-          "orderApprovedAt": "2026-07-13T10:45:00Z",
-          "orderSentBy": "sender@ubs.com",
-          "orderSentAt": "2026-07-13T10:50:00Z"
+          "SnapshotId": "corr20260713-0001",
+          "Type": "Header",
+          "Payload": {
+            "Event": "REBALANCE",
+            "portfolioStatus": "APPROVED",
+            "orderStatus": "SENT",
+            "benchmark": "MSCI World",
+            "baseCcy": "CHF",
+            "programId": "PRG-7",
+            "batchId": "BATCH-2026-07-13",
+            "numOrders": 17,
+            "ptcAlerts": 2,
+            "orderApprovedBy": "approver@ubs.com",
+            "orderApprovedAt": "2026-07-13T10:45:00Z",
+            "orderSentBy": "sender@ubs.com",
+            "orderSentAt": "2026-07-13T10:50:00Z"
+          }
         }
         """;
 
-    // The one header value the writer extracts into its own filterable column; every other
+    // The one header value the writer extracts from Payload.Event into its own filterable column; every other
     // header field reaches SQL only inside the verbatim DisplayData text.
     public const string HeaderEventType = "REBALANCE";
 
@@ -44,7 +48,7 @@ internal static class TestPayloads
         {"positions":[{"isin":"US5949181045","qty":400}]}
         """;
 
-    public const string CalculationsJson = """
+    public const string PortfolioJson = """
         {"nav":5555.55,"ccy":"CHF"}
         """;
 

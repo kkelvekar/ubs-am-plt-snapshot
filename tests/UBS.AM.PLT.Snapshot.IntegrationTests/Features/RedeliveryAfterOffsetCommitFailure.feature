@@ -12,7 +12,7 @@ Feature: Redelivery after a failed offset commit
 Scenario: Redelivery of the completing header after a failed offset commit is a harmless no-op
     Given a failure-scenario snapshot for account "IT-ACC-006"
     When the snapshot receives an orders payload
-    And the snapshot receives a calculations payload
+    And the snapshot receives a portfolio payload
     And the snapshot receives a settings payload
     And the completing header message is delivered for the first time
     Then the snapshot is COMPLETE and its tracking, index and header blob are recorded as the redelivery baseline

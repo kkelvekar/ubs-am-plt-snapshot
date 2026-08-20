@@ -1,21 +1,22 @@
 {
   "accountIds": [
-    "99900002Y"
+    "99900003X"
   ],
   "payloads": [
     {
       "payloadType": "header",
       "publishedBy": "Portal",
       "payload": {
-        "EventType": "Rebalance",
-        "portfolioStatus": "ReadyToSend",
-        "orderStatus": "ReadyToSend",
-        "benchmark": "MCCHM2EQ",
-        "baseCcy": "CHF",
-        "programId": "1",
-        "batchId": "1",
-        "numOrders": 1,
-        "ptcAlerts": 0
+        "Payload": {
+          "portfolioStatus": "ReadyToSend",
+          "orderStatus": "ReadyToSend",
+          "benchmark": "MCCHM2EQ",
+          "baseCcy": "CHF",
+          "programId": "1",
+          "batchId": "1",
+          "numOrders": 1,
+          "ptcAlerts": 0
+        }
       }
     },
     {
@@ -24,7 +25,7 @@
       "payload": { "total": 1 }
     },
     {
-      "payloadType": "calculations",
+      "payloadType": "portfolio",
       "publishedBy": "PortfolioCalculation",
       "payload": { "nav": 1.0 }
     },

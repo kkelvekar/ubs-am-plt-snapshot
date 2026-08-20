@@ -77,9 +77,9 @@ public sealed class RejectionRecordingSteps
     public Task WhenARequiredOrdersPayloadIsDeliveredForTheRejectionRecordingSnapshot() =>
         DeliverAsync("orders", TestPayloads.OrdersJson);
 
-    [When("a required calculations payload is delivered for the rejection-recording snapshot")]
-    public Task WhenARequiredCalculationsPayloadIsDeliveredForTheRejectionRecordingSnapshot() =>
-        DeliverAsync("calculations", TestPayloads.CalculationsJson);
+    [When("a required portfolio payload is delivered for the rejection-recording snapshot")]
+    public Task WhenARequiredPortfolioPayloadIsDeliveredForTheRejectionRecordingSnapshot() =>
+        DeliverAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("a required settings payload is delivered for the rejection-recording snapshot")]
     public Task WhenARequiredSettingsPayloadIsDeliveredForTheRejectionRecordingSnapshot() =>
@@ -162,7 +162,7 @@ public sealed class RejectionRecordingSteps
         Assert.False(string.IsNullOrEmpty(tracking.AdlsRootPath));
         Assert.Contains($"accountId={_accountId}/snapshotId={_snapshotId}", tracking.AdlsRootPath);
 
-        foreach (var fileName in new[] { "orders.json", "calculations.json", "settings.json", "header.json" })
+        foreach (var fileName in new[] { "orders.json", "portfolio.json", "settings.json", "header.json" })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/{fileName}").ExistsAsync(),

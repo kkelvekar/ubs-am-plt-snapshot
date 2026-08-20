@@ -33,7 +33,7 @@ public sealed class SnapshotPayloadDocumentComposerTests
         [
             new() { PayloadType = "header", Json = """{"a":1}""" },
             new() { PayloadType = "orders", Json = """[1,2,3]""" },
-            new() { PayloadType = "calculations", Json = """{"b":[{"c":null}]}""" },
+            new() { PayloadType = "portfolio", Json = """{"b":[{"c":null}]}""" },
         ];
 
         var json = SnapshotPayloadDocumentComposer.Compose(payloads);
@@ -43,7 +43,7 @@ public sealed class SnapshotPayloadDocumentComposerTests
         Assert.Equal(3, document.RootElement.EnumerateObject().Count());
         Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("header").ValueKind);
         Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty("orders").ValueKind);
-        Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("calculations").ValueKind);
+        Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("portfolio").ValueKind);
     }
 
     [Fact]

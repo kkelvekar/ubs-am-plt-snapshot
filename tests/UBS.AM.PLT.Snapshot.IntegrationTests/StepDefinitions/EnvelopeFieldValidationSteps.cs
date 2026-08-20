@@ -56,9 +56,9 @@ public sealed class EnvelopeFieldValidationSteps
     public Task WhenTheFieldValidationOrdersPayloadArrives() =>
         DeliverAsync("orders", TestPayloads.OrdersJson);
 
-    [When("the field-validation calculations payload arrives")]
-    public Task WhenTheFieldValidationCalculationsPayloadArrives() =>
-        DeliverAsync("calculations", TestPayloads.CalculationsJson);
+    [When("the field-validation portfolio payload arrives")]
+    public Task WhenTheFieldValidationPortfolioPayloadArrives() =>
+        DeliverAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("the field-validation settings payload arrives")]
     public Task WhenTheFieldValidationSettingsPayloadArrives() =>

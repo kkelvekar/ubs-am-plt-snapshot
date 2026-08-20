@@ -1,5 +1,5 @@
 {
-  "_comment": "Sample Kafka messages for the ubs-advantage-snapshots topic, conforming to docs/snapshot-request.schema.json. Each entry is one message value (publish as a JSON string, key = AccountId). Together the four entries form one complete snapshot: the index row is written once all four required files (header, orders, calculations, settings) have been received.",
+  "_comment": "Sample Kafka messages for the ubs-advantage-snapshots topic, conforming to docs/snapshot-request.schema.json. Each entry is one message value (publish as a JSON string, key = AccountId). Together the four entries form one complete snapshot: the index row is written once all four required files (header, orders, portfolio, settings) have been received.",
   "messages": [
     {
       "SnapshotId": "corr20260727-0001",
@@ -8,7 +8,7 @@
       "PayloadType": "header",
       "PublishedAt": "2026-07-27T10:45:00.0000000Z",
       "PublishedBy": "PortfolioCalculation",
-      "Payload": "{\"eventType\":\"REBALANCE\",\"portfolioStatus\":\"APPROVED\",\"orderStatus\":\"SENT\",\"benchmark\":\"MSCI World\",\"baseCcy\":\"CHF\",\"programId\":\"PRG-7\",\"batchId\":\"BATCH-2026-07-13\",\"numOrders\":17,\"ptcAlerts\":2,\"orderApprovedBy\":\"approver@ubs.com\",\"orderApprovedAt\":\"2026-07-13T10:45:00Z\",\"orderSentBy\":\"sender@ubs.com\",\"orderSentAt\":\"2026-07-13T10:50:00Z\"}"
+      "Payload": "{\"SnapshotId\":\"corr20260727-0001\",\"Type\":\"Header\",\"Payload\":{\"Event\":\"REBALANCE\",\"portfolioStatus\":\"APPROVED\",\"orderStatus\":\"SENT\",\"benchmark\":\"MSCI World\",\"baseCcy\":\"CHF\",\"programId\":\"PRG-7\",\"batchId\":\"BATCH-2026-07-13\",\"numOrders\":17,\"ptcAlerts\":2,\"orderApprovedBy\":\"approver@ubs.com\",\"orderApprovedAt\":\"2026-07-13T10:45:00Z\",\"orderSentBy\":\"sender@ubs.com\",\"orderSentAt\":\"2026-07-13T10:50:00Z\"}}"
     },
     {
       "SnapshotId": "corr20260727-0001",
@@ -23,7 +23,7 @@
       "SnapshotId": "corr20260727-0001",
       "AccountId": "00675442A",
       "SnapshotType": "portfolio",
-      "PayloadType": "calculations",
+      "PayloadType": "portfolio",
       "PublishedAt": "2026-07-27T10:45:10.0000000Z",
       "PublishedBy": "PortfolioCalculation",
       "Payload": "{\"nav\":5555.55,\"ccy\":\"CHF\"}"

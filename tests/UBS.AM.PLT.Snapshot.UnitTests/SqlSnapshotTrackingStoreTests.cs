@@ -207,7 +207,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         Assert.Null(entry.DeclaredFailedAt);
         Assert.Equal(completedAt, entry.CompletedAt);
         Assert.Equal(completedAt, entry.LastUpdatedAt);
-        Assert.Equal(["header.json", "orders.json", "calculations.json", "settings.json"], entry.ReceivedFiles);
+        Assert.Equal(["header.json", "orders.json", "portfolio.json", "settings.json"], entry.ReceivedFiles);
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public sealed class SqlSnapshotTrackingStoreTests
 
         _timeProvider.UtcNow = StartTime.AddMinutes(5);
         var entry = await _store.UpsertReceivedAsync(
-            CreateMessage("snap-1", "calculations"), "some/other/root", CancellationToken.None);
+            CreateMessage("snap-1", "portfolio"), "some/other/root", CancellationToken.None);
 
         // Backfilled once; from then on it is a pinned path like any other and is never moved.
         Assert.Equal(RootPath, entry.AdlsRootPath);
@@ -382,7 +382,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         AccountId = "00675442A",
         SnapshotType = "portfolio",
         AdlsRootPath = RootPath,
-        ReceivedFiles = ["header.json", "orders.json", "calculations.json", "settings.json"],
+        ReceivedFiles = ["header.json", "orders.json", "portfolio.json", "settings.json"],
         Status = SnapshotTrackingStatus.Complete,
         FirstReceivedAt = StartTime.UtcDateTime,
         LastUpdatedAt = completedAt,

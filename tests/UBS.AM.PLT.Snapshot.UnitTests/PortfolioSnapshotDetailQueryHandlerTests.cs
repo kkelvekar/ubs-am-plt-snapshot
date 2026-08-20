@@ -108,9 +108,9 @@ public sealed class PortfolioSnapshotDetailQueryHandlerTests
         var handler = CreateHandler();
 
         await Assert.ThrowsAsync<SnapshotNotFoundException>(
-            () => handler.GetPayloadAsync(SnapshotId, "calculations", CancellationToken.None));
+            () => handler.GetPayloadAsync(SnapshotId, "portfolio", CancellationToken.None));
 
-        Assert.Equal([(AdlsPath, "calculations")], _payloadQuery.SingleReads);
+        Assert.Equal([(AdlsPath, "portfolio")], _payloadQuery.SingleReads);
     }
 
     [Fact]

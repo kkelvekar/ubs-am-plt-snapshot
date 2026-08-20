@@ -60,9 +60,9 @@ public sealed class RedeliveryIdempotencySteps
     public Task WhenAnOrdersPayloadIsDelivered() =>
         DeliverAsync("orders", TestPayloads.OrdersJson);
 
-    [When("a calculations payload is delivered")]
-    public Task WhenACalculationsPayloadIsDelivered() =>
-        DeliverAsync("calculations", TestPayloads.CalculationsJson);
+    [When("a portfolio payload is delivered")]
+    public Task WhenAPortfolioPayloadIsDelivered() =>
+        DeliverAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("a settings payload is delivered")]
     public Task WhenASettingsPayloadIsDelivered() =>

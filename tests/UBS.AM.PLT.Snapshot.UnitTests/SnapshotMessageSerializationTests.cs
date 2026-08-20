@@ -18,7 +18,7 @@ public class SnapshotMessageSerializationTests
         """{"total":21,"equities":[{"assetName":"APPLE LTD","sedol":"BPBAJ01","ccy":"CHF","region":"EMEA","targetPct":1.52,"prevTargetPct":1.52}],"futures":[],"cash":[]}""";
 
     private const string HeaderPayloadJson =
-        """{"eventType":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","numOrders":4,"ptcAlerts":0,"programId":"123456","batchId":"15884"}""";
+        """{"SnapshotId":"corr98765","Type":"Header","Payload":{"Event":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","numOrders":4,"ptcAlerts":0,"programId":"123456","batchId":"15884"}}""";
 
     private const string OrdersWireExample = """
         {
@@ -40,7 +40,7 @@ public class SnapshotMessageSerializationTests
           "PayloadType":  "header",
           "PublishedAt":  "2026-05-22T06:14:22Z",
           "PublishedBy":  "Portal",
-          "Payload":      "{\"eventType\":\"ModelChange\",\"portfolioStatus\":\"ReadyToSend\",\"orderStatus\":\"ReadyToSend\",\"benchmark\":\"MCCHM2EQ\",\"baseCcy\":\"CHF\",\"orderApprovedBy\":\"Anna Miller\",\"orderApprovedAt\":\"2026-05-15T06:10:14Z\",\"orderSentBy\":\"James Smith\",\"numOrders\":4,\"ptcAlerts\":0,\"programId\":\"123456\",\"batchId\":\"15884\"}"
+          "Payload":      "{\"SnapshotId\":\"corr98765\",\"Type\":\"Header\",\"Payload\":{\"Event\":\"ModelChange\",\"portfolioStatus\":\"ReadyToSend\",\"orderStatus\":\"ReadyToSend\",\"benchmark\":\"MCCHM2EQ\",\"baseCcy\":\"CHF\",\"orderApprovedBy\":\"Anna Miller\",\"orderApprovedAt\":\"2026-05-15T06:10:14Z\",\"orderSentBy\":\"James Smith\",\"numOrders\":4,\"ptcAlerts\":0,\"programId\":\"123456\",\"batchId\":\"15884\"}}"
         }
         """;
 

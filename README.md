@@ -69,7 +69,7 @@ above.
   "PayloadType": "header",
   "PublishedAt": "2026-07-27T10:45:00.0000000Z",
   "PublishedBy": "PortfolioCalculation",
-  "Payload": "{\"eventType\":\"REBALANCE\",\"portfolioStatus\":\"APPROVED\",\"orderStatus\":\"SENT\",\"benchmark\":\"MSCI World\",\"baseCcy\":\"CHF\",\"programId\":\"PRG-7\",\"batchId\":\"BATCH-2026-07-13\",\"numOrders\":17,\"ptcAlerts\":2,\"orderApprovedBy\":\"approver@ubs.com\",\"orderApprovedAt\":\"2026-07-13T10:45:00Z\",\"orderSentBy\":\"sender@ubs.com\",\"orderSentAt\":\"2026-07-13T10:50:00Z\"}"
+  "Payload": "{\"SnapshotId\":\"corr20260727-0001\",\"Type\":\"Header\",\"Payload\":{\"Event\":\"REBALANCE\",\"portfolioStatus\":\"APPROVED\",\"orderStatus\":\"SENT\",\"benchmark\":\"MSCI World\",\"baseCcy\":\"CHF\",\"programId\":\"PRG-7\",\"batchId\":\"BATCH-2026-07-13\",\"numOrders\":17,\"ptcAlerts\":2,\"orderApprovedBy\":\"approver@ubs.com\",\"orderApprovedAt\":\"2026-07-13T10:45:00Z\",\"orderSentBy\":\"sender@ubs.com\",\"orderSentAt\":\"2026-07-13T10:50:00Z\"}}"
 }
 ```
 
@@ -83,7 +83,7 @@ snapshot type, adding a type is a config change on this service's side):
 
   // PayloadType — for SnapshotType "portfolio", exactly these four are accepted.
   // A snapshot is COMPLETE once all four have arrived for the same SnapshotId.
-  "PayloadType": "header" // | "orders" | "calculations" | "settings"
+  "PayloadType": "header" // | "orders" | "portfolio" | "settings"
 }
 ```
 
@@ -91,10 +91,12 @@ A snapshot is a set of related messages: publish one message per `PayloadType`, 
 sharing the same `SnapshotId`/`AccountId`/`SnapshotType`. Order between the four
 does not matter and any of them may be redelivered — writes are idempotent.
 
-Only the `header` payload is ever inspected by this service (its `eventType` field
-is extracted for the audit grid). `orders`, `calculations`, `settings` — and every
+Only the `header` payload is ever inspected by this service (its `Payload.Event` field
+is extracted for the audit grid). `orders`, `portfolio`, `settings` — and every
 other field inside `header` — pass through completely opaque: send whatever JSON
-document your payload type requires.
+document your payload type requires. A missing, invalid, blank, or over-length
+`Payload.Event` rejects the snapshot with `INVALID_HEADER_EVENT`; malformed header JSON
+remains retryable.
 
 ---
 
@@ -134,7 +136,7 @@ response (`Receiving` → `Complete`) and a failure response (`Failed`, with
   "SnapshotId": "corr20260727-0001",
   "AccountId": "00675442A",
   "ReceivedFiles": ["header.json"],
-  "MissingFiles": ["calculations.json", "orders.json", "settings.json"],
+  "MissingFiles": ["orders.json", "portfolio.json", "settings.json"],
   "Status": "Receiving",
   "FirstReceivedAt": "2026-07-27T10:45:00.0000000Z",
   "LastUpdatedAt": "2026-07-27T10:45:00.0000000Z",
@@ -151,7 +153,7 @@ response (`Receiving` → `Complete`) and a failure response (`Failed`, with
 {
   "SnapshotId": "corr20260727-0001",
   "AccountId": "00675442A",
-  "ReceivedFiles": ["calculations.json", "header.json", "orders.json", "settings.json"],
+  "ReceivedFiles": ["header.json", "orders.json", "portfolio.json", "settings.json"],
   "MissingFiles": [],
   "Status": "Complete",
   "FirstReceivedAt": "2026-07-27T10:45:00.0000000Z",
@@ -253,18 +255,23 @@ Each row is the fixed index columns plus every top-level field of the snapshot's
     "snapshotDate": "2026-07-27T10:45:00Z",
     "eventType": "REBALANCE",
     "createdAt": "2026-07-27T10:45:15Z",
-    "portfolioStatus": "APPROVED",
-    "orderStatus": "SENT",
-    "benchmark": "MSCI World",
-    "baseCcy": "CHF",
-    "programId": "PRG-7",
-    "batchId": "BATCH-2026-07-13",
-    "numOrders": 17,
-    "ptcAlerts": 2,
-    "orderApprovedBy": "approver@ubs.com",
-    "orderApprovedAt": "2026-07-13T10:45:00Z",
-    "orderSentBy": "sender@ubs.com",
-    "orderSentAt": "2026-07-13T10:50:00Z"
+    "SnapshotId": "corr20260727-0001",
+    "Type": "Header",
+    "Payload": {
+      "Event": "REBALANCE",
+      "portfolioStatus": "APPROVED",
+      "orderStatus": "SENT",
+      "benchmark": "MSCI World",
+      "baseCcy": "CHF",
+      "programId": "PRG-7",
+      "batchId": "BATCH-2026-07-13",
+      "numOrders": 17,
+      "ptcAlerts": 2,
+      "orderApprovedBy": "approver@ubs.com",
+      "orderApprovedAt": "2026-07-13T10:45:00Z",
+      "orderSentBy": "sender@ubs.com",
+      "orderSentAt": "2026-07-13T10:50:00Z"
+    }
   }
 ]
 ```
@@ -272,13 +279,13 @@ Each row is the fixed index columns plus every top-level field of the snapshot's
 ### 3.2 `GET /snapshots/api/portfolio-snapshots/{snapshotId}/payloads/{payloadType}` — one payload
 
 Returns the stored payload blob for one `payloadType` (e.g. `header`, `orders`,
-`calculations`, `settings`) of one snapshot, **verbatim** — the exact bytes that
+`portfolio`, `settings`) of one snapshot, **verbatim** — the exact bytes that
 were written, byte-identical to the original `Payload` sent on the request topic.
 
 **Example request**
 
 ```
-GET /snapshots/api/portfolio-snapshots/corr20260727-0001/payloads/calculations
+GET /snapshots/api/portfolio-snapshots/corr20260727-0001/payloads/portfolio
 ```
 
 **Example 200 response** (`Content-Type: application/json`)
@@ -302,9 +309,9 @@ GET /snapshots/api/portfolio-snapshots/corr20260727-0001/payloads
 
 ```json
 {
-  "header": {"eventType":"REBALANCE","portfolioStatus":"APPROVED","orderStatus":"SENT","benchmark":"MSCI World","baseCcy":"CHF","programId":"PRG-7","batchId":"BATCH-2026-07-13","numOrders":17,"ptcAlerts":2,"orderApprovedBy":"approver@ubs.com","orderApprovedAt":"2026-07-13T10:45:00Z","orderSentBy":"sender@ubs.com","orderSentAt":"2026-07-13T10:50:00Z"},
+  "header": {"SnapshotId":"corr20260727-0001","Type":"Header","Payload":{"Event":"REBALANCE","portfolioStatus":"APPROVED","orderStatus":"SENT","benchmark":"MSCI World","baseCcy":"CHF","programId":"PRG-7","batchId":"BATCH-2026-07-13","numOrders":17,"ptcAlerts":2,"orderApprovedBy":"approver@ubs.com","orderApprovedAt":"2026-07-13T10:45:00Z","orderSentBy":"sender@ubs.com","orderSentAt":"2026-07-13T10:50:00Z"}},
   "orders": {"positions":[{"isin":"CH0038863350","qty":250}]},
-  "calculations": {"nav":5555.55,"ccy":"CHF"},
+  "portfolio": {"nav":5555.55,"ccy":"CHF"},
   "settings": {"tolerance":0.05}
 }
 ```
