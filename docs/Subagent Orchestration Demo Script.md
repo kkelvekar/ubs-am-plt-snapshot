@@ -22,12 +22,15 @@
 
 **0:00–1:00**
 
-Today I want to show you a technique, not a tool. Nothing here needs a new
-subscription or a new platform — it's a way of structuring how we let AI
-touch our codebase, and every one of you can copy it into your own repo this
-week. It's called subagent orchestration, and I'm going to show you why it
-produces better outcomes than how we use Copilot today, then show you the
-actual files, then trigger it live and watch it work.
+Today I want to show you one of the more advanced capabilities of GitHub
+Copilot — something most of us haven't touched yet. We all use Copilot the
+same way: one prompt, one answer, one piece of code at a time. What I'm
+going to show you goes a level above that. Using this pattern, you can
+build your own team of AI agents right inside your repo — a planner, a
+developer, a reviewer, and a tester — that work together for you: they
+hand work to each other, check each other's output, and don't stop until
+the result is planned, implemented, reviewed, and tested. You describe the
+outcome you want; the team delivers it.
 
 ---
 
