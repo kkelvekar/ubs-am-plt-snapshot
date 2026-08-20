@@ -61,9 +61,9 @@ public sealed class UnexpectedPayloadHandlingSteps
     public Task WhenARequiredOrdersPayloadIsStored() =>
         DeliverAsync("orders", TestPayloads.OrdersJson);
 
-    [When("a required calculations payload is stored")]
-    public Task WhenARequiredCalculationsPayloadIsStored() =>
-        DeliverAsync("calculations", TestPayloads.CalculationsJson);
+    [When("a required portfolio payload is stored")]
+    public Task WhenARequiredPortfolioPayloadIsStored() =>
+        DeliverAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("a required settings payload is stored")]
     public Task WhenARequiredSettingsPayloadIsStored() =>

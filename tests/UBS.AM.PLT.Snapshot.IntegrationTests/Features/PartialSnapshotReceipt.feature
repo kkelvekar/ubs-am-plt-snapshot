@@ -17,9 +17,9 @@ Scenario: A second non-final payload updates tracking without completing
     Given a new snapshot for account "IT-ACC-001"
     When the orders payload arrives
     And some time passes
-    And the calculations payload arrives
-    Then the "calculations.json" blob under the snapshot root contains the sent payload
-    And the tracking row lists received files "orders.json,calculations.json"
+    And the portfolio payload arrives
+    Then the "portfolio.json" blob under the snapshot root contains the sent payload
+    And the tracking row lists received files "orders.json,portfolio.json"
     And the tracking last-updated time equals the most recent arrival
     And the tracking first-received time equals the initial arrival
     And the snapshot tracking status is "RECEIVING"
@@ -34,7 +34,7 @@ Scenario: Payloads arriving out of order accumulate and complete only when the h
     When the settings payload arrives
     Then the snapshot tracking status is "RECEIVING"
     And no index row exists for the snapshot
-    When the calculations payload arrives
+    When the portfolio payload arrives
     Then the snapshot tracking status is "RECEIVING"
     And no index row exists for the snapshot
     When the standard header payload arrives

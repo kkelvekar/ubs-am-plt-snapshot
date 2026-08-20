@@ -21,7 +21,7 @@ Scenario: An over-long AccountId is rejected before any payload is written, then
     Then the field-validation delivery is rejected for an over-long field
     And the field-validation snapshot has a FAILED tracking row and nothing else stored
     When the field-validation orders payload arrives
-    And the field-validation calculations payload arrives
+    And the field-validation portfolio payload arrives
     And the field-validation settings payload arrives
     And the field-validation header payload arrives
     Then the field-validation snapshot reaches COMPLETE with a completed time

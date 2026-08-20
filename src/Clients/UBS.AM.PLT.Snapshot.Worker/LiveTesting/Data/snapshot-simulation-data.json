@@ -10,19 +10,23 @@
       "payloadType": "header",
       "publishedBy": "Portal",
       "payload": {
-        "eventType": "ModelChange",
-        "portfolioStatus": "ReadyToSend",
-        "orderStatus": "ReadyToSend",
-        "benchmark": "MCCHM2EQ",
-        "baseCcy": "CHF",
-        "orderApprovedBy": "Anna Miller",
-        "orderApprovedAt": "2026-05-15T06:10:14Z",
-        "orderSentBy": "James Smith",
-        "orderSentAt": "2026-05-15T06:14:22Z",
-        "programId": "123456",
-        "batchId": "15884",
-        "numOrders": 4,
-        "ptcAlerts": 0
+        "SnapshotId": "corr-template",
+        "Type": "Header",
+        "Payload": {
+          "Event": "ModelChange",
+          "portfolioStatus": "ReadyToSend",
+          "orderStatus": "ReadyToSend",
+          "benchmark": "MCCHM2EQ",
+          "baseCcy": "CHF",
+          "orderApprovedBy": "Anna Miller",
+          "orderApprovedAt": "2026-05-15T06:10:14Z",
+          "orderSentBy": "James Smith",
+          "orderSentAt": "2026-05-15T06:14:22Z",
+          "programId": "123456",
+          "batchId": "15884",
+          "numOrders": 4,
+          "ptcAlerts": 0
+        }
       }
     },
     {
@@ -58,7 +62,7 @@
       }
     },
     {
-      "payloadType": "calculations",
+      "payloadType": "portfolio",
       "publishedBy": "PortfolioCalculation",
       "payload": {
         "totals": {

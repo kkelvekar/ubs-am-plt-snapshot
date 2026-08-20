@@ -65,9 +65,9 @@ public sealed class PartialSnapshotReceiptSteps
     public Task WhenTheOrdersPayloadArrives() =>
         SendPayloadAsync("orders", TestPayloads.OrdersJson);
 
-    [When("the calculations payload arrives")]
-    public Task WhenTheCalculationsPayloadArrives() =>
-        SendPayloadAsync("calculations", TestPayloads.CalculationsJson);
+    [When("the portfolio payload arrives")]
+    public Task WhenThePortfolioPayloadArrives() =>
+        SendPayloadAsync("portfolio", TestPayloads.PortfolioJson);
 
     [When("the settings payload arrives")]
     public Task WhenTheSettingsPayloadArrives() =>
@@ -151,7 +151,7 @@ public sealed class PartialSnapshotReceiptSteps
     {
         var tracking = await SnapshotTestHelpers.GetTrackingAsync(_fixture, _snapshotId);
         var rootPath = tracking.AdlsRootPath;
-        foreach (var fileName in new[] { "header.json", "orders.json", "settings.json", "calculations.json" })
+        foreach (var fileName in new[] { "header.json", "orders.json", "settings.json", "portfolio.json" })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{rootPath}/{fileName}").ExistsAsync(),

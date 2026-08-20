@@ -63,6 +63,6 @@ public sealed class SqlPortfolioSnapshotIndexStoreTests
         SnapshotDate = StartTime.UtcDateTime,
         EventType = eventType,
         AdlsPath = "snapshots/year=2026/month=05/00675442A/snap-1_20260522061014",
-        DisplayData = $$"""{"eventType":"{{eventType}}","benchmark":"MCCHM2EQ","batchId":"15884"}""",
+        DisplayData = "{\"Payload\":{\"Event\":\"" + eventType + "\",\"benchmark\":\"MCCHM2EQ\",\"batchId\":\"15884\"}}",
     };
 }

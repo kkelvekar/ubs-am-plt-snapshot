@@ -14,7 +14,7 @@ Feature: Redelivery and idempotency
 Scenario: Redelivering a non-header payload after completion leaves everything but last-updated intact
     Given a redelivery snapshot for account "IT-ACC-007"
     When an orders payload is delivered
-    And a calculations payload is delivered
+    And a portfolio payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE and captured as the redelivery baseline
@@ -33,7 +33,7 @@ Scenario: A same-payload duplicate before completion is counted once and still c
     And the same orders payload is delivered again
     Then the pre-completion snapshot is RECEIVING with received files "orders.json"
     And no index row exists yet for the snapshot
-    When a calculations payload is delivered
+    When a portfolio payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE with a completed time

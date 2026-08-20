@@ -8,7 +8,7 @@ public class SnapshotCompletenessTests
     [Fact]
     public void IsComplete_is_false_when_received_files_are_a_strict_subset_of_required()
     {
-        var required = new HashSet<string> { "header.json", "orders.json", "calculations.json", "settings.json" };
+        var required = new HashSet<string> { "header.json", "orders.json", "portfolio.json", "settings.json" };
         var received = new List<string> { "header.json", "orders.json" };
 
         Assert.False(SnapshotCompleteness.IsComplete(received, required));

@@ -63,7 +63,7 @@ public class SnapshotBlobPathTests
     [Theory]
     [InlineData("header", "header.json")]
     [InlineData("orders", "orders.json")]
-    [InlineData("calculations", "calculations.json")]
+    [InlineData("portfolio", "portfolio.json")]
     public void FileName_is_payloadType_with_json_extension(string payloadType, string expected)
     {
         Assert.Equal(expected, SnapshotBlobPath.FileName(payloadType));

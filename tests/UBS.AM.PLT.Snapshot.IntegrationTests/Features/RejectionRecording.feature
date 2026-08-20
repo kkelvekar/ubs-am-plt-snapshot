@@ -33,7 +33,7 @@ Scenario: A rejected snapshot fully recovers to COMPLETE once all required files
     When an out-of-contract payload is delivered for the rejection-recording snapshot
     Then the rejection-recording snapshot has a FAILED tracking row with the reason recorded
     When a required orders payload is delivered for the rejection-recording snapshot
-    And a required calculations payload is delivered for the rejection-recording snapshot
+    And a required portfolio payload is delivered for the rejection-recording snapshot
     And a required settings payload is delivered for the rejection-recording snapshot
     And a required header payload is delivered for the rejection-recording snapshot
     Then the rejection-recording snapshot reaches COMPLETE with the reason and declared-failed time cleared

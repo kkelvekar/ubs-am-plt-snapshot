@@ -42,16 +42,16 @@ internal static class SnapshotGenerator
 
         if (node is JsonObject payload)
         {
-            if (template.PayloadType == "header")
+            if (template.PayloadType == "header" && payload["Payload"] is JsonObject headerPayload)
             {
-                payload["programId"] = (123456 + snapshotIndex).ToString(CultureInfo.InvariantCulture);
-                payload["batchId"] = (15884 + snapshotIndex).ToString(CultureInfo.InvariantCulture);
-                payload["numOrders"] = 4 + snapshotIndex % 7;
-                payload["orderApprovedAt"] = publishedAt.AddMinutes(-4).UtcDateTime;
-                payload["orderSentAt"] = publishedAt.UtcDateTime;
+                headerPayload["programId"] = (123456 + snapshotIndex).ToString(CultureInfo.InvariantCulture);
+                headerPayload["batchId"] = (15884 + snapshotIndex).ToString(CultureInfo.InvariantCulture);
+                headerPayload["numOrders"] = 4 + snapshotIndex % 7;
+                headerPayload["orderApprovedAt"] = publishedAt.AddMinutes(-4).UtcDateTime;
+                headerPayload["orderSentAt"] = publishedAt.UtcDateTime;
             }
 
-            if (template.PayloadType == "calculations")
+            if (template.PayloadType == "portfolio")
             {
                 payload["calculatedAt"] = publishedAt.UtcDateTime;
             }

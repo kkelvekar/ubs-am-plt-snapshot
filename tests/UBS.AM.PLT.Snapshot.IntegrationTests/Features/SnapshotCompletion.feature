@@ -8,7 +8,7 @@ Scenario: The final required payload completes the set and writes the index via 
     When the orders payload is received
     Then the snapshot is still receiving with no index row
     And a receiving response was published listing the outstanding files
-    When the calculations payload is received
+    When the portfolio payload is received
     Then the snapshot is still receiving with no index row
     When the settings payload is received
     Then the snapshot is still receiving with no index row
@@ -22,14 +22,14 @@ Scenario: A full snapshot in canonical order is queryable with correct display d
     Given a completion snapshot for account "IT-ACC-002"
     When the standard header payload is received
     And the orders payload is received
-    And the calculations payload is received
+    And the portfolio payload is received
     And the settings payload is received
     Then the snapshot end state is a well-formed completed snapshot
 
 Scenario: A full snapshot in shuffled order reaches the same end state as canonical order
     Given a completion snapshot for account "IT-ACC-002"
     When the settings payload is received
-    And the calculations payload is received
+    And the portfolio payload is received
     And the standard header payload is received
     And the orders payload is received
     Then the snapshot end state is a well-formed completed snapshot

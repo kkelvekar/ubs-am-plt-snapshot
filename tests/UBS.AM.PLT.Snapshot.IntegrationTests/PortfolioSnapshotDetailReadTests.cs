@@ -39,14 +39,14 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
     // only pass if the value truly round-tripped verbatim (no re-serialisation anywhere on
     // either the write or the read side would preserve these).
     private const string HeaderJson = """
-        {"eventType":"REBALANCE",  "benchmark":"MSCI World","numOrders":17.0}
+        {"Payload":{"Event":"REBALANCE",  "benchmark":"MSCI World","numOrders":17.0}}
         """;
 
     private const string OrdersJson = """
         {"positions":[{"isin":"CH0038863350",  "qty":250.50}]}
         """;
 
-    private const string CalculationsJson = """
+    private const string PortfolioJson = """
         {"nav":5555.00,  "ccy":"CHF"}
         """;
 
@@ -85,7 +85,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         Assert.Equal(4, document.RootElement.EnumerateObject().Count());
         Assert.True(document.RootElement.TryGetProperty("header", out _));
         Assert.True(document.RootElement.TryGetProperty("orders", out _));
-        Assert.True(document.RootElement.TryGetProperty("calculations", out _));
+        Assert.True(document.RootElement.TryGetProperty("portfolio", out _));
         Assert.True(document.RootElement.TryGetProperty("settings", out _));
 
         // Each seeded payload string appears byte-for-byte inside the raw document text —
@@ -93,7 +93,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         // is untouched.
         Assert.Contains(HeaderJson, json, StringComparison.Ordinal);
         Assert.Contains(OrdersJson, json, StringComparison.Ordinal);
-        Assert.Contains(CalculationsJson, json, StringComparison.Ordinal);
+        Assert.Contains(PortfolioJson, json, StringComparison.Ordinal);
         Assert.Contains(SettingsJson, json, StringComparison.Ordinal);
     }
 
@@ -158,7 +158,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         foreach (var (payloadType, payloadJson) in new[]
                  {
                      ("orders", OrdersJson),
-                     ("calculations", CalculationsJson),
+                     ("portfolio", PortfolioJson),
                      ("settings", SettingsJson),
                      ("header", HeaderJson),
                  })

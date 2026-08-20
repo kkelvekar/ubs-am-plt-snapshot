@@ -16,9 +16,9 @@ public class PortfolioSnapshotIndexEntity
     /// <summary>
     /// The <c>header.json</c> blob content, verbatim. Opaque JSON text carried as a string —
     /// the same treatment as <c>SnapshotMessage.Payload</c> — so every header field reaches
-    /// the audit UI without a C# type to widen. This service never parses it; the single
-    /// value it reads out of the header (<see cref="EventType"/>) is extracted at completion
-    /// time and stored in its own column.
+    /// the audit UI without a C# type to widen. At completion, a scoped parse reads only
+    /// <c>Payload.Event</c> into <see cref="EventType"/>; the text itself is never
+    /// re-serialised.
     /// </summary>
     public required string DisplayData { get; set; }
     public DateTime CreatedAt { get; set; }

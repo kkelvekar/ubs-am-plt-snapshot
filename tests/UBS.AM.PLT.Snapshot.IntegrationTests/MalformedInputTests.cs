@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql;
@@ -11,10 +12,10 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// (ADLS Gen2 + Azure SQL) with Kafka bypassed. These cover inputs that deserialise into a
 /// valid envelope but violate a downstream expectation:
 /// TC-24 an unknown snapshotType (no SnapshotConfig entry); TC-26 a header whose
-/// <c>eventType</c> is null (the header is opaque JSON text now, never deserialised into a
-/// DTO — a null/absent/unusable <c>eventType</c> is an upstream contract breach, not a
-/// transport failure, so the index row is still written with an empty EventType and the
-/// header text persisted verbatim; see <c>SnapshotMessageHandler.ExtractEventType</c>).
+/// <c>Payload.Event</c> is null (the header is opaque JSON text now, never deserialised into a
+/// DTO — a null/absent/unusable <c>Payload.Event</c> is a non-retryable upstream contract
+/// breach, so the existing tracking row becomes FAILED and no index row is written; see
+/// <c>PortfolioSnapshotIndexEntryBuilder.ExtractEventType</c>).
 /// Both are open design questions and are intentionally kept here as xUnit tests rather
 /// than converted to Gherkin.
 /// TC-25 (an extra payloadType not in the required-files set) is covered by the Gherkin
@@ -32,27 +33,30 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     private const string AccountId = "IT-ACC-008";
 
     private const string OrdersJson = """{"positions":[{"isin":"CH0038863350","qty":250}]}""";
-    private const string CalculationsJson = """{"nav":5555.55,"ccy":"CHF"}""";
+    private const string PortfolioJson = """{"nav":5555.55,"ccy":"CHF"}""";
     private const string SettingsJson = """{"tolerance":0.05}""";
 
-    // Header with an explicit null eventType: passes System.Text.Json's `required` check
-    // (the property is present), so it reaches the index write where event_type NOT NULL
-    // rejects it. All other required header fields are present and valid.
-    private const string NullEventTypeHeaderJson = """
+    // Header with an explicit null Payload.Event. The opaque header remains stored verbatim,
+    // but its snapshot is rejected before an index row can be written.
+    private const string NullNestedEventHeaderJson = """
         {
-          "eventType": null,
-          "portfolioStatus": "APPROVED",
-          "orderStatus": "SENT",
-          "benchmark": "MSCI World",
-          "baseCcy": "CHF",
-          "programId": "PRG-7",
-          "batchId": "BATCH-2026-07-14",
-          "numOrders": 17,
-          "ptcAlerts": 2,
-          "orderApprovedBy": "approver@ubs.com",
-          "orderApprovedAt": "2026-07-14T10:45:00Z",
-          "orderSentBy": "sender@ubs.com",
-          "orderSentAt": "2026-07-14T10:50:00Z"
+          "SnapshotId": "corr20260714-0001",
+          "Type": "Header",
+          "Payload": {
+            "Event": null,
+            "portfolioStatus": "APPROVED",
+            "orderStatus": "SENT",
+            "benchmark": "MSCI World",
+            "baseCcy": "CHF",
+            "programId": "PRG-7",
+            "batchId": "BATCH-2026-07-14",
+            "numOrders": 17,
+            "ptcAlerts": 2,
+            "orderApprovedBy": "approver@ubs.com",
+            "orderApprovedAt": "2026-07-14T10:45:00Z",
+            "orderSentBy": "sender@ubs.com",
+            "orderSentAt": "2026-07-14T10:50:00Z"
+          }
         }
         """;
 
@@ -93,35 +97,40 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     }
 
     [Fact]
-    public async Task Header_with_null_eventType_still_completes_with_an_empty_EventType_column()
+    public async Task Header_with_null_Payload_Event_rejects_when_a_later_payload_completes_the_snapshot()
     {
-        // TC-26 (revised for the opaque-header slice): the header is never deserialised, so
-        // a null eventType is no longer a deserialisation-time failure. ExtractEventType
-        // treats "present but not a usable string" (including JSON null) the same as
-        // "absent": it logs a WARN and returns string.Empty, which the EventType NOT NULL
-        // column accepts. The snapshot still completes and display_data still carries the
-        // header verbatim, null eventType and all.
+        // TC-26: header payloads are opaque, but the one required filter value is mandatory.
+        // It is deliberately delivered first; settings is the completing message, proving the
+        // rejection applies to an existing row rather than only to a malformed final header.
         Fixture.CurrentTime = new DateTimeOffset(2026, 7, 14, 20, 0, 0, TimeSpan.Zero);
         var snapshotId = NewSnapshotId("tc26");
 
+        await Fixture.Handler.HandleAsync(
+            CreateMessage(snapshotId, "header", NullNestedEventHeaderJson),
+            CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "orders", OrdersJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "calculations", CalculationsJson), CancellationToken.None);
-        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "settings", SettingsJson), CancellationToken.None);
+        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "portfolio", PortfolioJson), CancellationToken.None);
 
-        // Completing header with null eventType — no exception, snapshot completes anyway.
-        var badHeader = CreateMessage(snapshotId, "header", NullEventTypeHeaderJson);
-        var exception = await Record.ExceptionAsync(
-            () => Fixture.Handler.HandleAsync(badHeader, CancellationToken.None));
-        Assert.Null(exception);
+        var thrown = await Assert.ThrowsAsync<InvalidSnapshotHeaderException>(
+            () => Fixture.Handler.HandleAsync(
+                CreateMessage(snapshotId, "settings", SettingsJson),
+                CancellationToken.None));
+        Assert.Equal(InvalidSnapshotHeaderException.InvalidHeaderEventReason, thrown.ReasonCode);
 
         var tracking = await GetTrackingAsync(snapshotId);
-        Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
-        Assert.NotNull(tracking.CompletedAt);
+        Assert.Equal(SnapshotTrackingStatus.Failed, tracking.Status);
+        Assert.Contains(InvalidSnapshotHeaderException.InvalidHeaderEventReason, tracking.Reason);
+        Assert.NotNull(tracking.DeclaredFailedAt);
+        Assert.Null(tracking.CompletedAt);
         Assert.Equal(4, tracking.ReceivedFiles.Count);
 
-        var index = await GetIndexAsync(snapshotId);
-        Assert.Equal(string.Empty, index.EventType);
-        Assert.Equal(NullEventTypeHeaderJson, index.DisplayData);
+        Assert.False(await IndexRowExistsAsync(snapshotId));
+
+        var notification = Assert.Single(
+            Fixture.ResponsePublisher.PublishedFor(snapshotId),
+            entry => entry.Status == SnapshotTrackingStatus.Failed);
+        Assert.Equal(InvalidSnapshotHeaderException.InvalidHeaderEventReason, notification.ReasonCode);
+        Assert.Equal(thrown.Message, notification.ReasonDetail);
     }
 
     private SnapshotMessage CreateMessage(

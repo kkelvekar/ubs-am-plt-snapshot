@@ -59,7 +59,7 @@ The **Load snapshots grid** needs fast filtered queries on thin metadata. This i
 
 The **View a snapshot detail** needs one large document fetched by key with no cross-row querying. This is served by **ADLS Gen2 blob files** fetched directly using the path stored in the index row.
 
-Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, orders, calculations, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
+Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, orders, portfolio, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
 
 **Key principles:**
 
@@ -103,7 +103,7 @@ Offset commit:   manual (EnableAutoCommit = false)
 
 ### Message Contract
 
-Every message uses the same envelope regardless of which service publishes it or which payload type it carries. The envelope is defined by the org-approved JSON Schema (draft-04, `additionalProperties: true`) committed at `docs/snapshot-request.schema.json`: exactly seven string properties, **PascalCase on the wire**. The payload field is opaque -- it carries already-serialised JSON as a **string**, and the consumer writes that string to ADLS verbatim, without parsing its internal structure. The only touch of the payload before the write is a syntax-only well-formedness check (parse-and-discard), so a broken payload can never land as an invalid `.json` blob. Only the header payload is deserialised, and only at completion time when building the SQL index row, re-read from blob.
+Every message uses the same envelope regardless of which service publishes it or which payload type it carries. The envelope is defined by the org-approved JSON Schema (draft-04, `additionalProperties: true`) committed at `docs/snapshot-request.schema.json`: exactly seven string properties, **PascalCase on the wire**. The payload field is opaque -- it carries already-serialised JSON as a **string**, and the consumer writes that string to ADLS verbatim, without parsing its internal structure. The only touch of the payload before the write is a syntax-only well-formedness check (parse-and-discard), so a broken payload can never land as an invalid `.json` blob. At completion, the header text is re-read from blob in a scoped `JsonDocument` parse solely to extract `$.Payload.Event` for the SQL index; it is never deserialised into a DTO or re-serialised. A missing, invalid, blank, or over-length value at that path rejects the existing snapshot as FAILED with `INVALID_HEADER_EVENT`; malformed header JSON remains retryable.
 
 **C# contract (.NET 10):**
 
@@ -124,22 +124,6 @@ public class SnapshotMessage
     public string Payload      { get; set; }
 }
 
-public class HeaderPayload
-{
-    public string   EventType         { get; set; }
-    public string   PortfolioStatus   { get; set; }
-    public string   OrderStatus       { get; set; }
-    public string   Benchmark         { get; set; }
-    public string   BaseCcy           { get; set; }
-    public string   OrderApprovedBy   { get; set; }
-    public DateTime OrderApprovedAt   { get; set; }
-    public string   OrderSentBy       { get; set; }
-    public DateTime OrderSentAt       { get; set; }
-    public string   ProgramId         { get; set; }
-    public string   BatchId           { get; set; }
-    public int      NumOrders         { get; set; }
-    public int      PtcAlerts         { get; set; }
-}
 ```
 
 **Wire format example -- orders payload:**
@@ -172,14 +156,14 @@ The `Payload` value above is a JSON **string**, not a nested object. Unescaped, 
   "PayloadType":  "header",
   "PublishedAt":  "2026-05-22T06:14:22Z",
   "PublishedBy":  "Portal",
-  "Payload":      "{\"eventType\":\"ModelChange\",\"portfolioStatus\":\"ReadyToSend\",\"orderStatus\":\"ReadyToSend\",\"benchmark\":\"MCCHM2EQ\",\"baseCcy\":\"CHF\",\"orderApprovedBy\":\"Anna Miller\",\"orderApprovedAt\":\"2026-05-15T06:10:14Z\",\"orderSentBy\":\"James Smith\",\"numOrders\":4,\"ptcAlerts\":0,\"programId\":\"123456\",\"batchId\":\"15884\"}"
+  "Payload":      "{\"SnapshotId\":\"corr98765\",\"Type\":\"Header\",\"Payload\":{\"Event\":\"ModelChange\",\"portfolioStatus\":\"ReadyToSend\",\"orderStatus\":\"ReadyToSend\",\"benchmark\":\"MCCHM2EQ\",\"baseCcy\":\"CHF\",\"orderApprovedBy\":\"Anna Miller\",\"orderApprovedAt\":\"2026-05-15T06:10:14Z\",\"orderSentBy\":\"James Smith\",\"numOrders\":4,\"ptcAlerts\":0,\"programId\":\"123456\",\"batchId\":\"15884\"}}"
 }
 ```
 
-Unescaped, that `Payload` string is the exact content written to `header.json` — and the only payload the writer ever deserialises, re-read from blob at completion time:
+Unescaped, that `Payload` string is the exact content written to `header.json`. At completion, the writer makes a scoped parse to read only `Payload.Event`; it never deserialises the header into a DTO or re-serialises it:
 
 ```json
-{"eventType":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","numOrders":4,"ptcAlerts":0,"programId":"123456","batchId":"15884"}
+{"SnapshotId":"corr98765","Type":"Header","Payload":{"Event":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"ReadyToSend","benchmark":"MCCHM2EQ","baseCcy":"CHF","orderApprovedBy":"Anna Miller","orderApprovedAt":"2026-05-15T06:10:14Z","orderSentBy":"James Smith","numOrders":4,"ptcAlerts":0,"programId":"123456","batchId":"15884"}}
 ```
 
 **Required file list** (illustrative shape below).
@@ -195,7 +179,7 @@ Unescaped, that `Payload` string is the exact content written to `header.json` �
     "requiredFiles": [
       "header.json",
       "orders.json",
-      "calculations.json",
+      "portfolio.json",
       "settings.json"
     ]
   }
@@ -221,18 +205,18 @@ ubsadvsnapshots/
             │   ├── snapshotId=corr98765/
             │   │   ├── header.json
             │   │   ├── orders.json
-            │   │   ├── calculations.json
+            │   │   ├── portfolio.json
             │   │   └── settings.json
             │   └── snapshotId=corr98766/
             │       ├── header.json
             │       ├── orders.json
-            │       ├── calculations.json
+            │       ├── portfolio.json
             │       └── settings.json
             └── accountId=03485732S/
                 └── snapshotId=corr98770/
                     ├── header.json
                     ├── orders.json
-                    ├── calculations.json
+                    ├── portfolio.json
                     └── settings.json
 ```
 
@@ -610,7 +594,7 @@ After header renders -- fetch orders.json page 1 (first 50 rows). Further pages 
 
 On Orders tab click -- fetch orders.json.
 
-On Calculations section open -- fetch calculations.json. This is the only heavy fetch and most audit users never trigger it.
+On Portfolio section open -- fetch portfolio.json. This is the only heavy fetch and most audit users never trigger it.
 
 No server-side search is required within a snapshot detail. All filtering is client-side on already-loaded data.
 

@@ -23,7 +23,7 @@ Scenario: An unexpected file arriving before the required files is rejected and 
     Then the delivery is rejected as an unexpected payload type
     And a FAILED tracking row is recorded and nothing else has been stored for the snapshot
     When a required orders payload is stored
-    And a required calculations payload is stored
+    And a required portfolio payload is stored
     And a required settings payload is stored
     And the completing header is stored
     Then the snapshot reaches COMPLETE with a completed time
@@ -34,7 +34,7 @@ Scenario: An unexpected file arriving before the required files is rejected and 
 Scenario: An unexpected file arriving after completion is rejected and leaves the snapshot untouched
     Given an out-of-contract snapshot for account "IT-ACC-008"
     When a required orders payload is stored
-    And a required calculations payload is stored
+    And a required portfolio payload is stored
     And a required settings payload is stored
     And the completing header is stored
     Then the snapshot reaches COMPLETE and is captured as the extra-file baseline

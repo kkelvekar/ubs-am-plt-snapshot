@@ -7,19 +7,21 @@
       "payloadType": "header",
       "publishedBy": "Portal",
       "payload": {
-        "eventType": "ModelChange",
-        "portfolioStatus": "ReadyToSend",
-        "orderStatus": "ReadyToSend",
-        "benchmark": "MCCHM2EQ",
-        "baseCcy": "CHF",
-        "programId": "999999",
-        "batchId": "99999",
-        "numOrders": 1,
-        "ptcAlerts": 0,
-        "aFieldNoCSharpTypeHasEverHeardOf": "bottleneck-proof-value",
-        "riskFlags": {
-          "escalationTier": "amber",
-          "reviewers": ["alice", "bob"]
+        "Payload": {
+          "Event": "ModelChange",
+          "portfolioStatus": "ReadyToSend",
+          "orderStatus": "ReadyToSend",
+          "benchmark": "MCCHM2EQ",
+          "baseCcy": "CHF",
+          "programId": "999999",
+          "batchId": "99999",
+          "numOrders": 1,
+          "ptcAlerts": 0,
+          "aFieldNoCSharpTypeHasEverHeardOf": "bottleneck-proof-value",
+          "riskFlags": {
+            "escalationTier": "amber",
+            "reviewers": ["alice", "bob"]
+          }
         }
       }
     },
@@ -29,7 +31,7 @@
       "payload": { "total": 1 }
     },
     {
-      "payloadType": "calculations",
+      "payloadType": "portfolio",
       "publishedBy": "PortfolioCalculation",
       "payload": { "nav": 1.0 }
     },

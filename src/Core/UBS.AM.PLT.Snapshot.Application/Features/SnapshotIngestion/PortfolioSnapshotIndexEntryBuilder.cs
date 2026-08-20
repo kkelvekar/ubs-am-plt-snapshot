@@ -1,4 +1,5 @@
 using System.Text.Json;
+using UBS.AM.PLT.Snapshot.Application.Exceptions;
 using UBS.AM.PLT.Snapshot.Domain;
 using UBS.AM.PLT.Snapshot.Domain.Entities;
 
@@ -6,54 +7,59 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Builds the permanent index row written once a snapshot is complete, per design §4. The
-/// only value read out of the header is <c>eventType</c>; the persisted display data is the
+/// only value read out of the header is <c>Payload.Event</c>; the persisted display data is the
 /// header text verbatim.
 /// </summary>
 public static class PortfolioSnapshotIndexEntryBuilder
 {
     /// <summary>
-    /// Reads the one header value this service needs, <c>eventType</c>, which has its own
-    /// filterable SQL column. Returns an empty string when the header carries no usable value.
-    /// The document is disposed immediately and no other field is read.
+    /// Reads the one header value this service needs, <c>Payload.Event</c>, which has its own
+    /// filterable SQL column. The document is disposed immediately and no other field is read.
     /// </summary>
     /// <remarks>
     /// Malformed header JSON propagates, so no index row is written, the tracking row stays
     /// RECEIVING and the offset is not committed; redelivery retries.
     ///
-    /// A missing, non-string or over-long <c>eventType</c> falls back to an empty string and
-    /// the row is still written: it is an upstream contract breach that retrying would never
-    /// fix, and an over-long value cannot be caught by envelope validation because it comes
-    /// from the header blob rather than the message. The header text still reaches
-    /// display_data verbatim; only the filterable column falls back.
+    /// A missing, non-object <c>Payload</c>, non-string, blank or over-long
+    /// <c>Payload.Event</c> is a non-retryable upstream contract breach. The handler records
+    /// the existing tracking row as FAILED and publishes a rejection response. Malformed JSON
+    /// remains a retryable processing error and propagates as <see cref="JsonException"/>.
     /// </remarks>
     public static string ExtractEventType(string headerJson)
     {
         using var header = JsonDocument.Parse(headerJson);
 
-        if (header.RootElement.ValueKind == JsonValueKind.Object)
+        if (header.RootElement.ValueKind != JsonValueKind.Object
+            || !TryGetFirstPropertyIgnoreCase(header.RootElement, "Payload", out var payload)
+            || payload.ValueKind != JsonValueKind.Object
+            || !TryGetFirstPropertyIgnoreCase(payload, "Event", out var eventProperty)
+            || eventProperty.ValueKind != JsonValueKind.String
+            || eventProperty.GetString() is not { } eventType
+            || string.IsNullOrWhiteSpace(eventType)
+            || eventType.Length > SnapshotFieldLimits.EventTypeMaxLength)
         {
-            // Matched case-insensitively by hand: TryGetProperty is case-sensitive and would
-            // miss the PascalCase headers the wire contract also allows. On keys differing
-            // only by case, document order decides, which is stable across redeliveries.
-            foreach (var property in header.RootElement.EnumerateObject())
+            throw InvalidSnapshotHeaderException.InvalidEvent();
+        }
+
+        return eventType;
+    }
+
+    private static bool TryGetFirstPropertyIgnoreCase(
+        JsonElement objectElement,
+        string propertyName,
+        out JsonElement value)
+    {
+        foreach (var property in objectElement.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
             {
-                if (!string.Equals(property.Name, "eventType", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (property.Value.ValueKind == JsonValueKind.String
-                    && property.Value.GetString() is { Length: > 0 } eventType
-                    && eventType.Length <= SnapshotFieldLimits.EventTypeMaxLength)
-                {
-                    return eventType;
-                }
-
-                break;
+                value = property.Value;
+                return true;
             }
         }
 
-        return string.Empty;
+        value = default;
+        return false;
     }
 
     /// <summary>

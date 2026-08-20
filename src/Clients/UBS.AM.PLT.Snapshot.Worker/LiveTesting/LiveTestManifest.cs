@@ -12,8 +12,8 @@ internal static class LiveTestManifest
     [
         new("complete", "snapshot-simulation-data.json", "Complete", string.Empty),
         new("unknown-header-fields", "bottleneck-proof-data.json", "Complete", string.Empty),
-        new("pascal-case-event-type", "pascalcase-eventtype-data.json", "Complete", string.Empty),
-        new("missing-event-type", "missing-eventtype-data.json", "Complete", string.Empty),
+        new("nested-event", "nested-event-data.json", "Complete", string.Empty),
+        new("missing-nested-event", "missing-nested-event-data.json", "Failed", "INVALID_HEADER_EVENT"),
         new("overlength-account-id", "overlength-accountid-data.json", "Failed", "FIELD_TOO_LONG"),
         new("invalid-account-id-characters", "invalidchar-accountid-data.json", "Failed", "INVALID_FIELD_CHARACTERS"),
     ];

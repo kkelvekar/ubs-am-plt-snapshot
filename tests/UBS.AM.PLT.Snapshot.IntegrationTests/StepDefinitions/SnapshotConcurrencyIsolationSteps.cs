@@ -64,9 +64,9 @@ public sealed class SnapshotConcurrencyIsolationSteps
     public Task WhenSnapshotGetsItsOwnDistinctOrdersPayload(string label) =>
         SendPayloadAsync(label, "orders", TestPayloads.OrdersJsonAlt);
 
-    [When("snapshot \"(.*)\" gets its calculations payload")]
-    public Task WhenSnapshotGetsItsCalculationsPayload(string label) =>
-        SendPayloadAsync(label, "calculations", TestPayloads.CalculationsJson);
+    [When("snapshot \"(.*)\" gets its portfolio payload")]
+    public Task WhenSnapshotGetsItsPortfolioPayload(string label) =>
+        SendPayloadAsync(label, "portfolio", TestPayloads.PortfolioJson);
 
     [When("snapshot \"(.*)\" gets its settings payload")]
     public Task WhenSnapshotGetsItsSettingsPayload(string label) =>
