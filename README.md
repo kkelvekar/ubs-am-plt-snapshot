@@ -244,8 +244,8 @@ GET /snapshots/api/portfolio-snapshots?accountIds=00675442A&from=2026-07-01&to=2
 **Example 200 response**
 
 Each row is the fixed index columns plus every top-level field of the snapshot's
-`header` payload flattened in alongside them (fixed columns win on name collision;
-`AdlsPath`/storage location is never exposed).
+`header` payload's nested `Payload` object flattened in alongside them (fixed
+columns win on name collision; `AdlsPath`/storage location is never exposed).
 
 ```json
 [
@@ -255,23 +255,19 @@ Each row is the fixed index columns plus every top-level field of the snapshot's
     "snapshotDate": "2026-07-27T10:45:00Z",
     "eventType": "REBALANCE",
     "createdAt": "2026-07-27T10:45:15Z",
-    "SnapshotId": "corr20260727-0001",
-    "Type": "Header",
-    "Payload": {
-      "Event": "REBALANCE",
-      "portfolioStatus": "APPROVED",
-      "orderStatus": "SENT",
-      "benchmark": "MSCI World",
-      "baseCcy": "CHF",
-      "programId": "PRG-7",
-      "batchId": "BATCH-2026-07-13",
-      "numOrders": 17,
-      "ptcAlerts": 2,
-      "orderApprovedBy": "approver@ubs.com",
-      "orderApprovedAt": "2026-07-13T10:45:00Z",
-      "orderSentBy": "sender@ubs.com",
-      "orderSentAt": "2026-07-13T10:50:00Z"
-    }
+    "Event": "REBALANCE",
+    "portfolioStatus": "APPROVED",
+    "orderStatus": "SENT",
+    "benchmark": "MSCI World",
+    "baseCcy": "CHF",
+    "programId": "PRG-7",
+    "batchId": "BATCH-2026-07-13",
+    "numOrders": 17,
+    "ptcAlerts": 2,
+    "orderApprovedBy": "approver@ubs.com",
+    "orderApprovedAt": "2026-07-13T10:45:00Z",
+    "orderSentBy": "sender@ubs.com",
+    "orderSentAt": "2026-07-13T10:50:00Z"
   }
 ]
 ```

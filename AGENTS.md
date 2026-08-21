@@ -34,8 +34,9 @@ signed off — do not redesign it.
   `string` and are written to blob verbatim — never re-serialised from anything parsed, so
   every delivery is byte-identical. No payload is ever deserialised into a DTO — not even
   `header`: at completion time the header is re-read from blob, a single `eventType`
-  property is extracted for its filterable SQL column, and the header text itself is
-  persisted verbatim to `display_data`, so a new header field needs no code change here
+  property is extracted for its filterable SQL column, and the header's nested `Payload`
+  object text itself is persisted verbatim to `display_data` (the envelope — `SnapshotId`,
+  `Type`, the `Payload` key — is not stored), so a new payload field needs no code change here
 
 ## Architecture
 
@@ -75,7 +76,9 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
      is ever inspected, so a broken payload cannot land as an invalid `.json` blob;
    - the **`eventType` extraction** from `header` at completion time — that one value has
      its own filterable column on `snapshot_index`. No other header field may be read; the
-     header text is persisted to `display_data` verbatim, byte-identical to the blob.
+     resolved `Payload` object's raw text (`JsonElement.GetRawText()`) is persisted to
+     `display_data` verbatim, byte-identical to that slice of the blob — the envelope wrapper
+     is not stored.
 
    The third is not a parse at all:
    - the read edge's **raw-value embedding** when composing the all-payloads detail

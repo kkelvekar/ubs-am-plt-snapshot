@@ -169,11 +169,8 @@ public class SnapshotMessageHandlerTests
         var indexStore = new FakePortfolioSnapshotIndexStore { CallOrderLog = callOrderLog };
         var responsePublisher = new FakeSnapshotResponsePublisher { CallOrderLog = callOrderLog };
 
-        const string headerJson = """
+        const string payloadJson = """
             {
-              "SnapshotId": "corr98765",
-              "Type": "Header",
-              "Payload": {
                 "Event":           "ModelChange",
                 "portfolioStatus": "ReadyToSend",
                 "orderStatus":     "ReadyToSend",
@@ -187,6 +184,12 @@ public class SnapshotMessageHandlerTests
                 "programId":       "123456",
                 "batchId":         "15884"
               }
+            """;
+        var headerJson = $$"""
+            {
+              "SnapshotId": "corr98765",
+              "Type": "Header",
+              "Payload": {{payloadJson}}
             }
             """;
         var blobStore = new FakeSnapshotBlobStore { HeaderJson = headerJson };
@@ -215,7 +218,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc), indexEntry.SnapshotDate);
         Assert.Equal("ModelChange", indexEntry.EventType);
         Assert.Equal(expectedRootPath, indexEntry.AdlsPath);
-        Assert.Equal(headerJson, indexEntry.DisplayData);
+        Assert.Equal(payloadJson, indexEntry.DisplayData);
 
         Assert.Equal([message.SnapshotId], trackingStore.MarkedComplete);
 
@@ -655,17 +658,20 @@ public class SnapshotMessageHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_persists_the_header_blob_text_byte_for_byte_as_display_data()
+    public async Task HandleAsync_persists_the_header_Payload_object_text_byte_for_byte_as_display_data()
     {
-        // DisplayData must be the header.json blob content verbatim — never re-serialised.
-        // Odd whitespace, key order and producer casing therefore survive untouched.
-        const string headerJson = """{  "Payload" : { "Event" : "ModelChange",   "zzz":1 },  "aaa" : 2  }""";
+        // DisplayData must be the header's nested Payload object content verbatim — never
+        // re-serialised. Odd whitespace, key order and producer casing therefore survive
+        // untouched, and the sibling top-level "aaa" field outside Payload is excluded.
+        const string payloadJson = """{ "Event" : "ModelChange",   "zzz":1 }""";
+        var headerJson = """{  "Payload" : """ + payloadJson + """,  "aaa" : 2  }""";
         var (handler, indexStore, _) = CreateCompletingHandler(headerJson);
 
         await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
 
         var indexEntry = Assert.Single(indexStore.Upserts);
-        Assert.Equal(headerJson, indexEntry.DisplayData);
+        Assert.Equal(payloadJson, indexEntry.DisplayData);
+        Assert.DoesNotContain("aaa", indexEntry.DisplayData);
     }
 
     [Fact]
@@ -708,21 +714,25 @@ public class SnapshotMessageHandlerTests
     [InlineData("""{"Payload":{"Event":"   "}}""")]              // Event blank
     [InlineData("""{"payload":null,"Payload":{"Event":"Later"}}""")] // first matching Payload is invalid
     [InlineData("""["Payload",{"Event":"ModelChange"}]""")]      // root is not an object
-    public void ExtractEventType_rejects_when_Payload_Event_is_unusable(string headerJson)
+    public void ExtractHeaderValues_rejects_when_Payload_Event_is_unusable(string headerJson)
     {
         var thrown = Assert.Throws<InvalidSnapshotHeaderException>(
-            () => PortfolioSnapshotIndexEntryBuilder.ExtractEventType(headerJson));
+            () => PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues(headerJson));
 
         Assert.Equal(InvalidSnapshotHeaderException.InvalidHeaderEventReason, thrown.ReasonCode);
     }
 
     [Fact]
-    public void ExtractEventType_matches_Payload_and_Event_case_insensitively_and_uses_the_first_document_value()
+    public void ExtractHeaderValues_matches_Payload_and_Event_case_insensitively_and_uses_the_first_document_value()
     {
-        var eventType = PortfolioSnapshotIndexEntryBuilder.ExtractEventType(
-            """{"payload":{"event":"First","EVENT":"Second"},"Payload":{"Event":"Later"}}""");
+        // The first-matched Payload is "payload" (document order), so both EventType and
+        // DisplayData must come from that same object — proving one parse drives both outputs.
+        const string firstPayloadJson = """{"event":"First","EVENT":"Second"}""";
+        var headerValues = PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues(
+            """{"payload":""" + firstPayloadJson + ""","Payload":{"Event":"Later"}}""");
 
-        Assert.Equal("First", eventType);
+        Assert.Equal("First", headerValues.EventType);
+        Assert.Equal(firstPayloadJson, headerValues.DisplayData);
     }
 
     [Fact]
@@ -764,15 +774,16 @@ public class SnapshotMessageHandlerTests
     public async Task HandleAsync_carries_header_fields_unknown_to_this_service_into_display_data()
     {
         // THE point of making the header opaque: a producer can add a field that exists
-        // nowhere in this codebase and it reaches the audit UI with no code change here.
-        const string headerJson =
-            """{"Payload":{"Event":"ModelChange","aFieldNoCSharpTypeHasEverHeardOf":"survives","nested":{"deep":[1,2,3]}}}""";
-        var (handler, indexStore, _) = CreateCompletingHandler(headerJson);
+        // nowhere in this codebase and it reaches the audit UI with no code change here — as
+        // long as it lives inside Payload; fields outside Payload are no longer carried at all.
+        const string payloadJson =
+            """{"Event":"ModelChange","aFieldNoCSharpTypeHasEverHeardOf":"survives","nested":{"deep":[1,2,3]}}""";
+        var (handler, indexStore, _) = CreateCompletingHandler("""{"Payload":""" + payloadJson + "}");
 
         await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
 
         var indexEntry = Assert.Single(indexStore.Upserts);
-        Assert.Equal(headerJson, indexEntry.DisplayData);
+        Assert.Equal(payloadJson, indexEntry.DisplayData);
         Assert.Contains("aFieldNoCSharpTypeHasEverHeardOf", indexEntry.DisplayData);
         Assert.Contains("\"deep\":[1,2,3]", indexEntry.DisplayData);
     }
@@ -781,16 +792,33 @@ public class SnapshotMessageHandlerTests
     public async Task HandleAsync_carries_portfolioStatus_and_orderStatus_into_display_data()
     {
         // Both were parsed and then silently dropped by the old typed display-data mapping.
-        const string headerJson =
-            """{"Payload":{"Event":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"Sent"}}""";
+        const string payloadJson =
+            """{"Event":"ModelChange","portfolioStatus":"ReadyToSend","orderStatus":"Sent"}""";
+        var (handler, indexStore, _) = CreateCompletingHandler("""{"Payload":""" + payloadJson + "}");
+
+        await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
+
+        var indexEntry = Assert.Single(indexStore.Upserts);
+        Assert.Equal(payloadJson, indexEntry.DisplayData);
+        Assert.Contains("\"portfolioStatus\":\"ReadyToSend\"", indexEntry.DisplayData);
+        Assert.Contains("\"orderStatus\":\"Sent\"", indexEntry.DisplayData);
+    }
+
+    [Fact]
+    public async Task HandleAsync_excludes_the_envelope_wrapper_from_display_data()
+    {
+        // Only the nested Payload object lands in DisplayData — SnapshotId and Type, the
+        // envelope around it, are never stored.
+        const string payloadJson = """{"Event":"ModelChange","benchmark":"MCCHM2EQ"}""";
+        var headerJson = """{"SnapshotId":"corr98765","Type":"Header","Payload":""" + payloadJson + "}";
         var (handler, indexStore, _) = CreateCompletingHandler(headerJson);
 
         await handler.HandleAsync(CreateMessage(payloadType: "header"), CancellationToken.None);
 
         var indexEntry = Assert.Single(indexStore.Upserts);
-        Assert.Equal(headerJson, indexEntry.DisplayData);
-        Assert.Contains("\"portfolioStatus\":\"ReadyToSend\"", indexEntry.DisplayData);
-        Assert.Contains("\"orderStatus\":\"Sent\"", indexEntry.DisplayData);
+        Assert.Equal(payloadJson, indexEntry.DisplayData);
+        Assert.DoesNotContain("SnapshotId", indexEntry.DisplayData);
+        Assert.DoesNotContain("\"Type\"", indexEntry.DisplayData);
     }
 
     [Theory]
@@ -1092,26 +1120,26 @@ public class SnapshotMessageHandlerTests
     }
 
     [Fact]
-    public void ExtractEventType_rejects_a_value_longer_than_the_EventType_column()
+    public void ExtractHeaderValues_rejects_a_value_longer_than_the_EventType_column()
     {
         var overlong = new string('x', SnapshotFieldLimits.EventTypeMaxLength + 1);
 
         var thrown = Assert.Throws<InvalidSnapshotHeaderException>(
-            () => PortfolioSnapshotIndexEntryBuilder.ExtractEventType(
+            () => PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues(
                 "{\"Payload\":{\"Event\":\"" + overlong + "\"}}"));
 
         Assert.Equal(InvalidSnapshotHeaderException.InvalidHeaderEventReason, thrown.ReasonCode);
     }
 
     [Fact]
-    public void ExtractEventType_returns_a_value_of_exactly_the_EventType_column_length()
+    public void ExtractHeaderValues_returns_a_value_of_exactly_the_EventType_column_length()
     {
         var atLimit = new string('x', SnapshotFieldLimits.EventTypeMaxLength);
 
         Assert.Equal(
             atLimit,
-            PortfolioSnapshotIndexEntryBuilder.ExtractEventType(
-                "{\"Payload\":{\"Event\":\"" + atLimit + "\"}}"));
+            PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues(
+                "{\"Payload\":{\"Event\":\"" + atLimit + "\"}}").EventType);
     }
 
     [Fact]

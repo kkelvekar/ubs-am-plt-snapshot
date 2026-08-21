@@ -3,16 +3,15 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// <summary>
 /// Canonical valid <c>header</c> payload shared across test groups, so the header shape
 /// lives in one place. The header is opaque to the writer: completion assertions compare
-/// the persisted display data against <see cref="HeaderJson"/> verbatim, so no typed twin
-/// of it exists.
+/// the persisted display data against <see cref="HeaderPayloadJson"/> verbatim, so no typed
+/// twin of it exists.
 /// </summary>
 internal static class TestPayloads
 {
-    public const string HeaderJson = """
+    // The header's nested Payload object text, verbatim what the writer persists to
+    // display_data (the envelope wrapper is never stored).
+    public const string HeaderPayloadJson = """
         {
-          "SnapshotId": "corr20260713-0001",
-          "Type": "Header",
-          "Payload": {
             "Event": "REBALANCE",
             "portfolioStatus": "APPROVED",
             "orderStatus": "SENT",
@@ -27,6 +26,13 @@ internal static class TestPayloads
             "orderSentBy": "sender@ubs.com",
             "orderSentAt": "2026-07-13T10:50:00Z"
           }
+        """;
+
+    public const string HeaderJson = $$"""
+        {
+          "SnapshotId": "corr20260713-0001",
+          "Type": "Header",
+          "Payload": {{HeaderPayloadJson}}
         }
         """;
 

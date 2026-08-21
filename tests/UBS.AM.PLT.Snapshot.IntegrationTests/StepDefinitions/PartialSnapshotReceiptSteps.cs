@@ -170,7 +170,7 @@ public sealed class PartialSnapshotReceiptSteps
         Assert.Equal(tracking.FirstReceivedAt, index.SnapshotDate);
         Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
-        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
+        Assert.Equal(TestPayloads.HeaderPayloadJson, index.DisplayData);
     }
 
     private async Task SendPayloadAsync(string payloadType, string payloadJson)

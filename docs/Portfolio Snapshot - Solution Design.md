@@ -375,7 +375,7 @@ The Azure SQL index table holds exactly one thin row per snapshot containing the
 
 This table is created in a **new database on an existing Azure SQL server**, shared with the snapshot_tracking table described above, for clean separation from existing application databases.
 
-**Note on schema:** The schema below is representative. The exact fields in display_data will be confirmed based on the header payload structure, agreed with upstream teams before implementation.
+**Note on schema:** The schema below is representative. The exact fields in display_data will be confirmed based on the header payload structure, agreed with upstream teams before implementation. `display_data` holds the header's nested `Payload` object text verbatim (the `SnapshotId`/`Type`/`Payload` envelope wrapper is not stored), including `Event`, which is also copied into its own filterable `event_type` column.
 
 **Architect recommendation adopted -- JSON display column:**
 

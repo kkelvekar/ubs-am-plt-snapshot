@@ -70,9 +70,9 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
                 if (SnapshotCompleteness.IsComplete(tracking.ReceivedFiles, required))
                 {
                     var headerJson = await _blobStore.ReadHeaderAsync(tracking.AdlsRootPath, cancellationToken);
-                    var eventType = PortfolioSnapshotIndexEntryBuilder.ExtractEventType(headerJson);
+                    var headerValues = PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues(headerJson);
 
-                    var indexEntry = PortfolioSnapshotIndexEntryBuilder.Build(message, tracking, headerJson, eventType);
+                    var indexEntry = PortfolioSnapshotIndexEntryBuilder.Build(message, tracking, headerValues);
 
                     // The index UPSERT must precede the status flip: if it fails, tracking must
                     // still read RECEIVING so redelivery retries this branch.
@@ -91,7 +91,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
                         message.AccountId,
                         message.PayloadType,
                         tracking.AdlsRootPath,
-                        eventType);
+                        headerValues.EventType);
                 }
                 else if (tracking.ReceivedFiles.Count == 1)
                 {

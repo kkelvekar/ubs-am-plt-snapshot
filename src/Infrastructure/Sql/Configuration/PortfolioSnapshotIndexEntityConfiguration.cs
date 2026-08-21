@@ -12,8 +12,8 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql.Configuration;
 /// </summary>
 internal sealed class PortfolioSnapshotIndexEntityConfiguration : IEntityTypeConfiguration<PortfolioSnapshotIndexEntity>
 {
-    // DisplayData carries no value conversion on purpose: it holds the header.json text and
-    // must stay byte-identical to the blob.
+    // DisplayData carries no value conversion on purpose: it holds the header's nested
+    // Payload object text and must stay byte-identical to that slice of the blob.
     public void Configure(EntityTypeBuilder<PortfolioSnapshotIndexEntity> indexEntity)
     {
         indexEntity.ToTable("PortfolioSnapshotIndex", "dbo");

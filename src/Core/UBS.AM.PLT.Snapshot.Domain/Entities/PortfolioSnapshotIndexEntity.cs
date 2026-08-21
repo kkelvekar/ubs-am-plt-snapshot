@@ -14,11 +14,12 @@ public class PortfolioSnapshotIndexEntity
     public required string AdlsPath { get; set; }
 
     /// <summary>
-    /// The <c>header.json</c> blob content, verbatim. Opaque JSON text carried as a string —
-    /// the same treatment as <c>SnapshotMessage.Payload</c> — so every header field reaches
-    /// the audit UI without a C# type to widen. At completion, a scoped parse reads only
-    /// <c>Payload.Event</c> into <see cref="EventType"/>; the text itself is never
-    /// re-serialised.
+    /// The header's nested <c>Payload</c> object text, verbatim (the envelope —
+    /// <c>SnapshotId</c>, <c>Type</c>, the <c>Payload</c> key itself — is not stored). Opaque
+    /// JSON text carried as a string — the same treatment as <c>SnapshotMessage.Payload</c> —
+    /// so every payload field reaches the audit UI without a C# type to widen. At completion,
+    /// a scoped parse reads <c>Payload.Event</c> into <see cref="EventType"/> and
+    /// <c>Payload</c>'s raw text into this property; neither is ever re-serialised.
     /// </summary>
     public required string DisplayData { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -154,7 +154,7 @@ public sealed class RejectionRecordingSteps
         Assert.Equal(_accountId, index.AccountId);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
         Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
-        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
+        Assert.Equal(TestPayloads.HeaderPayloadJson, index.DisplayData);
 
         // The root path pinned by MarkRejectedAsync's FAILED insert is string.Empty (not
         // null, since AdlsRootPath is non-nullable) -- it must never survive into the real
