@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "UBS.AM.PLT.Snapshot.Worker": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:52870;http://localhost:52871"
+    }
+  }
+}
