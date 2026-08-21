@@ -15,7 +15,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// <c>Payload.Event</c> is null (the header is opaque JSON text now, never deserialised into a
 /// DTO — a null/absent/unusable <c>Payload.Event</c> is a non-retryable upstream contract
 /// breach, so the existing tracking row becomes FAILED and no index row is written; see
-/// <c>PortfolioSnapshotIndexEntryBuilder.ExtractEventType</c>).
+/// <c>PortfolioSnapshotIndexEntryBuilder.ExtractHeaderValues</c>).
 /// Both are open design questions and are intentionally kept here as xUnit tests rather
 /// than converted to Gherkin.
 /// TC-25 (an extra payloadType not in the required-files set) is covered by the Gherkin

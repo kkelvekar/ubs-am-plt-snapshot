@@ -7,14 +7,17 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Builds the permanent index row written once a snapshot is complete, per design §4. The
-/// only value read out of the header is <c>Payload.Event</c>; the persisted display data is the
-/// header text verbatim.
+/// only values read out of the header are <c>Payload.Event</c> and the raw text of
+/// <c>Payload</c> itself; the envelope (<c>SnapshotId</c>, <c>Type</c>, the <c>Payload</c> key)
+/// is never persisted.
 /// </summary>
 public static class PortfolioSnapshotIndexEntryBuilder
 {
     /// <summary>
-    /// Reads the one header value this service needs, <c>Payload.Event</c>, which has its own
-    /// filterable SQL column. The document is disposed immediately and no other field is read.
+    /// Reads the two header values this service needs from a single resolved <c>Payload</c>
+    /// element: <c>Payload.Event</c>, which has its own filterable SQL column, and the raw text
+    /// of <c>Payload</c> itself, which becomes <c>display_data</c>. The document is disposed
+    /// immediately and no other field is read.
     /// </summary>
     /// <remarks>
     /// Malformed header JSON propagates, so no index row is written, the tracking row stays
@@ -25,7 +28,7 @@ public static class PortfolioSnapshotIndexEntryBuilder
     /// the existing tracking row as FAILED and publishes a rejection response. Malformed JSON
     /// remains a retryable processing error and propagates as <see cref="JsonException"/>.
     /// </remarks>
-    public static string ExtractEventType(string headerJson)
+    public static SnapshotHeaderValues ExtractHeaderValues(string headerJson)
     {
         using var header = JsonDocument.Parse(headerJson);
 
@@ -41,7 +44,8 @@ public static class PortfolioSnapshotIndexEntryBuilder
             throw InvalidSnapshotHeaderException.InvalidEvent();
         }
 
-        return eventType;
+        // GetRawText must run before the JsonDocument is disposed at the end of this using scope.
+        return new SnapshotHeaderValues(eventType, payload.GetRawText());
     }
 
     private static bool TryGetFirstPropertyIgnoreCase(
@@ -63,21 +67,20 @@ public static class PortfolioSnapshotIndexEntryBuilder
     }
 
     /// <summary>
-    /// Builds the index row for a completed snapshot. <paramref name="headerJson"/> is stored
-    /// verbatim as the display data.
+    /// Builds the index row for a completed snapshot. <paramref name="headerValues"/>'s
+    /// <c>DisplayData</c> (the header's nested <c>Payload</c> object text) is stored verbatim.
     /// </summary>
     public static PortfolioSnapshotIndexEntity Build(
         SnapshotMessage message,
         SnapshotTrackingEntity tracking,
-        string headerJson,
-        string eventType)
+        SnapshotHeaderValues headerValues)
         => new()
         {
             SnapshotId = message.SnapshotId,
             AccountId = message.AccountId,
             SnapshotDate = tracking.FirstReceivedAt,
-            EventType = eventType,
+            EventType = headerValues.EventType,
             AdlsPath = tracking.AdlsRootPath,
-            DisplayData = headerJson,
+            DisplayData = headerValues.DisplayData,
         };
 }

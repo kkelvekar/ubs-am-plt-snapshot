@@ -95,7 +95,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(_accountId, index.AccountId);
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
         Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
-        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
+        Assert.Equal(TestPayloads.HeaderPayloadJson, index.DisplayData);
     }
 
     [Then("a receiving response was published listing the outstanding files")]
@@ -150,7 +150,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(tracking.AdlsRootPath, index.AdlsPath);
         Assert.Equal(tracking.FirstReceivedAt, index.SnapshotDate);
         Assert.Equal(TestPayloads.HeaderEventType, index.EventType);
-        Assert.Equal(TestPayloads.HeaderJson, index.DisplayData);
+        Assert.Equal(TestPayloads.HeaderPayloadJson, index.DisplayData);
     }
 
     private async Task SendPayloadAsync(string payloadType, string payloadJson)
