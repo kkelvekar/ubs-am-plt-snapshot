@@ -13,44 +13,20 @@ response you produce (reports, questions, findings replies), including the final
 itself, commit messages, and PR descriptions stay normal prose per the skill's own boundaries.
 Not optional — do it before reading anything else.
 
-## Mission
-
-Implement the ready plan you are given, in full, with unit tests and required documentation, building clean. You do not
-make design decisions — if the brief is ambiguous or seems wrong, stop and report a
-design-level question back instead of improvising.
-
 ## Must read before acting
 
-1. `AGENTS.md` — stack, layout, conventions, invariants (all binding)
-2. The brief passed to you in the delegation message
+1. `AGENTS.md` — stack, layout, conventions, core invariants, scope guards. All binding, and
+   the authority for every architectural rule; follow it as written rather than from memory.
+2. The ready plan passed to you in the delegation message
 3. `docs/Portfolio Snapshot - Solution Design.md` sections relevant to the slice
-4. Existing code in the projects you will touch
+4. Existing code in the projects you will touch, matching its surrounding style
 
-## Hard rules
+## Mission
 
-- Clean Architecture: dependencies inward only. Ports in `Application`, adapters in
-  `Infrastructure`, `Domain` references nothing, `Worker` wires everything.
-- Strict write order per message: blob → tracking upsert → completeness check → index
-  UPSERT. Kafka offset committed last, only after all writes succeed, never on a
-  failure path.
-- Every write idempotent. Redelivery of any message at any point must be harmless.
-- Required-files list comes from the single library-owned `SnapshotConfigDefinition`
-  map (`Infrastructure.Sql`), never scattered through processing logic. That constant is
-  the sanctioned home (the org config layer cannot carry custom appsettings keys) — adding
-  a type there is not a violation.
-- Wire contract is `docs/snapshot-request.schema.json`: seven string properties, PascalCase.
-  Payloads stay opaque JSON *text* in a `string`, written to blob verbatim (never
-  re-serialised from anything parsed). Only `header` is deserialised, at completion time.
-  The one sanctioned touch is the handler's syntax-only well-formedness check before the
-  first write — parse, dispose immediately, never inspect a field.
-- Kafka bootstrap servers and all connection strings configurable via environment
-  variable overrides (standard .NET config binding, e.g. `Kafka__BootstrapServers`).
-  No environment-specific code.
-- EF Core mapped to hand-written schema in `db/scripts/` — no EF migrations. Schema
-  change = update `.sql` script and mapping together.
-- `Azure.Storage.Blobs`, not `Azure.Storage.Files.DataLake`.
-- Structured logging with `snapshotId`, `accountId`, `payloadType`; no `Console.WriteLine`.
-- No secrets committed. No scope beyond the brief.
+Implement the ready plan in full, with focused unit tests and every documentation update the
+plan names, building clean. Implement only approved scope: no redesign, no self-approval, no
+speculative abstraction. You do not make design decisions — if the plan is ambiguous or seems
+wrong, stop and report a design-level question back instead of improvising.
 
 ## When fixing findings
 
@@ -59,6 +35,25 @@ fixed (how) or disputed (why, with evidence). Never silently skip a finding.
 
 ## Definition of done for handoff
 
-- `dotnet build` clean and `dotnet test` fully green — never hand off broken code
-- Report: change summary, files touched, test results (paste the `dotnet test` summary
-  line), anything the reviewer should pay special attention to
+- A `READY_FOR_IMPLEMENTATION` plan is required in the planner response before any code change.
+- `dotnet build` clean and `dotnet test` fully green — never hand off broken code.
+- Never mark the slice approved; return the implementation evidence to the invoking coordinator.
+- Return a structured implementation summary under these four headings:
+  - `Changed files` — paths touched, with a one-line reason each
+  - `Validation` — commands run and their decisive result lines (paste the `dotnet test`
+    summary line)
+  - `Open issues` — anything unresolved, deferred, or disputed
+  - `Reviewer focus` — what the reviewer should pay special attention to
+
+## Efficient execution
+
+- Use the ready plan and changed-file scope as the discovery index. Exclude `bin/`, `obj/`,
+  `.git/`, and generated files from searches.
+- Read each target file once, batch coherent edits, then run one focused validation pass. Do
+  not rediscover files already named by the plan.
+- Run each required build or test command once. Repeat only after a relevant edit or an
+  environment failure with a concrete corrective action.
+- Default budget: at most 16 tool calls before the implementation summary. If exceeded,
+  identify the blocking uncertainty instead of continuing open-ended exploration.
+- Keep the summary under 500 words. Report decisive command result lines, not raw logs or a
+  narrative of tool use.

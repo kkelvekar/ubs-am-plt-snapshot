@@ -171,7 +171,13 @@ platform packages; see that project's README before changing anything in it.
 
 ## Repository AI workflow
 
-[workflow.agent.md](.github/agents/workflow.agent.md) is the single authority for automatic request classification,
-role orchestration, gates, rerouting, testing-mode selection, and workflow completion. Keep this
-file focused on shared project architecture, constraints, and conventions; do not duplicate the
-workflow lifecycle here.
+Each agent surface has one authority for request classification, role orchestration, gates,
+rerouting, testing-mode selection, and workflow completion:
+
+- GitHub Copilot: [workflow.agent.md](.github/agents/workflow.agent.md)
+- Claude Code: [.claude/workflow.md](.claude/workflow.md)
+
+The two carry the same classification rules, gates, verdict labels, and budgets; they differ
+only in role names and in how the coordinator is realised. Keep this file focused on shared
+project architecture, constraints, and conventions; do not duplicate the workflow lifecycle
+here.

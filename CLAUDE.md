@@ -1,11 +1,16 @@
 @AGENTS.md
+@.claude/workflow.md
 
 ## Claude Code specifics
 
-- The four workflow roles in AGENTS.md are implemented as subagents in `.claude/agents/`
-  (`planner`, `dev`, `reviewer`, `tester-e2e`). Delegate to them for any
-  non-trivial implementation slice; the main conversation orchestrates the pipeline and
-  carries verdicts/findings between roles, since subagents do not share context.
-- Route feedback per AGENTS.md: code-level findings back to `dev`, design-level findings
-  to `planner`. After a dev fix, always re-run `reviewer` before `tester-e2e`.
-- Loop budget 3 iterations, then stop and escalate to the user with the full history.
+Users describe the outcome; do not require them to name a workflow or role. Route repository
+mutation, formal review, and testing requests through the classification and orchestration
+contract in `.claude/workflow.md`, which owns gates, routing, and completion. Answer ordinary
+non-mutating questions, explanations, status checks, read-only exploration, and documentation
+lookups directly.
+
+The four workflow roles are implemented as subagents in `.claude/agents/` (`planner`, `dev`,
+`reviewer`, `tester-e2e`). The main conversation is the coordinator: subagents do not share
+context and cannot invoke one another, so it carries verdicts and findings between roles.
+
+Always preserve the project constraints in `AGENTS.md` and never expose secrets.
