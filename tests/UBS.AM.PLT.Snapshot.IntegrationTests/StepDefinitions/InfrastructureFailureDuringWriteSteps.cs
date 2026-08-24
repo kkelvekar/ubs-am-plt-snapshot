@@ -17,9 +17,9 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// deterministic, Kafka-independent slice of design doc §9: an unreachable downstream dependency
 /// during the write order propagates out of the handler unchanged (so the live consumer never
 /// commits the offset — recovery is forward, via redelivery) and leaves no durable state in the
-/// system of record. The retry / Critical operations-alert half of §9 lives in the consumer — 3
-/// in-process attempts, then one Critical alert and a non-zero process exit so the pod restarts and
-/// Kafka redelivers from the last committed offset — and is proved live in Mode B,
+/// system of record. The retry / Critical operations-alert half of §9 lives at the command edge —
+/// one Critical alert followed by an immediate non-zero process exit so Kubernetes restarts the
+/// container and Kafka redelivers from the last committed offset — and is proved live in Mode B,
 /// since Mode A bypasses the consumer entirely.
 ///
 /// Each scenario builds a SECOND, fault-injected object graph (the same
@@ -114,7 +114,7 @@ public sealed class InfrastructureFailureDuringWriteSteps
     public void ThenTheHandlerSurfacesAnInfrastructureError()
     {
         // The infra failure propagates out of the handler — in the live system this is the exception
-        // the consumer catches to retry in-process, and never commit the offset.
+        // the command edge treats as retryable, terminates for Kubernetes restart, and never commits.
         Assert.NotNull(_handlerException);
     }
 

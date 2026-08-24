@@ -134,13 +134,15 @@ services.AddMessageProducerService<string, SnapshotResponse, SnapshotResponseCom
   It maps the domain notification with `SnapshotResponseMapper` and calls `IProducer.Publish`;
   nothing more.
 
-A consumer command's only lever over the offset is its `CommandResult`: `Success` commits, `Fail`
-does not. There is no seek, no requeue and no in-process retry ladder. A `Fail` means the consumer
-service logs one Critical alert, leaves the offset uncommitted and exits non-zero, so the process
-restarts and Kafka redelivers from the last committed offset. A **rejected** message is the one
+`SnapshotRequestCommand` returns `Success` only after a handled message or a fully recorded
+rejection. Every other outcome logs one Critical alert and calls `Environment.Exit(1)` before
+control returns to the Kafka library, preventing its graceful-close path from committing the
+failed message. There is no seek, requeue or in-process retry ladder; Kubernetes restarts the
+container and Kafka redelivers from the last committed offset. A **rejected** message is the one
 case that looks like a failure but returns `Success`: the handler has already written the FAILED
 tracking row and published the Failed response, and the same bytes would fail identically forever,
-so the offset must move past it.
+so the offset must move past it. Do not move this hard-exit behavior into `ACommand` or the platform
+Kafka consumer; those types are owned by the org library.
 
 Publishing is fire-and-forget. `Publish` queues the message and returns, so a response that cannot
 be sent is reported to `SnapshotResponseCommand` and logged — it never fails the message being

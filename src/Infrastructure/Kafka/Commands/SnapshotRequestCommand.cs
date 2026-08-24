@@ -24,8 +24,9 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 /// already written the FAILED tracking row and published the Failed response, and the same bytes
 /// would fail identically forever, so the offset must move past the message rather than block
 /// its partition.</description></item>
-/// <item><description><b>Anything else</b> — <see cref="CommandResult.Fail"/>: the offset stays
-/// uncommitted and the process stops, so the message is redelivered after the restart.</description></item>
+/// <item><description><b>Anything else</b> — the process exits immediately with a non-zero
+/// code before control returns to the Kafka library. Kubernetes restarts the worker and Kafka
+/// redelivers the uncommitted message.</description></item>
 /// </list>
 /// </remarks>
 public class SnapshotRequestCommand(ILogger<SnapshotRequestCommand> logger, ISnapshotMessageHandler handler)
@@ -40,8 +41,15 @@ public class SnapshotRequestCommand(ILogger<SnapshotRequestCommand> logger, ISna
 
         if (snapshotRequest is null)
         {
-            _logger.LogWarning("Received null snapshot request");
-            return CommandResult.Fail("Snapshot request is null");
+            const string reason = "Snapshot request is null";
+
+            _logger.LogCritical(
+                "Operations alert: snapshot message was not handled; process exiting immediately with code 1 so Kubernetes can restart without graceful Kafka shutdown. reason={Reason}",
+                reason);
+
+            Environment.Exit(1);
+
+            return CommandResult.Fail(reason);
         }
 
         _logger.LogInformation(
@@ -78,12 +86,15 @@ public class SnapshotRequestCommand(ILogger<SnapshotRequestCommand> logger, ISna
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            _logger.LogCritical(
                 ex,
-                "Error processing snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
+                "Operations alert: snapshot message was not handled; process exiting immediately with code 1 so Kubernetes can restart without graceful Kafka shutdown. reason={Reason} snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType}",
+                ex.Message,
                 snapshotRequest.SnapshotId,
                 snapshotRequest.AccountId,
                 snapshotRequest.PayloadType);
+
+            Environment.Exit(1);
 
             return CommandResult.Fail(ex.Message);
         }

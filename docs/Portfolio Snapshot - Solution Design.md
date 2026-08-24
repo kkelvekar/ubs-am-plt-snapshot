@@ -548,15 +548,7 @@ The system does not roll back on failure. Data that has been successfully writte
 
 **Retry strategy:**
 
-|Attempt|Delay|Action if still failing|
-|---|---|---|
-|1|Immediate|Retry|
-|2|5 seconds|Retry|
-|3|30 seconds|Alert operations|
-
-Retry timings are configurable via appsettings.
-
-All three attempts run in-process inside the consumer (~35 seconds total, well under the Kafka max.poll.interval.ms). If the final attempt fails, the worker logs a Critical operations alert and terminates with a non-zero exit code without committing the offset. Kubernetes (restartPolicy: Always, CrashLoopBackOff on repeated failure) restarts the pod, and Kafka redelivers the message from the last committed offset — recovery is always forward via redelivery, never via in-process seek-back.
+A retryable message failure is not retried in-process. The command logs a Critical operations alert and immediately terminates the worker with exit code 1, before control returns to the Kafka library and without gracefully closing the consumer. Kubernetes (`restartPolicy: Always`, with CrashLoopBackOff on repeated failure) restarts the container, and Kafka redelivers the message from the last committed offset. Recovery is always forward via redelivery, never via in-process seek-back. Once the transient dependency or permission issue is repaired, the next restarted consumer processes and commits the same message normally.
 
 **Failure summary:**
 

@@ -11,11 +11,11 @@ Feature: Infrastructure failure during the write order
     # AddApplication/AddInfrastructure wiring, one dependency repointed at an unreachable endpoint)
     # while asserting absence of durable state against the fixture's REAL, reachable resources.
     #
-    # The retry / operations-alert half of §9 lives in the consumer, not the handler: 3 in-process
-    # attempts (0s/5s/30s), then a single Critical alert and a non-zero process exit so the pod is
-    # restarted and Kafka redelivers from the last committed offset. Mode A bypasses the consumer
-    # entirely, so it never exercised that path — only described it. The crash-restart behaviour is
-    # verified through the live worker in Mode B.
+    # The retry / operations-alert half of §9 lives at the command edge, not the handler: the first
+    # retryable failure produces a single Critical alert and an immediate non-zero process exit so
+    # Kubernetes restarts the container and Kafka redelivers from the last committed offset. Mode A
+    # bypasses the consumer entirely, so it never exercised that path — only described it. The
+    # crash-restart behaviour is verified through the live worker in Mode B.
 
 Scenario: SQL unreachable during the tracking write fails forward and leaves no durable state
     Given a fault-injected graph with SQL repointed to an unreachable endpoint
