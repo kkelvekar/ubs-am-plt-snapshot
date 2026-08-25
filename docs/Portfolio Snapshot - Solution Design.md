@@ -453,7 +453,7 @@ True distributed atomicity spanning Azure SQL and ADLS Gen2 is not implemented a
 
 **Idempotency:** All writes at every layer are safe to repeat. ADLS blob overwrites are content-idempotent. The tracking table upsert is idempotent. The snapshot_index write uses UPSERT so re-delivery of a header message after partial failure produces no duplicate rows.
 
-**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. Any failure causes the message to be re-delivered and all steps retried from the beginning. Redelivery after exhausted in-process retries is achieved by the worker exiting non-zero and being restarted (see §9); the restarted consumer resumes from the last committed offset.
+**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. A failure classified transient (§9) causes the worker to exit non-zero and restart, and the restarted consumer resumes from the last committed offset so the message is re-delivered and all steps retried from the beginning. A failure classified poison (§9) is recorded as FAILED and the offset is committed past it deliberately, since the same bytes would fail identically forever.
 
 The guarantee to users: a snapshot is either fully visible in the grid with all blob files present, or it is not visible at all. There is no intermediate state.
 
@@ -546,25 +546,19 @@ Result:   Self-healing, no human needed
 
 The system does not roll back on failure. Data that has been successfully written is never deleted as a result of a downstream failure. The recovery model is always forward -- retry, complete, or flag for investigation.
 
-**Retry strategy:**
+**Failure classification.** There is no fixed-attempt in-process retry ladder. Instead, `SnapshotRequestCommand` classifies every exception raised while processing a message into one of three outcomes, using a declarative `ITransientFailureClassifier` per infrastructure dependency (SQL, blob) plus a BCL-only network classifier:
 
-|Attempt|Delay|Action if still failing|
-|---|---|---|
-|1|Immediate|Retry|
-|2|5 seconds|Retry|
-|3|30 seconds|Alert operations|
-
-Retry timings are configurable via appsettings.
-
-All three attempts run in-process inside the consumer (~35 seconds total, well under the Kafka max.poll.interval.ms). If the final attempt fails, the worker logs a Critical operations alert and terminates with a non-zero exit code without committing the offset. Kubernetes (restartPolicy: Always, CrashLoopBackOff on repeated failure) restarts the pod, and Kafka redelivers the message from the last committed offset — recovery is always forward via redelivery, never via in-process seek-back.
+- **Rejected** -- an envelope or contract violation (see "Rejected message" below).
+- **Poison** -- any other exception, once the message has been durably recorded as a FAILED tracking row. Not retryable: the same bytes would fail identically forever, so the offset is committed past it, deliberately.
+- **Transient infrastructure failure** -- recognised by a classifier as a condition expected to resolve on its own (SQL/blob throttling, timeout, network blip). A recognised SQL or blob error is transient unless it is one a single message's own content can cause (a bad value, a constraint violation, an absent header blob); every other recognised infrastructure error is treated as transient, deliberately, because an allow-list of transient codes can never be complete and an unknown infrastructure error must never be committed away. The worker logs a Critical operations alert, sets a non-zero exit code, calls `IHostApplicationLifetime.StopApplication()`, and then parks for 30 seconds -- comfortably inside Kafka's `max.poll.interval.ms` (default 300 seconds) -- before returning failure. The park exists because stopping the host only signals shutdown, it does not suspend the consume loop; without it, the loop would take the next message, succeed, and commit a HIGHER offset, permanently skipping the still-uncommitted failed one (Kafka commits are positional). Kubernetes (`restartPolicy: Always`, CrashLoopBackOff on repeated failure) then restarts the pod, and Kafka redelivers the message from the last committed offset -- recovery is always forward via redelivery, never via in-process seek-back.
 
 **Failure summary:**
 
 |Failure point|Auto recovery|Human needed|User impact|Data lost|
 |---|---|---|---|---|
-|Blob write fails|Yes -- Kafka retry|No|None|No|
-|Tracking write fails (transient)|Yes -- Kafka retry|No|None|No|
-|SQL unavailable (tracking or index)|In-process retries, then alert + pod restart|Yes|Snapshot delayed|No|
+|Blob write fails (transient)|Yes -- park + pod restart, Kafka redelivery|No|Snapshot delayed|No|
+|Tracking write fails (transient)|Yes -- park + pod restart, Kafka redelivery|No|Snapshot delayed|No|
+|SQL unavailable (tracking or index)|Yes -- park + pod restart, Kafka redelivery|No|Snapshot delayed|No|
 |Consumer pod crashes|Yes -- Kafka re-delivery|No|None|No|
 |Daily job fails|Yes -- next scheduled run|No|None|No|
 |Files never arrive (stale)|Detected by daily job|Yes -- investigate|Snapshot never visible|No (blobs deleted, logged)|

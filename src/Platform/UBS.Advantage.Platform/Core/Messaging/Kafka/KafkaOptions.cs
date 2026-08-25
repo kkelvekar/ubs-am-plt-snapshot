@@ -22,7 +22,15 @@ public sealed class KafkaOptions
     /// Back-off after a broker-level consume error. Not a per-message retry: a command that
     /// reports failure is never retried in-process.
     /// </summary>
-    public TimeSpan ConsumeErrorBackoff { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan ConsumeErrorBackoff { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Mirrors the org platform's own consumer setting. This service always runs with it
+    /// <c>false</c> (offsets committed manually, only after a command reports success) — see
+    /// <c>SnapshotRequestCommand</c> for why the library's own auto-commit-on-success path is
+    /// not used.
+    /// </summary>
+    public bool AutoCommit { get; set; }
 
     public string ResolveTopic(string topicKey)
         => Topics.TryGetValue(topicKey, out var topic) && !string.IsNullOrWhiteSpace(topic)

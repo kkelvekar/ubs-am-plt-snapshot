@@ -499,7 +499,7 @@ public class SnapshotMessageHandlerTests
         // Only the rejection-response line: no payload was written, so no per-payload line.
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Information, entry.Level);
-        Assert.StartsWith("Published snapshot rejection response", entry.Message, StringComparison.Ordinal);
+        Assert.StartsWith("Published snapshot failure response", entry.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -537,7 +537,7 @@ public class SnapshotMessageHandlerTests
 
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Information, entry.Level);
-        Assert.StartsWith("Published snapshot rejection response", entry.Message, StringComparison.Ordinal);
+        Assert.StartsWith("Published snapshot failure response", entry.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -564,7 +564,7 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(trackingStore.Upserts);
         Assert.Empty(indexStore.Upserts);
         Assert.Single(trackingStore.MarkedRejected);
-        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot failure response", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -636,7 +636,7 @@ public class SnapshotMessageHandlerTests
         Assert.Empty(trackingStore.MarkedComplete);
         Assert.Empty(indexStore.Upserts);
         Assert.Single(trackingStore.MarkedRejected);
-        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot failure response", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -891,7 +891,7 @@ public class SnapshotMessageHandlerTests
         // An over-long snapshotId does not fit its primary-key column, so that one rejection
         // cannot be recorded; the rest are.
         Assert.Equal(field == "SnapshotId" ? 0 : 1, trackingStore.MarkedRejected.Count);
-        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot failure response", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -935,7 +935,7 @@ public class SnapshotMessageHandlerTests
         // A snapshotId with unusable characters still FITS its column, so every one of these
         // rejections is recorded — only the blob path could not have been formed from it.
         Assert.Single(trackingStore.MarkedRejected);
-        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot rejection response", StringComparison.Ordinal));
+        Assert.Single(logger.Entries, entry => entry.Message.StartsWith("Published snapshot failure response", StringComparison.Ordinal));
     }
 
     [Fact]

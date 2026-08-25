@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql.Repositories;
+using UBS.AM.PLT.Snapshot.Infrastructure.Sql.Resilience;
 using UBS.AM.PLT.Snapshot.Infrastructure.Sql.SnapshotConfig;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Sql;
@@ -18,6 +19,8 @@ public static class SqlRegistration
 
         services.AddSingleton<ISnapshotTrackingStore, SqlSnapshotTrackingStore>();
         services.AddSingleton<IPortfolioSnapshotIndexStore, SqlPortfolioSnapshotIndexStore>();
+
+        services.AddSingleton<ITransientFailureClassifier, SqlTransientFailureClassifier>();
 
         return services;
     }

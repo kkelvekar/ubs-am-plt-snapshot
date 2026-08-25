@@ -6,7 +6,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Explicit rather than relying on the transitive path through the Platform project:
+         SnapshotRequestCommand takes IHostApplicationLifetime directly, and that transitive
+         path disappears once the Platform project reference is swapped for the real platform
+         packages. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 

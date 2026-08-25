@@ -20,6 +20,9 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 /// </remarks>
 public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
 {
+    /// <summary>Reason code recorded for <see cref="RecordUnexpectedFailureAsync"/> — the poison path's fixed reason.</summary>
+    public const string UnexpectedErrorReasonCode = "UNEXPECTED_ERROR";
+
     private readonly ISnapshotBlobStore _blobStore;
     private readonly ISnapshotTrackingStore _trackingStore;
     private readonly IRequiredFilesProvider _requiredFilesProvider;
@@ -109,25 +112,38 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         }
         catch (SnapshotMessageRejectedException ex)
         {
-            await RecordAndPublishRejectionAsync(message, ex, cancellationToken);
+            await RecordAndPublishFailureAsync(message, ex.ReasonCode, ex.Message, cancellationToken);
             throw; // the consumer must still see the rejection and commit past it
         }
     }
 
     /// <summary>
-    /// Records a rejected message as a FAILED tracking row and tells the publishing
-    /// application why the message was refused.
+    /// Records a message the Kafka command has decided is poison — a code defect or otherwise
+    /// unclassified error, not a recognised rejection and not a transient infrastructure
+    /// condition — through the same FAILED-row-plus-response mechanism a rejection uses, under
+    /// the fixed reason code <c>UNEXPECTED_ERROR</c>. Unlike the rejection path this does not
+    /// rethrow: the caller already knows it is committing past the message.
+    /// </summary>
+    public Task RecordUnexpectedFailureAsync(SnapshotMessage message, Exception exception, CancellationToken cancellationToken)
+        => RecordAndPublishFailureAsync(message, UnexpectedErrorReasonCode, exception.Message, cancellationToken);
+
+    /// <summary>
+    /// Records a failed message as a FAILED tracking row and tells the publishing application
+    /// why the message failed. One mechanism shared by both failure paths that reach it: a
+    /// rejection reports its own <see cref="SnapshotMessageRejectedException.ReasonCode"/>, and
+    /// <see cref="RecordUnexpectedFailureAsync"/> reports <see cref="UnexpectedErrorReasonCode"/>.
     /// </summary>
     /// <remarks>
     /// A tracking-store failure propagates, so the offset is not committed and redelivery
     /// re-runs both steps; the upsert is idempotent, so the replay is harmless. Publishing is
     /// fire-and-forget (see <see cref="ISnapshotResponsePublisher"/>) and cannot block or
     /// retry the commit on delivery failure — the FAILED row is the durable record of the
-    /// rejection regardless of whether the notification is delivered.
+    /// failure regardless of whether the notification is delivered.
     /// </remarks>
-    private async Task RecordAndPublishRejectionAsync(
+    private async Task RecordAndPublishFailureAsync(
         SnapshotMessage message,
-        SnapshotMessageRejectedException rejection,
+        string reasonCode,
+        string reasonDetail,
         CancellationToken cancellationToken)
     {
         // SnapshotId is the tracking primary key, so a null, empty or over-long one has
@@ -146,8 +162,8 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
                     SnapshotId = snapshotId!,
                     AccountId = message.AccountId,
                     SnapshotType = message.SnapshotType,
-                    ReasonCode = rejection.ReasonCode,
-                    ReasonDetail = rejection.Message,
+                    ReasonCode = reasonCode,
+                    ReasonDetail = reasonDetail,
                 },
                 cancellationToken);
         }
@@ -162,23 +178,23 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             AccountId = message.AccountId ?? string.Empty,
             ReceivedFiles = tracking?.ReceivedFiles ?? [],
 
-            // Empty by design: this response reports a refused message, and the required-file
+            // Empty by design: this response reports a failed message, and the required-file
             // list may not be resolvable at all when snapshotType is itself the problem.
             MissingFiles = [],
             Status = SnapshotTrackingStatus.Failed,
             FirstReceivedAt = tracking?.FirstReceivedAt ?? now,
             LastUpdatedAt = tracking?.LastUpdatedAt ?? now,
             DeclaredFailedAt = tracking?.DeclaredFailedAt ?? now,
-            ReasonCode = rejection.ReasonCode,
-            ReasonDetail = rejection.Message,
+            ReasonCode = reasonCode,
+            ReasonDetail = reasonDetail,
         });
 
         _logger.LogInformation(
-            "Published snapshot rejection response snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} reasonCode={ReasonCode} recorded={Recorded}",
+            "Published snapshot failure response snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} reasonCode={ReasonCode} recorded={Recorded}",
             message.SnapshotId,
             message.AccountId,
             message.PayloadType,
-            rejection.ReasonCode,
+            reasonCode,
             storable);
     }
 

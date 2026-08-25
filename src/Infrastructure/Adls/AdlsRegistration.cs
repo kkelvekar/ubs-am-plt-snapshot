@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using UBS.AM.PLT.Snapshot.Application.Contracts.Infrastructure;
+using UBS.AM.PLT.Snapshot.Infrastructure.Adls.Resilience;
 
 namespace UBS.AM.PLT.Snapshot.Infrastructure.Adls;
 
@@ -10,6 +11,7 @@ public static class AdlsRegistration
         services.AddBlobStorageOptions(serviceUri, containerName, connectionString);
 
         services.AddSingleton<ISnapshotBlobStore, AzureBlobSnapshotStore>();
+        services.AddSingleton<ITransientFailureClassifier, BlobTransientFailureClassifier>();
 
         return services;
     }
