@@ -14,9 +14,10 @@ public interface ISnapshotMessageHandler
     /// Records a message that failed for a reason other than a recognised rejection or a
     /// transient infrastructure condition — a code defect or an otherwise-unclassified error.
     /// The Kafka command calls this on the poison path, after deciding the failure is not worth
-    /// retrying: it writes the same FAILED tracking row and Failed response shape as a rejection
-    /// (reason code <c>UNEXPECTED_ERROR</c>), but — unlike <see cref="HandleAsync"/>'s rejection
-    /// path — does not rethrow, since the caller already knows it is committing past the message.
+    /// retrying. Recording the FAILED tracking row and publishing the Failed response are both
+    /// best-effort operations under reason code <c>UNEXPECTED_ERROR</c>. Any failure in either
+    /// operation is logged and swallowed so the caller can commit past the poison message rather
+    /// than block the Kafka partition indefinitely.
     /// </summary>
     Task RecordUnexpectedFailureAsync(SnapshotMessage message, Exception exception, CancellationToken cancellationToken);
 }

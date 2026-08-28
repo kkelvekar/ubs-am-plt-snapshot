@@ -1120,6 +1120,85 @@ public class SnapshotMessageHandlerTests
     }
 
     [Fact]
+    public async Task RecordUnexpectedFailureAsync_records_and_publishes_the_poison_failure()
+    {
+        var trackingStore = new FakeSnapshotTrackingStore();
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher);
+
+        await handler.RecordUnexpectedFailureAsync(
+            CreateMessage(),
+            new InvalidOperationException("code defect"),
+            CancellationToken.None);
+
+        var rejection = Assert.Single(trackingStore.MarkedRejected);
+        Assert.Equal(SnapshotMessageHandler.UnexpectedErrorReasonCode, rejection.ReasonCode);
+        Assert.Equal("code defect", rejection.ReasonDetail);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(SnapshotTrackingStatus.Failed, notification.Status);
+        Assert.Equal(SnapshotMessageHandler.UnexpectedErrorReasonCode, notification.ReasonCode);
+        Assert.Equal("code defect", notification.ReasonDetail);
+    }
+
+    [Fact]
+    public async Task RecordUnexpectedFailureAsync_publishes_and_logs_critical_when_tracking_recording_fails()
+    {
+        var trackingFailure = new InvalidOperationException("sql unavailable");
+        var trackingStore = new FakeSnapshotTrackingStore { ThrowOnMarkRejected = trackingFailure };
+        var responsePublisher = new FakeSnapshotResponsePublisher();
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            trackingStore,
+            responsePublisher: responsePublisher,
+            logger: logger);
+
+        await handler.RecordUnexpectedFailureAsync(
+            CreateMessage(),
+            new InvalidOperationException("code defect"),
+            CancellationToken.None);
+
+        Assert.Empty(trackingStore.MarkedRejected);
+
+        var notification = Assert.Single(responsePublisher.Published);
+        Assert.Equal(SnapshotTrackingStatus.Failed, notification.Status);
+        Assert.Equal(SnapshotMessageHandler.UnexpectedErrorReasonCode, notification.ReasonCode);
+        Assert.Equal("code defect", notification.ReasonDetail);
+        Assert.Empty(notification.ReceivedFiles);
+
+        var critical = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Critical);
+        Assert.Contains("committing past it", critical.Message, StringComparison.Ordinal);
+        Assert.Equal("corr98765", critical.State["SnapshotId"]);
+        Assert.Equal("00675442A", critical.State["AccountId"]);
+        Assert.Equal("orders", critical.State["PayloadType"]);
+    }
+
+    [Fact]
+    public async Task RecordUnexpectedFailureAsync_logs_critical_and_returns_when_publishing_fails()
+    {
+        var publishFailure = new InvalidOperationException("publisher unavailable");
+        var responsePublisher = new FakeSnapshotResponsePublisher { ThrowOnPublish = publishFailure };
+        var logger = new CapturingLogger<SnapshotMessageHandler>();
+        var handler = CreateHandler(
+            new FakeSnapshotBlobStore(),
+            new FakeSnapshotTrackingStore(),
+            responsePublisher: responsePublisher,
+            logger: logger);
+
+        await handler.RecordUnexpectedFailureAsync(
+            CreateMessage(),
+            new InvalidOperationException("code defect"),
+            CancellationToken.None);
+
+        var critical = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Critical);
+        Assert.Contains("Failed to publish poison message response", critical.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExtractHeaderValues_rejects_a_value_longer_than_the_EventType_column()
     {
         var overlong = new string('x', SnapshotFieldLimits.EventTypeMaxLength + 1);

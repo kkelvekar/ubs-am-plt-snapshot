@@ -26,15 +26,13 @@ namespace UBS.AM.PLT.Snapshot.Infrastructure.Kafka.Commands;
 /// <item><description><b>Handled</b> — <see cref="CommandResult.Success"/>: the write pipeline
 /// completed, so the offset is committed.</description></item>
 /// <item><description><b>Rejected</b> (<see cref="SnapshotMessageRejectedException"/>) or
-/// <b>poison</b> (anything else that is not a recognised infrastructure failure, once
-/// <see cref="ISnapshotMessageHandler.RecordUnexpectedFailureAsync"/> has durably recorded it)
-/// — <see cref="CommandResult.Success"/> as well. Both are fully handled: a FAILED tracking row
-/// exists and a Failed response has been published, and the same bytes would fail identically
-/// forever, so the offset must move past the message rather than block its partition.</description></item>
+/// <b>poison</b> (anything else that is not a recognised infrastructure failure) —
+/// <see cref="CommandResult.Success"/> as well. A poison message's FAILED tracking row and
+/// response are best effort: failures are logged, but the same bytes would fail identically
+/// forever, so the offset moves past the message rather than blocking its partition.</description></item>
 /// <item><description><b>Transient infrastructure failure</b> (recognised by an
-/// <see cref="ITransientFailureClassifier"/>, or a poison message whose FAILED row itself could
-/// not be recorded) — <see cref="CommandResult.Fail"/>, but only after this command has already
-/// logged one Critical alert, set a non-zero exit code, called
+/// <see cref="ITransientFailureClassifier"/>) — <see cref="CommandResult.Fail"/>, but only after
+/// this command has already logged one Critical alert, set a non-zero exit code, called
 /// <see cref="IHostApplicationLifetime.StopApplication"/>, and — because that call only signals
 /// shutdown without suspending this thread — parked for <see cref="TransientPark"/> so the
 /// consume loop cannot take a NEXT message and commit a higher offset before the process
@@ -123,17 +121,7 @@ public class SnapshotRequestCommand(
         }
         catch (Exception ex)
         {
-            try
-            {
-                await _handler.RecordUnexpectedFailureAsync(snapshotMessage, ex, CancellationToken.None);
-            }
-            catch (Exception recordEx)
-            {
-                // Cannot persist the FAILED row, so there is no durable record and committing
-                // past the message would lose it entirely. Escalate to the transient path
-                // instead so the offset stays uncommitted and Kafka redelivers.
-                return await ParkAndStopAsync(recordEx, message, snapshotRequest);
-            }
+            await _handler.RecordUnexpectedFailureAsync(snapshotMessage, ex, CancellationToken.None);
 
             _logger.LogCritical(
                 ex,

@@ -21,9 +21,8 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// <c>SnapshotRequestCommand</c> — the exception is classified transient by an
 /// <c>ITransientFailureClassifier</c>, one Critical alert is logged, the host is stopped with a
 /// non-zero exit code, and the consume loop is parked before the command returns failure, so the
-/// pod restarts and Kafka redelivers from the last committed offset — and is proved by
-/// <c>Features/FailureClassification.feature</c> (Mode A, against the command itself) and Mode B,
-/// since this feature's scenarios bypass the consumer entirely.
+/// pod restarts and Kafka redelivers from the last committed offset. That Kafka-specific behavior
+/// is verified through the live worker rather than this org-portable integration-test project.
 ///
 /// Each scenario builds a SECOND, fault-injected object graph (the same
 /// <c>AddApplication</c>/<c>AddInfrastructure</c> wiring the fixture uses, with one dependency's

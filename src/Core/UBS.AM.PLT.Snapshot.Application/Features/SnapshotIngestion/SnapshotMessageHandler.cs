@@ -9,8 +9,8 @@ namespace UBS.AM.PLT.Snapshot.Application.Features.SnapshotIngestion;
 
 /// <summary>
 /// Orchestrates the write order for a single message: blob write, tracking upsert,
-/// completeness check, index UPSERT. Any failure propagates unchanged so the consumer never
-/// commits the offset and redelivery retries the message.
+/// completeness check, index UPSERT. Processing failures propagate unchanged so the Kafka
+/// command can classify them as transient, rejected, or poison.
 /// </summary>
 /// <remarks>
 /// A message refused by the pre-write envelope guards, or by an invalid completed header, is
@@ -120,27 +120,75 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
     /// <summary>
     /// Records a message the Kafka command has decided is poison — a code defect or otherwise
     /// unclassified error, not a recognised rejection and not a transient infrastructure
-    /// condition — through the same FAILED-row-plus-response mechanism a rejection uses, under
-    /// the fixed reason code <c>UNEXPECTED_ERROR</c>. Unlike the rejection path this does not
-    /// rethrow: the caller already knows it is committing past the message.
+    /// condition — under the fixed reason code <c>UNEXPECTED_ERROR</c>. Both the FAILED tracking
+    /// row and Failed response are best effort. A failure in either operation is logged and
+    /// swallowed so the caller can commit past the poison message instead of retrying forever.
     /// </summary>
-    public Task RecordUnexpectedFailureAsync(SnapshotMessage message, Exception exception, CancellationToken cancellationToken)
-        => RecordAndPublishFailureAsync(message, UnexpectedErrorReasonCode, exception.Message, cancellationToken);
+    public async Task RecordUnexpectedFailureAsync(
+        SnapshotMessage message,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        SnapshotTrackingEntity? tracking = null;
+
+        try
+        {
+            tracking = await RecordFailureAsync(
+                message,
+                UnexpectedErrorReasonCode,
+                exception.Message,
+                cancellationToken);
+        }
+        catch (Exception recordException)
+        {
+            _logger.LogCritical(
+                recordException,
+                "Failed to record poison message in snapshot tracking; committing past it snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} reasonCode={ReasonCode} originalError={OriginalError}",
+                message.SnapshotId,
+                message.AccountId,
+                message.PayloadType,
+                UnexpectedErrorReasonCode,
+                exception.Message);
+        }
+
+        try
+        {
+            PublishFailure(message, UnexpectedErrorReasonCode, exception.Message, tracking);
+        }
+        catch (Exception publishException)
+        {
+            _logger.LogCritical(
+                publishException,
+                "Failed to publish poison message response; committing past it snapshotId={SnapshotId} accountId={AccountId} payloadType={PayloadType} reasonCode={ReasonCode} originalError={OriginalError}",
+                message.SnapshotId,
+                message.AccountId,
+                message.PayloadType,
+                UnexpectedErrorReasonCode,
+                exception.Message);
+        }
+    }
 
     /// <summary>
-    /// Records a failed message as a FAILED tracking row and tells the publishing application
-    /// why the message failed. One mechanism shared by both failure paths that reach it: a
-    /// rejection reports its own <see cref="SnapshotMessageRejectedException.ReasonCode"/>, and
-    /// <see cref="RecordUnexpectedFailureAsync"/> reports <see cref="UnexpectedErrorReasonCode"/>.
+    /// Records a rejected message as a FAILED tracking row and tells the publishing application
+    /// why the message failed.
     /// </summary>
     /// <remarks>
-    /// A tracking-store failure propagates, so the offset is not committed and redelivery
-    /// re-runs both steps; the upsert is idempotent, so the replay is harmless. Publishing is
-    /// fire-and-forget (see <see cref="ISnapshotResponsePublisher"/>) and cannot block or
-    /// retry the commit on delivery failure — the FAILED row is the durable record of the
-    /// failure regardless of whether the notification is delivered.
+    /// A tracking-store failure propagates for a recognised rejection, so the offset is not
+    /// committed and redelivery re-runs both steps; the upsert is idempotent, so the replay is
+    /// harmless. Unexpected poison failures use <see cref="RecordUnexpectedFailureAsync"/>'s
+    /// separate best-effort policy instead.
     /// </remarks>
     private async Task RecordAndPublishFailureAsync(
+        SnapshotMessage message,
+        string reasonCode,
+        string reasonDetail,
+        CancellationToken cancellationToken)
+    {
+        var tracking = await RecordFailureAsync(message, reasonCode, reasonDetail, cancellationToken);
+        PublishFailure(message, reasonCode, reasonDetail, tracking);
+    }
+
+    private async Task<SnapshotTrackingEntity?> RecordFailureAsync(
         SnapshotMessage message,
         string reasonCode,
         string reasonDetail,
@@ -153,28 +201,36 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
         var snapshotId = message.SnapshotId;
         var storable = !string.IsNullOrEmpty(snapshotId) && snapshotId.Length <= SnapshotFieldLimits.SnapshotIdMaxLength;
 
-        SnapshotTrackingEntity? tracking = null;
-        if (storable)
+        if (!storable)
         {
-            tracking = await _trackingStore.MarkRejectedAsync(
-                new SnapshotRejectionRecord
-                {
-                    SnapshotId = snapshotId!,
-                    AccountId = message.AccountId,
-                    SnapshotType = message.SnapshotType,
-                    ReasonCode = reasonCode,
-                    ReasonDetail = reasonDetail,
-                },
-                cancellationToken);
+            return null;
         }
 
+        return await _trackingStore.MarkRejectedAsync(
+            new SnapshotRejectionRecord
+            {
+                SnapshotId = snapshotId!,
+                AccountId = message.AccountId,
+                SnapshotType = message.SnapshotType,
+                ReasonCode = reasonCode,
+                ReasonDetail = reasonDetail,
+            },
+            cancellationToken);
+    }
+
+    private void PublishFailure(
+        SnapshotMessage message,
+        string reasonCode,
+        string reasonDetail,
+        SnapshotTrackingEntity? tracking)
+    {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         _responsePublisher.Publish(new SnapshotStatusNotification
         {
             // The message's own values, even when too broken to persist, so the publisher can
             // recognise which message this response is about.
-            SnapshotId = snapshotId ?? string.Empty,
+            SnapshotId = message.SnapshotId ?? string.Empty,
             AccountId = message.AccountId ?? string.Empty,
             ReceivedFiles = tracking?.ReceivedFiles ?? [],
 
@@ -195,7 +251,7 @@ public sealed class SnapshotMessageHandler : ISnapshotMessageHandler
             message.AccountId,
             message.PayloadType,
             reasonCode,
-            storable);
+            tracking is not null);
     }
 
     /// <summary>

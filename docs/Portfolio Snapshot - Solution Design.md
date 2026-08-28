@@ -453,7 +453,7 @@ True distributed atomicity spanning Azure SQL and ADLS Gen2 is not implemented a
 
 **Idempotency:** All writes at every layer are safe to repeat. ADLS blob overwrites are content-idempotent. The tracking table upsert is idempotent. The snapshot_index write uses UPSERT so re-delivery of a header message after partial failure produces no duplicate rows.
 
-**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed. A failure classified transient (§9) causes the worker to exit non-zero and restart, and the restarted consumer resumes from the last committed offset so the message is re-delivered and all steps retried from the beginning. A failure classified poison (§9) is recorded as FAILED and the offset is committed past it deliberately, since the same bytes would fail identically forever.
+**Kafka offset commitment:** The offset is committed only as the final step after all writes succeed for a processable message. A failure classified transient (§9) causes the worker to exit non-zero and restart, and the restarted consumer resumes from the last committed offset so the message is re-delivered and all steps retried from the beginning. For a failure classified poison (§9), recording the FAILED row and publishing the Failed response are best effort; the offset is committed past it even if either operation fails, since the same bytes would fail identically forever and must not block the partition.
 
 The guarantee to users: a snapshot is either fully visible in the grid with all blob files present, or it is not visible at all. There is no intermediate state.
 
@@ -549,7 +549,7 @@ The system does not roll back on failure. Data that has been successfully writte
 **Failure classification.** There is no fixed-attempt in-process retry ladder. Instead, `SnapshotRequestCommand` classifies every exception raised while processing a message into one of three outcomes, using a declarative `ITransientFailureClassifier` per infrastructure dependency (SQL, blob) plus a BCL-only network classifier:
 
 - **Rejected** -- an envelope or contract violation (see "Rejected message" below).
-- **Poison** -- any other exception, once the message has been durably recorded as a FAILED tracking row. Not retryable: the same bytes would fail identically forever, so the offset is committed past it, deliberately.
+- **Poison** -- any other exception. Not retryable: the same bytes would fail identically forever, so the handler attempts to record a FAILED tracking row and publish a Failed response independently, logs a Critical alert if either attempt fails, and commits the offset past the message regardless. This explicitly favours partition availability over guaranteed retention of a poison message.
 - **Transient infrastructure failure** -- recognised by a classifier as a condition expected to resolve on its own (SQL/blob throttling, timeout, network blip). A recognised SQL or blob error is transient unless it is one a single message's own content can cause (a bad value, a constraint violation, an absent header blob); every other recognised infrastructure error is treated as transient, deliberately, because an allow-list of transient codes can never be complete and an unknown infrastructure error must never be committed away. The worker logs a Critical operations alert, sets a non-zero exit code, calls `IHostApplicationLifetime.StopApplication()`, and then parks for 30 seconds -- comfortably inside Kafka's `max.poll.interval.ms` (default 300 seconds) -- before returning failure. The park exists because stopping the host only signals shutdown, it does not suspend the consume loop; without it, the loop would take the next message, succeed, and commit a HIGHER offset, permanently skipping the still-uncommitted failed one (Kafka commits are positional). Kubernetes (`restartPolicy: Always`, CrashLoopBackOff on repeated failure) then restarts the pod, and Kafka redelivers the message from the last committed offset -- recovery is always forward via redelivery, never via in-process seek-back.
 
 **Failure summary:**
@@ -563,12 +563,13 @@ The system does not roll back on failure. Data that has been successfully writte
 |Daily job fails|Yes -- next scheduled run|No|None|No|
 |Files never arrive (stale)|Detected by daily job|Yes -- investigate|Snapshot never visible|No (blobs deleted, logged)|
 |Message rejected (bad envelope)|Not retryable -- producer must resend|Yes -- producer fixes the message|Snapshot delayed, still recoverable|No (nothing was written)|
+|Poison failure cannot be recorded or reported|No retry -- Critical log, offset committed|Yes -- investigate the alert|Snapshot may never be visible|Yes -- accepted for poison messages|
 
 **Rejected message.** A message whose envelope is unusable (null, over-long or path-unsafe identity field; empty or syntactically invalid payload; payload type outside the snapshot type's file contract) is non-retryable: the same bytes would fail identically forever and block the partition. It is refused before any payload is written -- no blob, no index row -- and handled as follows: the snapshot's tracking row is set to FAILED with the reason (`{reasonCode}: {detail}`) and declared_failed_at, a Failed response carrying reasonCode and reasonDetail is published to the producer on the response topic, and only then is the offset committed past the message. If the snapshot has no tracking row yet, a minimal FAILED row is inserted so the rejection is visible in SQL; if it is already COMPLETE, the row is left untouched.
 
 FAILED is not terminal here. A later valid message for the same snapshot returns the row to RECEIVING, clears the reason and declared_failed_at, and the snapshot completes normally once all required files have arrived -- so a producer that resends a corrected message needs no intervention.
 
-In no failure scenario is permanent audit data deleted or corrupted. The worst outcome is a snapshot delayed until the issue is resolved and the message re-processed, or a snapshot eventually declared failed and logged for investigation with full traceability of what was received and what was missing.
+Permanent audit data is never deleted or corrupted. A poison message is the explicit exception to guaranteed failure traceability: if its best-effort tracking write or response cannot be produced, the Critical log remains but the offset is still committed to preserve partition availability, and that message may be lost.
 
 ---
 

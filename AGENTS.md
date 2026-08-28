@@ -58,9 +58,12 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 2. **Idempotency everywhere**: every write at every layer is safe to repeat. Blob overwrite
    is content-idempotent, tracking upsert is idempotent, index write is an UPSERT.
    Kafka redelivery of any message at any point must be harmless.
-3. **Offset committed last**: the Kafka offset is committed only after all writes for the
-   message succeed. No commit on any failure path. No rollback — recovery is always
-   forward (retry via redelivery).
+3. **Offset committed last for processable messages**: the Kafka offset is committed only after
+   all required writes for a successfully processed message complete. Transient infrastructure
+   failures are never committed and recover through redelivery. Rejected and poison messages are
+   deliberate terminal outcomes: a poison failure's SQL record and response are best effort, and
+   the offset is committed even when either cannot be produced so the partition cannot be blocked
+   indefinitely. No rollback — recovery is always forward.
 4. **Completeness is driven by a single declarative required-files map**: the required
    file list is one declarative source of truth, never scattered through processing logic.
    The index row is written only when all required files are received.
@@ -142,13 +145,14 @@ skipping the failed one. `SnapshotRequestCommand`, not the library, therefore ow
 is safe to let ride on `Fail`, classifying every exception into one of three buckets:
 
 - **Handled** or **rejected** (`SnapshotMessageRejectedException`) or **poison** (any other
-  exception, once `ISnapshotMessageHandler.RecordUnexpectedFailureAsync` has durably recorded a
-  FAILED tracking row and published a Failed response) — all three return `Success`. The same
-  bytes would fail identically forever, so the offset must move past the message rather than
-  block its partition.
-- **Transient infrastructure failure** (recognised by an `ITransientFailureClassifier`, or a
-  poison message whose FAILED row itself could not be recorded) — the command logs one Critical
-  alert, sets a non-zero exit code, calls `IHostApplicationLifetime.StopApplication()`, and then
+  exception not classified as transient) — all three return `Success`. For poison messages,
+  `ISnapshotMessageHandler.RecordUnexpectedFailureAsync` attempts the FAILED tracking row and
+  Failed response independently; either failure is logged Critical and swallowed. The same bytes
+  would fail identically forever, so the offset must move past the message rather than block its
+  partition.
+- **Transient infrastructure failure** (recognised by an `ITransientFailureClassifier`) — the
+  command logs one Critical alert, sets a non-zero exit code, calls
+  `IHostApplicationLifetime.StopApplication()`, and then
   *parks* for 30 seconds before returning `Fail`. The park exists because `StopApplication()`
   only signals shutdown, it does not suspend the calling thread — without it the consume loop
   would immediately take the NEXT message, succeed, and commit a higher offset, permanently
@@ -156,9 +160,9 @@ is safe to let ride on `Fail`, classifying every exception into one of three buc
   committed offset and Kafka redelivers the failed message.
 
 `UBS.Advantage.Platform`'s `MessageConsumerService` faithfully mirrors the real library's
-log-only `Fail` behaviour (see that project's README for the known drift this implies), so a
-unit or integration test exercising `Fail` through the mirror proves the same thing the real
-platform would.
+log-only `Fail` behaviour (see that project's README for the known drift this implies) for local
+live-worker execution. Unit and in-process integration tests deliberately do not cover
+`SnapshotRequestCommand`, because the org repository supplies a different Kafka layer.
 
 Publishing is fire-and-forget. `Publish` queues the message and returns, so a response that cannot
 be sent is reported to `SnapshotResponseCommand` and logged — it never fails the message being
