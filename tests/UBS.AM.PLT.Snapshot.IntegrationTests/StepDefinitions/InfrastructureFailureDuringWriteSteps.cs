@@ -17,10 +17,12 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// deterministic, Kafka-independent slice of design doc §9: an unreachable downstream dependency
 /// during the write order propagates out of the handler unchanged (so the live consumer never
 /// commits the offset — recovery is forward, via redelivery) and leaves no durable state in the
-/// system of record. The retry / Critical operations-alert half of §9 lives in the consumer — 3
-/// in-process attempts, then one Critical alert and a non-zero process exit so the pod restarts and
-/// Kafka redelivers from the last committed offset — and is proved live in Mode B,
-/// since Mode A bypasses the consumer entirely.
+/// system of record. The classification and Critical operations-alert half of §9 lives in
+/// <c>SnapshotRequestCommand</c> — the exception is classified transient by an
+/// <c>ITransientFailureClassifier</c>, one Critical alert is logged, the host is stopped with a
+/// non-zero exit code, and the consume loop is parked before the command returns failure, so the
+/// pod restarts and Kafka redelivers from the last committed offset. That Kafka-specific behavior
+/// is verified through the live worker rather than this org-portable integration-test project.
 ///
 /// Each scenario builds a SECOND, fault-injected object graph (the same
 /// <c>AddApplication</c>/<c>AddInfrastructure</c> wiring the fixture uses, with one dependency's

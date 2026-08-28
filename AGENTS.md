@@ -58,9 +58,12 @@ Domain  <--  Application  <--  Infrastructure  <--  Worker
 2. **Idempotency everywhere**: every write at every layer is safe to repeat. Blob overwrite
    is content-idempotent, tracking upsert is idempotent, index write is an UPSERT.
    Kafka redelivery of any message at any point must be harmless.
-3. **Offset committed last**: the Kafka offset is committed only after all writes for the
-   message succeed. No commit on any failure path. No rollback — recovery is always
-   forward (retry via redelivery).
+3. **Offset committed last for processable messages**: the Kafka offset is committed only after
+   all required writes for a successfully processed message complete. Transient infrastructure
+   failures are never committed and recover through redelivery. Rejected and poison messages are
+   deliberate terminal outcomes: a poison failure's SQL record and response are best effort, and
+   the offset is committed even when either cannot be produced so the partition cannot be blocked
+   indefinitely. No rollback — recovery is always forward.
 4. **Completeness is driven by a single declarative required-files map**: the required
    file list is one declarative source of truth, never scattered through processing logic.
    The index row is written only when all required files are received.
@@ -135,12 +138,31 @@ services.AddMessageProducerService<string, SnapshotResponse, SnapshotResponseCom
   nothing more.
 
 A consumer command's only lever over the offset is its `CommandResult`: `Success` commits, `Fail`
-does not. There is no seek, no requeue and no in-process retry ladder. A `Fail` means the consumer
-service logs one Critical alert, leaves the offset uncommitted and exits non-zero, so the process
-restarts and Kafka redelivers from the last committed offset. A **rejected** message is the one
-case that looks like a failure but returns `Success`: the handler has already written the FAILED
-tracking row and published the Failed response, and the same bytes would fail identically forever,
-so the offset must move past it.
+does not — but under the real org platform library, `Fail` only logs. The consume loop does NOT
+stop and does NOT seek; it moves straight on to the next message. Because Kafka commits are
+positional, the next successfully-committed message then commits a HIGHER offset, permanently
+skipping the failed one. `SnapshotRequestCommand`, not the library, therefore owns which outcome
+is safe to let ride on `Fail`, classifying every exception into one of three buckets:
+
+- **Handled** or **rejected** (`SnapshotMessageRejectedException`) or **poison** (any other
+  exception not classified as transient) — all three return `Success`. For poison messages,
+  `ISnapshotMessageHandler.RecordUnexpectedFailureAsync` attempts the FAILED tracking row and
+  Failed response independently; either failure is logged Critical and swallowed. The same bytes
+  would fail identically forever, so the offset must move past the message rather than block its
+  partition.
+- **Transient infrastructure failure** (recognised by an `ITransientFailureClassifier`) — the
+  command logs one Critical alert, sets a non-zero exit code, calls
+  `IHostApplicationLifetime.StopApplication()`, and then
+  *parks* for 30 seconds before returning `Fail`. The park exists because `StopApplication()`
+  only signals shutdown, it does not suspend the calling thread — without it the consume loop
+  would immediately take the NEXT message, succeed, and commit a higher offset, permanently
+  skipping the still-uncommitted failed one. The restarted process resumes from the last
+  committed offset and Kafka redelivers the failed message.
+
+`UBS.Advantage.Platform`'s `MessageConsumerService` faithfully mirrors the real library's
+log-only `Fail` behaviour (see that project's README for the known drift this implies) for local
+live-worker execution. Unit and in-process integration tests deliberately do not cover
+`SnapshotRequestCommand`, because the org repository supplies a different Kafka layer.
 
 Publishing is fire-and-forget. `Publish` queues the message and returns, so a response that cannot
 be sent is reported to `SnapshotResponseCommand` and logged — it never fails the message being
