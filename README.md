@@ -233,7 +233,12 @@ snapshot is `Complete`).
 | `accountIds` | yes | Repeatable, e.g. `?accountIds=00675442A&accountIds=00675443B`. At least one is required. |
 | `from` | no | ISO-8601 date/time. Omitted = open lower bound. |
 | `to` | no | ISO-8601 date/time. Omitted = open upper bound. |
-| `event` | no | Filters on the snapshot's `eventType`. |
+| `event` | no | Literal substring filter on the snapshot's `eventType`; for example, `ModelChange` also matches a combined value containing `ModelChange`. |
+
+Contains semantics are intentional because one snapshot may report more than one event in
+the stored `eventType`. The complete upstream value set and the delimiter used for combined
+values have not yet been confirmed; the API therefore treats the supplied `event` text as a
+literal substring and does not parse or depend on a particular delimiter.
 
 **Example request**
 

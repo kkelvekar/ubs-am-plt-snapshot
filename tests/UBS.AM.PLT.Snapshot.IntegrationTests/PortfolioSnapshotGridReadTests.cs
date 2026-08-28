@@ -132,28 +132,38 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
     }
 
     [Fact]
-    public async Task Grid_query_honors_event_type_filter()
+    public async Task Grid_query_event_filter_matches_exact_and_combined_values()
     {
-        var sidRebalance = NewSnapshotId("grid-evt-reb");
-        var sidCashFlow = NewSnapshotId("grid-evt-cf");
+        var sidModelChange = NewSnapshotId("grid-evt-mc");
+        var sidCombined = NewSnapshotId("grid-evt-combo");
+        var sidCashflow = NewSnapshotId("grid-evt-cf");
 
         await InsertIndexRowAsync(
-            sidRebalance,
+            sidModelChange,
             _accountA,
             new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc),
-            "REBALANCE",
-            $"portfolio_snapshots/accountId={_accountA}/{sidRebalance}",
+            "ModelChange",
+            $"portfolio_snapshots/accountId={_accountA}/{sidModelChange}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc));
 
         await InsertIndexRowAsync(
-            sidCashFlow,
+            sidCombined,
             _accountA,
             new DateTime(2026, 7, 16, 0, 0, 0, DateTimeKind.Utc),
-            "CASH_FLOW",
-            $"portfolio_snapshots/accountId={_accountA}/{sidCashFlow}",
+            "ModelChange + Cashflow",
+            $"portfolio_snapshots/accountId={_accountA}/{sidCombined}",
             """{"benchmark":"MSCI World"}""",
             new DateTime(2026, 7, 16, 9, 0, 0, DateTimeKind.Utc));
+
+        await InsertIndexRowAsync(
+            sidCashflow,
+            _accountA,
+            new DateTime(2026, 7, 17, 0, 0, 0, DateTimeKind.Utc),
+            "Cashflow",
+            $"portfolio_snapshots/accountId={_accountA}/{sidCashflow}",
+            """{"benchmark":"MSCI World"}""",
+            new DateTime(2026, 7, 17, 9, 0, 0, DateTimeKind.Utc));
 
         using var query = BuildQuery();
         var filter = SnapshotGridFilter.Resolve(
@@ -162,14 +172,54 @@ public sealed class PortfolioSnapshotGridReadTests : IntegrationTestBase, IClass
                 AccountIds = [_accountA],
                 FromDate = new DateTime(2026, 7, 1),
                 ToDate = new DateTime(2026, 7, 31),
-                EventType = "CASH_FLOW",
+                EventType = "ModelChange",
+            });
+
+        var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, row => row.SnapshotId == sidModelChange && row.EventType == "ModelChange");
+        Assert.Contains(rows, row => row.SnapshotId == sidCombined && row.EventType == "ModelChange + Cashflow");
+        Assert.DoesNotContain(rows, row => row.SnapshotId == sidCashflow);
+    }
+
+    [Fact]
+    public async Task Grid_query_event_filter_treats_like_wildcards_as_literal_text()
+    {
+        var sidLiteral = NewSnapshotId("grid-evt-lit");
+        var sidWildcardDecoy = NewSnapshotId("grid-evt-wild");
+
+        await InsertIndexRowAsync(
+            sidLiteral,
+            _accountA,
+            new DateTime(2026, 7, 18, 0, 0, 0, DateTimeKind.Utc),
+            "Model%Change_Test[1]~",
+            $"portfolio_snapshots/accountId={_accountA}/{sidLiteral}",
+            """{"benchmark":"MSCI World"}""",
+            new DateTime(2026, 7, 18, 9, 0, 0, DateTimeKind.Utc));
+
+        await InsertIndexRowAsync(
+            sidWildcardDecoy,
+            _accountA,
+            new DateTime(2026, 7, 19, 0, 0, 0, DateTimeKind.Utc),
+            "ModelXChangeXTest1~",
+            $"portfolio_snapshots/accountId={_accountA}/{sidWildcardDecoy}",
+            """{"benchmark":"MSCI World"}""",
+            new DateTime(2026, 7, 19, 9, 0, 0, DateTimeKind.Utc));
+
+        using var query = BuildQuery();
+        var filter = SnapshotGridFilter.Resolve(
+            new SnapshotGridFilter
+            {
+                AccountIds = [_accountA],
+                EventType = "%Change_Test[1]~",
             });
 
         var rows = await query.Service.QueryAsync(filter, CancellationToken.None);
 
         var row = Assert.Single(rows);
-        Assert.Equal(sidCashFlow, row.SnapshotId);
-        Assert.Equal("CASH_FLOW", row.EventType);
+        Assert.Equal(sidLiteral, row.SnapshotId);
+        Assert.Equal("Model%Change_Test[1]~", row.EventType);
     }
 
     [Fact]

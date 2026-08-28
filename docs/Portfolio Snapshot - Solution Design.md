@@ -375,7 +375,7 @@ The Azure SQL index table holds exactly one thin row per snapshot containing the
 
 This table is created in a **new database on an existing Azure SQL server**, shared with the snapshot_tracking table described above, for clean separation from existing application databases.
 
-**Note on schema:** The schema below is representative. The exact fields in display_data will be confirmed based on the header payload structure, agreed with upstream teams before implementation. `display_data` holds the header's nested `Payload` object text verbatim (the `SnapshotId`/`Type`/`Payload` envelope wrapper is not stored), including `Event`, which is also copied into its own filterable `event_type` column.
+**Note on schema:** The schema below is representative. The exact fields in display_data will be confirmed based on the header payload structure, agreed with upstream teams before implementation. `display_data` holds the header's nested `Payload` object text verbatim (the `SnapshotId`/`Type`/`Payload` envelope wrapper is not stored), including `Event`, which is also copied into its own filterable `event_type` column. An event filter uses intentional literal-substring semantics so a selection such as `ModelChange` returns both `ModelChange` and a combined value containing it, such as `ModelChange + Cashflow`. The complete upstream event value set and delimiter for combined values remain unconfirmed, so the read path does not parse or depend on a delimiter.
 
 **Architect recommendation adopted -- JSON display column:**
 
@@ -409,7 +409,7 @@ JSON display column:
 |snapshot_id|VARCHAR(50)|Primary key -- correlationId from Kafka|
 |account_id|VARCHAR(20)|Indexed -- always in grid query|
 |snapshot_date|DATETIME2|Partition column -- year-based|
-|event_type|VARCHAR(50)|ModelChange / Cashflow / NoEvent|
+|event_type|VARCHAR(50)|Event value from the header; may contain combined events (complete upstream value set and delimiter remain unconfirmed)|
 |adls_path|VARCHAR(500)|Root folder path to snapshot files|
 |display_data|NVARCHAR(MAX)|JSON -- all non-filterable grid fields|
 |created_at|DATETIME2|Row write timestamp|
@@ -420,7 +420,14 @@ JSON display column:
 |---|---|---|
 |Table partition|snapshot_date by year|Partition elimination -- 7-day default touches current year only|
 |Non-clustered index 1|account_id, snapshot_date DESC|Dominant query -- account plus date range|
-|Non-clustered index 2|event_type, snapshot_date DESC|Event type filter queries|
+|Non-clustered index 2|event_type, snapshot_date DESC|Retained pending measured query-plan evidence; the leading-wildcard LIKE predicate cannot seek this index by its leading event_type key|
+
+The parameterised `LIKE '%...%' ESCAPE '~'` event predicate is non-sargable because of its
+leading wildcard: SQL Server cannot use it to seek the leading `event_type` key of the existing B-tree index. User-supplied `~`, `%`, `_` and `[` characters are escaped before the two intentional contains wildcards are added, so they remain literal search text. The mandatory `account_id` predicate
+and any supplied date range narrow the candidate rows through the account/date access path
+before SQL Server evaluates the event substring as a residual predicate. The existing
+`event_type` index remains unchanged, but its suitability for contains queries must be
+decided from measured execution plans and representative data rather than assumed.
 
 **Grid query pattern:**
 
@@ -435,13 +442,13 @@ FROM     snapshot_index
 WHERE    account_id   IN ('00675442A', '03485732S', ...)
 AND      snapshot_date >= '2026-05-21'
 AND      snapshot_date <= '2026-05-27 23:59:59'
-AND      event_type    = 'ModelChange'    -- optional
+AND      event_type LIKE @event ESCAPE '~'    -- @event = '%ModelChange%', optional literal-substring filter
 ORDER BY snapshot_date DESC
 ```
 
 **Performance over 10 years:**
 
-At 1,000 snapshots per day over 10 years the snapshot_index table holds approximately 3.65 million rows. With year-based partitioning and the account_id index, a 7-day default query touches one year partition and performs an index seek. Performance is identical in year 10 as in year 1. This permanent table is unaffected by the design change above -- only the tracking table changed from Redis to a bounded 30-day SQL table.
+At 1,000 snapshots per day over 10 years the snapshot_index table holds approximately 3.65 million rows. With year-based partitioning and the account_id index, an account/date query can narrow candidates through that access path before an optional event substring is evaluated as a residual predicate. Because the leading-wildcard `LIKE` predicate is non-sargable and cannot seek the leading `event_type` B-tree key, contains-query latency is not guaranteed by the existing event index and must be validated with measured query plans and representative data. This permanent table is unaffected by the design change above -- only the tracking table changed from Redis to a bounded 30-day SQL table.
 
 ---
 
@@ -577,7 +584,7 @@ Permanent audit data is never deleted or corrupted. A poison message is the expl
 
 **Screen 1 -- Load snapshots grid**
 
-The UI enforces that at least one portfolio must be selected before the grid loads. The SQL query always has at least one account_id in the IN clause. It hits the non-clustered index on (account_id, snapshot_date DESC), applies the date range as a row range within the year partition, and optionally filters event_type server-side. The last-7-days date range is a UI convention, not API behaviour: the UI sends explicit from/to values when it wants that view. account_id is the only mandatory filter -- the API applies no implicit default to any optional filter, so from, to and event_type each constrain the query only when the caller supplies them, and an omitted date bound is an open bound. The Read API deserialises the display_data JSON column in application code before returning to the UI. Typical query across 5-20 accounts returns in under 100ms.
+The UI enforces that at least one portfolio must be selected before the grid loads. The SQL query always has at least one account_id in the IN clause. The mandatory account predicate and any optional date range narrow candidate rows through the (account_id, snapshot_date DESC) access path before an optional event substring is evaluated as a residual predicate. The parameterised leading-wildcard `LIKE` contains predicate is non-sargable and cannot seek the leading `event_type` B-tree key; the existing event index remains in place, but its suitability and contains-query latency require measured query plans with representative data. Caller wildcard characters are escaped and remain literal search text. This contains behaviour is intentional so a selected event also returns combined event values containing it; the complete upstream value set and delimiter remain unconfirmed, and the query does not parse or depend on a delimiter. The last-7-days date range is a UI convention, not API behaviour: the UI sends explicit from/to values when it wants that view. account_id is the only mandatory filter -- the API applies no implicit default to any optional filter, so from, to and event_type each constrain the query only when the caller supplies them, and an omitted date bound is an open bound. The Read API deserialises the display_data JSON column in application code before returning to the UI. No under-100ms guarantee is made for contains queries until that measurement is complete.
 
 **Screen 2 -- View a snapshot detail**
 
