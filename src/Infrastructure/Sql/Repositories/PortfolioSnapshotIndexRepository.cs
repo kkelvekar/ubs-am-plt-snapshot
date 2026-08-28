@@ -138,8 +138,8 @@ internal sealed class PortfolioSnapshotIndexRepository : IPortfolioSnapshotIndex
 
         if (!string.IsNullOrWhiteSpace(filter.EventType))
         {
-            sql += " AND EventType = @event";
-            sqlParameters.Add(new SqlParameter("@event", filter.EventType));
+            sql += " AND EventType LIKE @event ESCAPE '~'";
+            sqlParameters.Add(new SqlParameter("@event", $"%{EscapeLikePattern(filter.EventType)}%"));
         }
 
         sql += " ORDER BY SnapshotDate DESC";
@@ -147,4 +147,11 @@ internal sealed class PortfolioSnapshotIndexRepository : IPortfolioSnapshotIndex
         parameters = sqlParameters.ToArray();
         return sql;
     }
+
+    private static string EscapeLikePattern(string value) =>
+        value
+            .Replace("~", "~~", StringComparison.Ordinal)
+            .Replace("%", "~%", StringComparison.Ordinal)
+            .Replace("_", "~_", StringComparison.Ordinal)
+            .Replace("[", "~[", StringComparison.Ordinal);
 }

@@ -49,7 +49,7 @@ public sealed class PortfolioSnapshotIndexRepositoryQueryTests
     }
 
     [Fact]
-    public void Event_type_adds_a_single_parameterised_clause()
+    public void Event_type_adds_a_single_parameterised_contains_clause()
     {
         var filter = new SnapshotGridFilter
         {
@@ -61,13 +61,34 @@ public sealed class PortfolioSnapshotIndexRepositoryQueryTests
 
         var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
 
-        Assert.Contains("AND EventType = @event", sql);
-        Assert.Equal("ModelChange", ParameterValue(parameters, "@event"));
+        Assert.Contains("AND EventType LIKE @event ESCAPE '~'", sql);
+        Assert.DoesNotContain("CHARINDEX", sql);
+        var eventParameter = Assert.Single(parameters, parameter => parameter.ParameterName == "@event");
+        Assert.Equal("%ModelChange%", eventParameter.Value);
+    }
+
+    [Fact]
+    public void Event_type_like_metacharacters_remain_a_literal_parameter_value()
+    {
+        const string eventType = "%Model_Change[+]~";
+        var filter = new SnapshotGridFilter
+        {
+            AccountIds = ["A"],
+            EventType = eventType,
+        };
+
+        var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
+
+        Assert.Contains("AND EventType LIKE @event ESCAPE '~'", sql);
+        Assert.DoesNotContain("CHARINDEX", sql);
+        Assert.DoesNotContain(eventType, sql);
+        var eventParameter = Assert.Single(parameters, parameter => parameter.ParameterName == "@event");
+        Assert.Equal("%~%Model~_Change~[+]~~%", eventParameter.Value);
     }
 
     /// <summary>
     /// The accountIds-only request reaches BuildQuery with no event type at all. Neither a null
-    /// nor a blank one may leave an <c>EventType = @event</c> clause behind - the clause and the
+    /// nor a blank one may leave an <c>EventType LIKE @event</c> clause behind - the clause and the
     /// parameter have to appear or disappear together, or the command fails on a missing
     /// parameter at execution time.
     /// </summary>
@@ -87,7 +108,8 @@ public sealed class PortfolioSnapshotIndexRepositoryQueryTests
 
         var sql = PortfolioSnapshotIndexRepository.BuildQuery(filter, out var parameters);
 
-        Assert.DoesNotContain("EventType = @event", sql);
+        Assert.DoesNotContain("EventType LIKE @event", sql);
+        Assert.DoesNotContain("CHARINDEX", sql);
         Assert.DoesNotContain("@event", sql);
         Assert.DoesNotContain(parameters, p => p.ParameterName == "@event");
 
