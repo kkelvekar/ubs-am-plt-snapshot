@@ -73,6 +73,69 @@ Result: one API pod and three consumer pods (one per partition of the request to
 kubectl -n snapshot-local get pods
 ```
 
+## Verify the current branch with a live consumer rollout
+
+Use a fresh consumer tag for every branch verification. Do not reuse `:local`: with
+`IfNotPresent`, an existing local image can otherwise leave the pods running older code.
+The only Helm value overridden below is the consumer image tag; the local values file
+continues to supply the machine-specific database connection.
+
+```bash
+SNAPSHOT_CONSUMER_TAG=six-files-20260902-v1
+
+docker build \
+  -f deploy/docker/consumer.Dockerfile \
+  -t "ubs-snapshot-consumer:${SNAPSHOT_CONSUMER_TAG}" \
+  .
+
+helm upgrade --install snapshot deploy/helm/snapshot \
+  -n snapshot-local \
+  --create-namespace \
+  -f deploy/values.local.yaml \
+  --set-string "image.consumer.tag=${SNAPSHOT_CONSUMER_TAG}" \
+  --wait
+
+kubectl -n snapshot-local rollout status deployment/snapshot-consumer --timeout=180s
+kubectl -n snapshot-local get deployment snapshot-consumer \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl -n snapshot-local get pods \
+  -l app.kubernetes.io/instance=snapshot,app.kubernetes.io/component=consumer \
+  -o custom-columns=NAME:.metadata.name,CREATED:.metadata.creationTimestamp,IMAGE:.spec.containers[0].image,READY:.status.containerStatuses[0].ready
+```
+
+Confirm the deployment and all three newly created pods report the unique image tag and
+all three pods are ready. Then expose one consumer's Development-only live-test endpoint,
+publish the manifest once, and stop only that temporary port-forward. The bounded readiness
+loop and cleanup trap prevent the helper process from being left behind.
+
+```bash
+kubectl -n snapshot-local port-forward deployment/snapshot-consumer 5106:5106 \
+  >snapshot-consumer-port-forward.log 2>&1 &
+SNAPSHOT_PORT_FORWARD_PID=$!
+trap 'kill "${SNAPSHOT_PORT_FORWARD_PID}" 2>/dev/null || true' EXIT
+
+for attempt in $(seq 1 30); do
+  if curl --silent --fail http://localhost:5106/api/live-tests/snapshots \
+    --request POST \
+    --output snapshot-live-test-result.json; then
+    break
+  fi
+  if [ "${attempt}" -eq 30 ]; then
+    exit 1
+  fi
+  sleep 1
+done
+
+cat snapshot-live-test-result.json
+kill "${SNAPSHOT_PORT_FORWARD_PID}" 2>/dev/null || true
+wait "${SNAPSHOT_PORT_FORWARD_PID}" 2>/dev/null || true
+trap - EXIT
+```
+
+For the six-file portfolio contract, the response must contain six case snapshot IDs and
+`"messageCount":36`. Preserve that response as the handoff evidence; leave the consumer
+deployment running on the unique image tag for subsequent read-only verification.
+
 The API is published on the host by Docker Desktop's load balancer:
 
 ```bash

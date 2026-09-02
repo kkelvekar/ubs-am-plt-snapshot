@@ -63,6 +63,8 @@ public class SnapshotBlobPathTests
     [Theory]
     [InlineData("header", "header.json")]
     [InlineData("orders", "orders.json")]
+    [InlineData("compliances", "compliances.json")]
+    [InlineData("orders-history", "orders-history.json")]
     [InlineData("portfolio", "portfolio.json")]
     public void FileName_is_payloadType_with_json_extension(string payloadType, string expected)
     {

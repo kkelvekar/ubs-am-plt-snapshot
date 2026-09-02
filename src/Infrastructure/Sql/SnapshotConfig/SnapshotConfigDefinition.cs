@@ -13,7 +13,15 @@ internal static class SnapshotConfigDefinition
         {
             ["portfolio"] = new SnapshotTypeConfig
             {
-                RequiredFiles = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+                RequiredFiles =
+                [
+                    "header.json",
+                    "portfolio.json",
+                    "orders.json",
+                    "compliances.json",
+                    "orders-history.json",
+                    "settings.json",
+                ],
             },
         };
 }

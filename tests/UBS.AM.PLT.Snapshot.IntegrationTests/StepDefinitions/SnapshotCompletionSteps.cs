@@ -51,6 +51,14 @@ public sealed class SnapshotCompletionSteps
     public Task WhenThePortfolioPayloadIsReceived() =>
         SendPayloadAsync("portfolio", TestPayloads.PortfolioJson);
 
+    [When("the compliances payload is received")]
+    public Task WhenTheCompliancesPayloadIsReceived() =>
+        SendPayloadAsync("compliances", TestPayloads.CompliancesJson);
+
+    [When("the orders-history payload is received")]
+    public Task WhenTheOrdersHistoryPayloadIsReceived() =>
+        SendPayloadAsync("orders-history", TestPayloads.OrdersHistoryJson);
+
     [When("the settings payload is received")]
     public Task WhenTheSettingsPayloadIsReceived() =>
         SendPayloadAsync("settings", TestPayloads.SettingsJson);
@@ -107,7 +115,9 @@ public sealed class SnapshotCompletionSteps
 
         Assert.Equal(_accountId, notification.AccountId);
         Assert.Equal(["orders.json"], notification.ReceivedFiles);
-        Assert.Equal(["header.json", "portfolio.json", "settings.json"], notification.MissingFiles);
+        Assert.Equal(
+            ["compliances.json", "header.json", "orders-history.json", "portfolio.json", "settings.json"],
+            notification.MissingFiles);
         Assert.Null(notification.CompletedAt);
     }
 
@@ -122,7 +132,7 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(_accountId, notification.AccountId);
         Assert.Empty(notification.MissingFiles);
         Assert.Equal(
-            new[] { "header.json", "orders.json", "portfolio.json", "settings.json" },
+            new[] { "compliances.json", "header.json", "orders-history.json", "orders.json", "portfolio.json", "settings.json" },
             notification.ReceivedFiles.Order());
         Assert.Equal(tracking.FirstReceivedAt, notification.FirstReceivedAt);
         Assert.NotNull(notification.CompletedAt);
@@ -136,7 +146,10 @@ public sealed class SnapshotCompletionSteps
         Assert.Equal(SnapshotTrackingStatus.Complete, tracking.Status);
         Assert.NotNull(tracking.CompletedAt);
 
-        foreach (var fileName in new[] { "header.json", "orders.json", "portfolio.json", "settings.json" })
+        foreach (var fileName in new[]
+                 {
+                     "header.json", "portfolio.json", "orders.json", "compliances.json", "orders-history.json", "settings.json",
+                 })
         {
             Assert.True(
                 await _fixture.BlobContainer.GetBlobClient($"{tracking.AdlsRootPath}/{fileName}").ExistsAsync(),

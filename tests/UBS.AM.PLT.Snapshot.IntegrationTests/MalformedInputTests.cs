@@ -33,6 +33,8 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
     private const string AccountId = "IT-ACC-008";
 
     private const string OrdersJson = """{"positions":[{"isin":"CH0038863350","qty":250}]}""";
+    private const string CompliancesJson = """{"checks":[{"rule":"MAX_ISSUER_WEIGHT","status":"PASS"}]}""";
+    private const string OrdersHistoryJson = """{"orders":[{"id":"ORD-1","status":"SENT"}]}""";
     private const string PortfolioJson = """{"nav":5555.55,"ccy":"CHF"}""";
     private const string SettingsJson = """{"tolerance":0.05}""";
 
@@ -110,6 +112,8 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
             CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "orders", OrdersJson), CancellationToken.None);
         await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "portfolio", PortfolioJson), CancellationToken.None);
+        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "compliances", CompliancesJson), CancellationToken.None);
+        await Fixture.Handler.HandleAsync(CreateMessage(snapshotId, "orders-history", OrdersHistoryJson), CancellationToken.None);
 
         var thrown = await Assert.ThrowsAsync<InvalidSnapshotHeaderException>(
             () => Fixture.Handler.HandleAsync(
@@ -122,7 +126,7 @@ public sealed class MalformedInputTests : IntegrationTestBase, IClassFixture<Sna
         Assert.Contains(InvalidSnapshotHeaderException.InvalidHeaderEventReason, tracking.Reason);
         Assert.NotNull(tracking.DeclaredFailedAt);
         Assert.Null(tracking.CompletedAt);
-        Assert.Equal(4, tracking.ReceivedFiles.Count);
+        Assert.Equal(6, tracking.ReceivedFiles.Count);
 
         Assert.False(await IndexRowExistsAsync(snapshotId));
 

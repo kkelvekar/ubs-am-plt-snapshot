@@ -54,6 +54,14 @@ internal static class TestPayloads
         {"positions":[{"isin":"US5949181045","qty":400}]}
         """;
 
+    public const string CompliancesJson = """
+        {"checks":[{"rule":"MAX_ISSUER_WEIGHT","status":"PASS"}]}
+        """;
+
+    public const string OrdersHistoryJson = """
+        {"orders":[{"id":"ORD-1","status":"SENT","at":"2026-07-13T10:50:00Z"}]}
+        """;
+
     public const string PortfolioJson = """
         {"nav":5555.55,"ccy":"CHF"}
         """;

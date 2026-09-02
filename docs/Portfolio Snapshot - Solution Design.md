@@ -59,7 +59,7 @@ The **Load snapshots grid** needs fast filtered queries on thin metadata. This i
 
 The **View a snapshot detail** needs one large document fetched by key with no cross-row querying. This is served by **ADLS Gen2 blob files** fetched directly using the path stored in the index row.
 
-Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, orders, portfolio, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
+Upstream services publish snapshot payloads to a single Kafka topic with a shared **snapshotId** used as the correlationId. Each Kafka message carries a payloadType identifying the file -- header, portfolio, orders, compliances, orders-history, settings. The Snapshot Writer API runs as stateless AKS pods. It consumes each message independently, writes each payload as a separate JSON file to ADLS Gen2, tracks completeness using a **dedicated Azure SQL tracking table**, and when all required files are confirmed received it reads header.json from ADLS, builds the permanent SQL index row, and writes it. This is the moment the snapshot becomes visible in the grid.
 
 **Key principles:**
 
@@ -77,7 +77,7 @@ Upstream services publish snapshot payloads to a single Kafka topic with a share
 
 Upstream services -- Portal, Portfolio Calculation, OFM -- publish snapshot payloads independently to a single Kafka topic named `ubs-advantage-snapshots`. The topic is partitioned by accountId so all messages for one account are routed to the same partition and processed sequentially, avoiding update conflicts on the tracking row.
 
-The Snapshot Writer API consumes each message and performs four steps in strict order. First it writes the blob file to ADLS Gen2. Second it inserts or updates the row in the snapshot_tracking table for the snapshotId, storing the ADLS root path on first write. Third it checks completeness by comparing received files against the required file list in appsettings.json. If all files are received it reads header.json from ADLS using the stored root path, builds the permanent SQL index row, writes it via UPSERT, and updates the tracking row to status COMPLETE. The Kafka offset is committed only after all steps succeed.
+The Snapshot Writer API consumes each message and performs four steps in strict order. First it writes the blob file to ADLS Gen2. Second it inserts or updates the row in the snapshot_tracking table for the snapshotId, storing the ADLS root path on first write. Third it checks completeness by comparing received files against the library-owned `SnapshotConfigDefinition` map. If all files are received it reads header.json from ADLS using the stored root path, builds the permanent SQL index row, writes it via UPSERT, and updates the tracking row to status COMPLETE. The Kafka offset is committed only after all steps succeed.
 
 **Read path**
 
@@ -178,8 +178,10 @@ Unescaped, that `Payload` string is the exact content written to `header.json`. 
   "portfolio": {
     "requiredFiles": [
       "header.json",
-      "orders.json",
       "portfolio.json",
+      "orders.json",
+      "compliances.json",
+      "orders-history.json",
       "settings.json"
     ]
   }
@@ -204,25 +206,31 @@ ubsadvsnapshots/
             ├── accountId=00675442A/
             │   ├── snapshotId=corr98765/
             │   │   ├── header.json
-            │   │   ├── orders.json
             │   │   ├── portfolio.json
+            │   │   ├── orders.json
+            │   │   ├── compliances.json
+            │   │   ├── orders-history.json
             │   │   └── settings.json
             │   └── snapshotId=corr98766/
             │       ├── header.json
-            │       ├── orders.json
             │       ├── portfolio.json
+            │       ├── orders.json
+            │       ├── compliances.json
+            │       ├── orders-history.json
             │       └── settings.json
             └── accountId=03485732S/
                 └── snapshotId=corr98770/
                     ├── header.json
-                    ├── orders.json
                     ├── portfolio.json
+                    ├── orders.json
+                    ├── compliances.json
+                    ├── orders-history.json
                     └── settings.json
 ```
 
 ADLS Gen2 is used over simple Blob Storage because it provides a true hierarchical namespace with real folder semantics and ACL-level permissions per folder. JSON is the file format because producers already emit JSON. Files are stored uncompressed in ADLS; gzip compression is applied only at the HTTP response layer by the Read API.
 
-New payload types require no code or infrastructure change. ADLS Gen2 folders are removed automatically when all files inside are deleted -- no explicit folder delete is needed during cleanup.
+New payload types require one entry in the library-owned `SnapshotConfigDefinition` map and a library rebuild, but no write-pipeline or infrastructure change. ADLS Gen2 folders are removed automatically when all files inside are deleted -- no explicit folder delete is needed during cleanup.
 
 **Blob tier strategy:**
 
@@ -340,7 +348,7 @@ Responsibility 1 -- Stale detection
   For each stale row:
     Read adls_root_path and received_files
     Calculate missing_files
-      = requiredFiles (appsettings) minus received_files
+      = requiredFiles (`SnapshotConfigDefinition`) minus received_files
     Delete orphan blob files from ADLS
       for each file in received_files:
         DELETE adls_root_path + "/" + filename

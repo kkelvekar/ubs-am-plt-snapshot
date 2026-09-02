@@ -24,10 +24,12 @@ Scenario: An unexpected file arriving before the required files is rejected and 
     And a FAILED tracking row is recorded and nothing else has been stored for the snapshot
     When a required orders payload is stored
     And a required portfolio payload is stored
+    And a required compliances payload is stored
+    And a required orders-history payload is stored
     And a required settings payload is stored
     And the completing header is stored
     Then the snapshot reaches COMPLETE with a completed time
-    And the completed snapshot lists exactly 4 received files excluding "auditlog.json"
+    And the completed snapshot lists exactly 6 received files excluding "auditlog.json"
     And the "auditlog.json" blob is absent under the snapshot root
     And an index row has been written for the snapshot
 
@@ -35,6 +37,8 @@ Scenario: An unexpected file arriving after completion is rejected and leaves th
     Given an out-of-contract snapshot for account "IT-ACC-008"
     When a required orders payload is stored
     And a required portfolio payload is stored
+    And a required compliances payload is stored
+    And a required orders-history payload is stored
     And a required settings payload is stored
     And the completing header is stored
     Then the snapshot reaches COMPLETE and is captured as the extra-file baseline
@@ -42,6 +46,6 @@ Scenario: An unexpected file arriving after completion is rejected and leaves th
     And an unexpected auditlog payload is delivered
     Then the delivery is rejected as an unexpected payload type
     And the snapshot is still COMPLETE with the same completed time as the baseline
-    And the completed snapshot lists exactly 4 received files excluding "auditlog.json"
+    And the completed snapshot lists exactly 6 received files excluding "auditlog.json"
     And the "auditlog.json" blob is absent under the snapshot root
     And exactly one index row exists, identical to the extra-file baseline

@@ -18,11 +18,15 @@ Scenario: Interleaved payloads for two snapshots on different partitions never c
     And snapshot "B" has no index row
     When snapshot "A" gets its settings payload
     And snapshot "B" gets its portfolio payload
+    And snapshot "A" gets its compliances payload
+    And snapshot "B" gets its orders-history payload
     And snapshot "A" gets its portfolio payload
     And snapshot "B" gets its settings payload
+    And snapshot "A" gets its orders-history payload
+    And snapshot "B" gets its compliances payload
     And snapshot "A" gets its standard header payload
     Then snapshot "A" is COMPLETE with a completed time and an index row
-    And snapshot "B" is RECEIVING with received files "orders.json,portfolio.json,settings.json"
+    And snapshot "B" is RECEIVING with received files "orders.json,portfolio.json,orders-history.json,settings.json,compliances.json"
     And snapshot "B" received files exclude "header.json"
     And snapshot "B" has no completed time
     And snapshot "B" has no index row
@@ -39,16 +43,20 @@ Scenario: Two sequential snapshots for the same account stay isolated by snapsho
     Given concurrent snapshot processing begins
     And snapshot "S1" is registered under account "IT-ACC-005"
     When snapshot "S1" gets its standard header payload
-    And snapshot "S1" gets its orders payload
     And snapshot "S1" gets its portfolio payload
+    And snapshot "S1" gets its orders payload
+    And snapshot "S1" gets its compliances payload
+    And snapshot "S1" gets its orders-history payload
     And snapshot "S1" gets its settings payload
     Then snapshot "S1" is COMPLETE
     And snapshot "S1" tracking and index are recorded as the isolation baseline
     When 20 minutes pass
     And snapshot "S2" is registered under account "IT-ACC-005"
     And snapshot "S2" gets its standard header payload
-    And snapshot "S2" gets its orders payload
     And snapshot "S2" gets its portfolio payload
+    And snapshot "S2" gets its orders payload
+    And snapshot "S2" gets its compliances payload
+    And snapshot "S2" gets its orders-history payload
     And snapshot "S2" gets its settings payload
     Then snapshot "S2" is COMPLETE
     And snapshot "S1" tracking is unchanged from the isolation baseline

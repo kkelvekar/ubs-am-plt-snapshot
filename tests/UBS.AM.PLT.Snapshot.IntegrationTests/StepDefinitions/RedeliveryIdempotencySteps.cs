@@ -8,7 +8,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 
 /// <summary>
 /// Step definitions for <c>Features/RedeliveryIdempotency.feature</c>. The first scenario drives a
-/// full 4-payload snapshot to COMPLETE then redelivers the byte-identical NON-header payload,
+/// full 6-payload snapshot to COMPLETE then redelivers the byte-identical NON-header payload,
 /// proving the update path touches only last_updated_at while the index UPSERT never re-runs (no
 /// duplicate row). The second delivers the same payloadType twice before completion, proving
 /// received_files de-duplicates the filename yet the remaining required files still drive the set
@@ -63,6 +63,14 @@ public sealed class RedeliveryIdempotencySteps
     [When("a portfolio payload is delivered")]
     public Task WhenAPortfolioPayloadIsDelivered() =>
         DeliverAsync("portfolio", TestPayloads.PortfolioJson);
+
+    [When("a compliances payload is delivered")]
+    public Task WhenACompliancesPayloadIsDelivered() =>
+        DeliverAsync("compliances", TestPayloads.CompliancesJson);
+
+    [When("an orders-history payload is delivered")]
+    public Task WhenAnOrdersHistoryPayloadIsDelivered() =>
+        DeliverAsync("orders-history", TestPayloads.OrdersHistoryJson);
 
     [When("a settings payload is delivered")]
     public Task WhenASettingsPayloadIsDelivered() =>

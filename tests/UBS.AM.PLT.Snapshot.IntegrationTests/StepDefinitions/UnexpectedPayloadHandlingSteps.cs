@@ -11,7 +11,7 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests.StepDefinitions;
 /// Step definitions for <c>Features/UnexpectedPayloadHandling.feature</c>. An unexpected
 /// payloadType (auditlog.json) that is not in the required-files set is rejected before the first
 /// write, so it never reaches blob storage or received_files — whether it arrives before the
-/// required files or after the snapshot has already completed. Either way the four required files
+/// required files or after the snapshot has already completed. Either way the six required files
 /// alone drive the snapshot to COMPLETE and the index row is written exactly once. The clock is
 /// anchored to a
 /// fixed-but-arbitrary instant inside the "out-of-contract snapshot" step. The run-scoped
@@ -64,6 +64,14 @@ public sealed class UnexpectedPayloadHandlingSteps
     [When("a required portfolio payload is stored")]
     public Task WhenARequiredPortfolioPayloadIsStored() =>
         DeliverAsync("portfolio", TestPayloads.PortfolioJson);
+
+    [When("a required compliances payload is stored")]
+    public Task WhenARequiredCompliancesPayloadIsStored() =>
+        DeliverAsync("compliances", TestPayloads.CompliancesJson);
+
+    [When("a required orders-history payload is stored")]
+    public Task WhenARequiredOrdersHistoryPayloadIsStored() =>
+        DeliverAsync("orders-history", TestPayloads.OrdersHistoryJson);
 
     [When("a required settings payload is stored")]
     public Task WhenARequiredSettingsPayloadIsStored() =>

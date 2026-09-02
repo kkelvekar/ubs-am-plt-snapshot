@@ -73,26 +73,27 @@ above.
 }
 ```
 
-`SnapshotType` and `PayloadType` valid values (current config — one entry per
-snapshot type, adding a type is a config change on this service's side):
+`SnapshotType` and `PayloadType` valid values (current library-owned map — one entry per
+snapshot type, adding a type is a code-constant change and library rebuild on this service's side):
 
 ```jsonc
 {
   // SnapshotType — only "portfolio" is defined today.
   "SnapshotType": "portfolio",
 
-  // PayloadType — for SnapshotType "portfolio", exactly these four are accepted.
-  // A snapshot is COMPLETE once all four have arrived for the same SnapshotId.
-  "PayloadType": "header" // | "orders" | "portfolio" | "settings"
+  // PayloadType — for SnapshotType "portfolio", exactly these six are accepted.
+  // A snapshot is COMPLETE once all six have arrived for the same SnapshotId.
+  "PayloadType": "header" // | "portfolio" | "orders" | "compliances" | "orders-history" | "settings"
 }
 ```
 
 A snapshot is a set of related messages: publish one message per `PayloadType`, all
-sharing the same `SnapshotId`/`AccountId`/`SnapshotType`. Order between the four
+sharing the same `SnapshotId`/`AccountId`/`SnapshotType`. Order between the six
 does not matter and any of them may be redelivered — writes are idempotent.
 
 Only the `header` payload is ever inspected by this service (its `Payload.Event` field
-is extracted for the audit grid). `orders`, `portfolio`, `settings` — and every
+is extracted for the audit grid). `portfolio`, `orders`, `compliances`, `orders-history`,
+`settings` — and every
 other field inside `header` — pass through completely opaque: send whatever JSON
 document your payload type requires. A missing, invalid, blank, or over-length
 `Payload.Event` rejects the snapshot with `INVALID_HEADER_EVENT`; malformed header JSON
@@ -136,7 +137,7 @@ response (`Receiving` → `Complete`) and a failure response (`Failed`, with
   "SnapshotId": "corr20260727-0001",
   "AccountId": "00675442A",
   "ReceivedFiles": ["header.json"],
-  "MissingFiles": ["orders.json", "portfolio.json", "settings.json"],
+  "MissingFiles": ["compliances.json", "orders-history.json", "orders.json", "portfolio.json", "settings.json"],
   "Status": "Receiving",
   "FirstReceivedAt": "2026-07-27T10:45:00.0000000Z",
   "LastUpdatedAt": "2026-07-27T10:45:00.0000000Z",
@@ -153,7 +154,7 @@ response (`Receiving` → `Complete`) and a failure response (`Failed`, with
 {
   "SnapshotId": "corr20260727-0001",
   "AccountId": "00675442A",
-  "ReceivedFiles": ["header.json", "orders.json", "portfolio.json", "settings.json"],
+  "ReceivedFiles": ["header.json", "portfolio.json", "orders.json", "compliances.json", "orders-history.json", "settings.json"],
   "MissingFiles": [],
   "Status": "Complete",
   "FirstReceivedAt": "2026-07-27T10:45:00.0000000Z",

@@ -5,7 +5,8 @@ namespace UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 public sealed class SnapshotTemplateLoader(IHostEnvironment environment)
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
-    private static readonly string[] ExpectedPayloadTypes = ["header", "orders", "portfolio", "settings"];
+    private static readonly string[] ExpectedPayloadTypes =
+        ["header", "portfolio", "orders", "compliances", "orders-history", "settings"];
     private readonly string dataDirectory = Path.Combine(environment.ContentRootPath, "LiveTesting", "Data");
 
     public SnapshotTemplate Load(string templateFileName)

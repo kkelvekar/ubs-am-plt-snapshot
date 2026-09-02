@@ -30,6 +30,21 @@
       }
     },
     {
+      "payloadType": "portfolio",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "totals": {
+          "marketValue": 1250000.50,
+          "cash": 32000.00
+        },
+        "risk": {
+          "trackingError": 0.84,
+          "activeShare": 0.21
+        },
+        "rows": []
+      }
+    },
+    {
       "payloadType": "orders",
       "publishedBy": "PortfolioCalculation",
       "payload": {
@@ -62,18 +77,27 @@
       }
     },
     {
-      "payloadType": "portfolio",
+      "payloadType": "compliances",
       "publishedBy": "PortfolioCalculation",
       "payload": {
-        "totals": {
-          "marketValue": 1250000.50,
-          "cash": 32000.00
-        },
-        "risk": {
-          "trackingError": 0.84,
-          "activeShare": 0.21
-        },
-        "rows": []
+        "checks": [
+          {
+            "rule": "MAX_ISSUER_WEIGHT",
+            "status": "PASS"
+          }
+        ]
+      }
+    },
+    {
+      "payloadType": "orders-history",
+      "publishedBy": "PortfolioCalculation",
+      "payload": {
+        "orders": [
+          {
+            "id": "ORD-1",
+            "status": "SENT"
+          }
+        ]
       }
     },
     {

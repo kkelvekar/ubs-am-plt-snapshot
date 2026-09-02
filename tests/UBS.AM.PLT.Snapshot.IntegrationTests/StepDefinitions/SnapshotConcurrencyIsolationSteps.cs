@@ -68,6 +68,14 @@ public sealed class SnapshotConcurrencyIsolationSteps
     public Task WhenSnapshotGetsItsPortfolioPayload(string label) =>
         SendPayloadAsync(label, "portfolio", TestPayloads.PortfolioJson);
 
+    [When("snapshot \"(.*)\" gets its compliances payload")]
+    public Task WhenSnapshotGetsItsCompliancesPayload(string label) =>
+        SendPayloadAsync(label, "compliances", TestPayloads.CompliancesJson);
+
+    [When("snapshot \"(.*)\" gets its orders-history payload")]
+    public Task WhenSnapshotGetsItsOrdersHistoryPayload(string label) =>
+        SendPayloadAsync(label, "orders-history", TestPayloads.OrdersHistoryJson);
+
     [When("snapshot \"(.*)\" gets its settings payload")]
     public Task WhenSnapshotGetsItsSettingsPayload(string label) =>
         SendPayloadAsync(label, "settings", TestPayloads.SettingsJson);
