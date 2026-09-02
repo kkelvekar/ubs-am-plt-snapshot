@@ -26,14 +26,24 @@
       }
     },
     {
+      "payloadType": "portfolio",
+      "publishedBy": "PortfolioCalculation",
+      "payload": { "nav": 1.0 }
+    },
+    {
       "payloadType": "orders",
       "publishedBy": "PortfolioCalculation",
       "payload": { "total": 1 }
     },
     {
-      "payloadType": "portfolio",
+      "payloadType": "compliances",
       "publishedBy": "PortfolioCalculation",
-      "payload": { "nav": 1.0 }
+      "payload": { "checks": [{ "rule": "MAX_ISSUER_WEIGHT", "status": "PASS" }] }
+    },
+    {
+      "payloadType": "orders-history",
+      "publishedBy": "PortfolioCalculation",
+      "payload": { "orders": [{ "id": "ORD-1", "status": "SENT" }] }
     },
     {
       "payloadType": "settings",

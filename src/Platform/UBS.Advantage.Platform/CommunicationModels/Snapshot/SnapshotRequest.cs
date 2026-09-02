@@ -9,7 +9,7 @@ public class SnapshotRequest
     public string AccountId { get; set; } = string.Empty;
     /// <summary>Type of the snapshot. E.g. "portfolio", "optimizer".</summary>
     public required string SnapshotType { get; set; }
-    /// <summary>Type of the payload for the snapshot. E.g. header, orders, portfolio, settings etc.</summary>
+    /// <summary>Type of the payload for the snapshot. E.g. header, portfolio, orders, compliances, orders-history, settings.</summary>
     public required string PayloadType { get; set; }
     public string PublishedAt { get; set; } = string.Empty;
     public string PublishedBy { get; set; } = string.Empty;

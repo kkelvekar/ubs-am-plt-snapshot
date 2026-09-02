@@ -207,7 +207,9 @@ public sealed class SqlSnapshotTrackingStoreTests
         Assert.Null(entry.DeclaredFailedAt);
         Assert.Equal(completedAt, entry.CompletedAt);
         Assert.Equal(completedAt, entry.LastUpdatedAt);
-        Assert.Equal(["header.json", "orders.json", "portfolio.json", "settings.json"], entry.ReceivedFiles);
+        Assert.Equal(
+            ["header.json", "portfolio.json", "orders.json", "compliances.json", "orders-history.json", "settings.json"],
+            entry.ReceivedFiles);
     }
 
     [Fact]
@@ -382,7 +384,7 @@ public sealed class SqlSnapshotTrackingStoreTests
         AccountId = "00675442A",
         SnapshotType = "portfolio",
         AdlsRootPath = RootPath,
-        ReceivedFiles = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+        ReceivedFiles = ["header.json", "portfolio.json", "orders.json", "compliances.json", "orders-history.json", "settings.json"],
         Status = SnapshotTrackingStatus.Complete,
         FirstReceivedAt = StartTime.UtcDateTime,
         LastUpdatedAt = completedAt,

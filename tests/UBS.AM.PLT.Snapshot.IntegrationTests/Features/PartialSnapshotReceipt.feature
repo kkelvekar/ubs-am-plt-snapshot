@@ -34,7 +34,13 @@ Scenario: Payloads arriving out of order accumulate and complete only when the h
     When the settings payload arrives
     Then the snapshot tracking status is "RECEIVING"
     And no index row exists for the snapshot
+    When the compliances payload arrives
+    Then the snapshot tracking status is "RECEIVING"
+    And no index row exists for the snapshot
     When the portfolio payload arrives
+    Then the snapshot tracking status is "RECEIVING"
+    And no index row exists for the snapshot
+    When the orders-history payload arrives
     Then the snapshot tracking status is "RECEIVING"
     And no index row exists for the snapshot
     When the standard header payload arrives

@@ -27,7 +27,15 @@ public class SnapshotConfigDefinitionTests
         var required = provider.GetRequiredFiles("portfolio");
 
         Assert.Equal(
-            new HashSet<string> { "header.json", "orders.json", "portfolio.json", "settings.json" },
+            new HashSet<string>
+            {
+                "header.json",
+                "portfolio.json",
+                "orders.json",
+                "compliances.json",
+                "orders-history.json",
+                "settings.json",
+            },
             required);
     }
 

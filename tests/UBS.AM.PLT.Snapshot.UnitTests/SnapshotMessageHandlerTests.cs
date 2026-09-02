@@ -12,7 +12,7 @@ namespace UBS.AM.PLT.Snapshot.UnitTests;
 public class SnapshotMessageHandlerTests
 {
     private static readonly HashSet<string> PortfolioRequiredFiles =
-        ["header.json", "orders.json", "portfolio.json", "settings.json"];
+        ["header.json", "portfolio.json", "orders.json", "compliances.json", "orders-history.json", "settings.json"];
 
     [Fact]
     public async Task HandleAsync_writes_to_blob_store_exactly_once_with_the_incoming_message()
@@ -25,6 +25,23 @@ public class SnapshotMessageHandlerTests
 
         var written = Assert.Single(blobStore.Written);
         Assert.Same(message, written.Message);
+    }
+
+    [Theory]
+    [InlineData("compliances")]
+    [InlineData("orders-history")]
+    public async Task HandleAsync_accepts_new_required_payload_types_and_writes_their_opaque_json_verbatim(string payloadType)
+    {
+        const string payload = """{"unknownToWriter":{"nested":[1,2,3]},"decimal":10.00}""";
+        var blobStore = new FakeSnapshotBlobStore();
+        var handler = CreateHandler(blobStore, new FakeSnapshotTrackingStore());
+        var message = CreateMessage(payloadType: payloadType, payload: payload);
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var written = Assert.Single(blobStore.Written);
+        Assert.Equal(payloadType, written.Message.PayloadType);
+        Assert.Equal(payload, written.Message.Payload);
     }
 
     [Fact]
@@ -161,7 +178,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
             CallOrderLog = callOrderLog,
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
@@ -240,7 +257,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
@@ -263,7 +280,7 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(message.AccountId, notification.AccountId);
         Assert.Equal(SnapshotTrackingStatus.Complete, notification.Status);
         Assert.Equal(
-            ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            [.. PortfolioRequiredFiles],
             notification.ReceivedFiles);
         Assert.Empty(notification.MissingFiles);
         Assert.Equal(new DateTime(2026, 5, 22, 6, 10, 14, DateTimeKind.Utc), notification.FirstReceivedAt);
@@ -300,7 +317,9 @@ public class SnapshotMessageHandlerTests
         Assert.Equal(["orders.json"], notification.ReceivedFiles);
 
         // Sorted, so the same snapshot state always renders the same wire value.
-        Assert.Equal(["header.json", "portfolio.json", "settings.json"], notification.MissingFiles);
+        Assert.Equal(
+            ["compliances.json", "header.json", "orders-history.json", "portfolio.json", "settings.json"],
+            notification.MissingFiles);
         Assert.Null(notification.CompletedAt);
         Assert.Null(notification.DeclaredFailedAt);
     }
@@ -308,7 +327,7 @@ public class SnapshotMessageHandlerTests
     [Fact]
     public async Task HandleAsync_publishes_no_response_for_a_later_payload_that_does_not_complete()
     {
-        // Second of four: the snapshot was already announced on its first payload, and it is
+        // Second of six: the snapshot was already announced on its first payload, and it is
         // not complete yet, so this message says nothing.
         var trackingStore = new FakeSnapshotTrackingStore
         {
@@ -385,7 +404,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
@@ -439,7 +458,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider(); // "portfolio" deliberately unconfigured
         var indexStore = new FakePortfolioSnapshotIndexStore();
@@ -741,7 +760,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;
@@ -1271,7 +1290,7 @@ public class SnapshotMessageHandlerTests
         var trackingStore = new FakeSnapshotTrackingStore
         {
             StatusToReturn = SnapshotTrackingStatus.Receiving,
-            ReceivedFilesToReturn = ["header.json", "orders.json", "portfolio.json", "settings.json"],
+            ReceivedFilesToReturn = [.. PortfolioRequiredFiles],
         };
         var requiredFilesProvider = new FakeRequiredFilesProvider();
         requiredFilesProvider.RequiredFilesByType["portfolio"] = PortfolioRequiredFiles;

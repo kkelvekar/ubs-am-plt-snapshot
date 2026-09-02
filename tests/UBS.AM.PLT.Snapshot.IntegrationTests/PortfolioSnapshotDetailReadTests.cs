@@ -46,6 +46,14 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         {"positions":[{"isin":"CH0038863350",  "qty":250.50}]}
         """;
 
+    private const string CompliancesJson = """
+        {"checks":[{"rule":"MAX_ISSUER_WEIGHT",  "status":"PASS"}]}
+        """;
+
+    private const string OrdersHistoryJson = """
+        {"orders":[{"id":"ORD-1",  "status":"SENT"}]}
+        """;
+
     private const string PortfolioJson = """
         {"nav":5555.00,  "ccy":"CHF"}
         """;
@@ -82,10 +90,12 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         // payload (AGENTS.md invariant 5); this asserts on the composed document's shape.
         using var document = JsonDocument.Parse(json);
         Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
-        Assert.Equal(4, document.RootElement.EnumerateObject().Count());
+        Assert.Equal(6, document.RootElement.EnumerateObject().Count());
         Assert.True(document.RootElement.TryGetProperty("header", out _));
-        Assert.True(document.RootElement.TryGetProperty("orders", out _));
         Assert.True(document.RootElement.TryGetProperty("portfolio", out _));
+        Assert.True(document.RootElement.TryGetProperty("orders", out _));
+        Assert.True(document.RootElement.TryGetProperty("compliances", out _));
+        Assert.True(document.RootElement.TryGetProperty("orders-history", out _));
         Assert.True(document.RootElement.TryGetProperty("settings", out _));
 
         // Each seeded payload string appears byte-for-byte inside the raw document text —
@@ -93,6 +103,8 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
         // is untouched.
         Assert.Contains(HeaderJson, json, StringComparison.Ordinal);
         Assert.Contains(OrdersJson, json, StringComparison.Ordinal);
+        Assert.Contains(CompliancesJson, json, StringComparison.Ordinal);
+        Assert.Contains(OrdersHistoryJson, json, StringComparison.Ordinal);
         Assert.Contains(PortfolioJson, json, StringComparison.Ordinal);
         Assert.Contains(SettingsJson, json, StringComparison.Ordinal);
     }
@@ -145,7 +157,7 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
     }
 
     /// <summary>
-    /// Sends all four required payloads (design §4's declarative required-files map) through
+    /// Sends all six required payloads (design §4's declarative required-files map) through
     /// the real handler so the snapshot reaches COMPLETE with an index row, then returns its
     /// snapshotId. Order is deliberately not "header first": header last exercises the same
     /// out-of-order arrival path already proven by <c>SnapshotCompletionSteps</c>, so this
@@ -157,8 +169,10 @@ public sealed class PortfolioSnapshotDetailReadTests : IntegrationTestBase, ICla
 
         foreach (var (payloadType, payloadJson) in new[]
                  {
-                     ("orders", OrdersJson),
                      ("portfolio", PortfolioJson),
+                     ("orders", OrdersJson),
+                     ("compliances", CompliancesJson),
+                     ("orders-history", OrdersHistoryJson),
                      ("settings", SettingsJson),
                      ("header", HeaderJson),
                  })

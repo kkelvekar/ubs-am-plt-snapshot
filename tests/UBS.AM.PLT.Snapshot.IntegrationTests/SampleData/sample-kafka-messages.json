@@ -1,5 +1,5 @@
 {
-  "_comment": "Sample Kafka messages for the ubs-advantage-snapshots topic, conforming to docs/snapshot-request.schema.json. Each entry is one message value (publish as a JSON string, key = AccountId). Together the four entries form one complete snapshot: the index row is written once all four required files (header, orders, portfolio, settings) have been received.",
+  "_comment": "Sample Kafka messages for the ubs-advantage-snapshots topic, conforming to docs/snapshot-request.schema.json. Each entry is one message value (publish as a JSON string, key = AccountId). Together the six entries form one complete snapshot: the index row is written once all six required files (header, portfolio, orders, compliances, orders-history, settings) have been received.",
   "messages": [
     {
       "SnapshotId": "corr20260727-0001",
@@ -14,17 +14,8 @@
       "SnapshotId": "corr20260727-0001",
       "AccountId": "00675442A",
       "SnapshotType": "portfolio",
-      "PayloadType": "orders",
-      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
-      "PublishedBy": "PortfolioCalculation",
-      "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
-    },
-    {
-      "SnapshotId": "corr20260727-0001",
-      "AccountId": "00675442A",
-      "SnapshotType": "portfolio",
       "PayloadType": "portfolio",
-      "PublishedAt": "2026-07-27T10:45:10.0000000Z",
+      "PublishedAt": "2026-07-27T10:45:05.0000000Z",
       "PublishedBy": "PortfolioCalculation",
       "Payload": "{\"nav\":5555.55,\"ccy\":\"CHF\"}"
     },
@@ -32,8 +23,35 @@
       "SnapshotId": "corr20260727-0001",
       "AccountId": "00675442A",
       "SnapshotType": "portfolio",
-      "PayloadType": "settings",
+      "PayloadType": "orders",
+      "PublishedAt": "2026-07-27T10:45:10.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"positions\":[{\"isin\":\"CH0038863350\",\"qty\":250}]}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "compliances",
       "PublishedAt": "2026-07-27T10:45:15.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"checks\":[{\"rule\":\"MAX_ISSUER_WEIGHT\",\"status\":\"PASS\"}]}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "orders-history",
+      "PublishedAt": "2026-07-27T10:45:20.0000000Z",
+      "PublishedBy": "PortfolioCalculation",
+      "Payload": "{\"orders\":[{\"id\":\"ORD-1\",\"status\":\"SENT\"}]}"
+    },
+    {
+      "SnapshotId": "corr20260727-0001",
+      "AccountId": "00675442A",
+      "SnapshotType": "portfolio",
+      "PayloadType": "settings",
+      "PublishedAt": "2026-07-27T10:45:25.0000000Z",
       "PublishedBy": "PortfolioCalculation",
       "Payload": "{\"tolerance\":0.05}"
     }

@@ -15,6 +15,8 @@ Scenario: Redelivering a non-header payload after completion leaves everything b
     Given a redelivery snapshot for account "IT-ACC-007"
     When an orders payload is delivered
     And a portfolio payload is delivered
+    And a compliances payload is delivered
+    And an orders-history payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE and captured as the redelivery baseline
@@ -34,8 +36,10 @@ Scenario: A same-payload duplicate before completion is counted once and still c
     Then the pre-completion snapshot is RECEIVING with received files "orders.json"
     And no index row exists yet for the snapshot
     When a portfolio payload is delivered
+    And a compliances payload is delivered
+    And an orders-history payload is delivered
     And a settings payload is delivered
     And the completing header payload is delivered
     Then the snapshot is COMPLETE with a completed time
-    And "orders.json" appears exactly once among the 4 received files
+    And "orders.json" appears exactly once among the 6 received files
     And an index row now exists for the snapshot

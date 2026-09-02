@@ -12,6 +12,10 @@ Scenario: The final required payload completes the set and writes the index via 
     Then the snapshot is still receiving with no index row
     When the settings payload is received
     Then the snapshot is still receiving with no index row
+    When the compliances payload is received
+    Then the snapshot is still receiving with no index row
+    When the orders-history payload is received
+    Then the snapshot is still receiving with no index row
     When the standard header payload is received
     Then the snapshot tracking is COMPLETE with a completed time
     And the "header.json" blob holds the sent payload
@@ -21,15 +25,19 @@ Scenario: The final required payload completes the set and writes the index via 
 Scenario: A full snapshot in canonical order is queryable with correct display data
     Given a completion snapshot for account "IT-ACC-002"
     When the standard header payload is received
-    And the orders payload is received
     And the portfolio payload is received
+    And the orders payload is received
+    And the compliances payload is received
+    And the orders-history payload is received
     And the settings payload is received
     Then the snapshot end state is a well-formed completed snapshot
 
 Scenario: A full snapshot in shuffled order reaches the same end state as canonical order
     Given a completion snapshot for account "IT-ACC-002"
     When the settings payload is received
+    And the orders-history payload is received
     And the portfolio payload is received
     And the standard header payload is received
+    And the compliances payload is received
     And the orders payload is received
     Then the snapshot end state is a well-formed completed snapshot

@@ -13,7 +13,7 @@ public class SnapshotMessage
     public required string SnapshotId { get; set; }  // correlationId
     public required string AccountId { get; set; }
     public required string SnapshotType { get; set; }  // "portfolio"
-    public required string PayloadType { get; set; }  // "header" / "orders" etc
+    public required string PayloadType { get; set; }  // "header" / "orders-history" etc
     public required string PublishedAt { get; set; }  // log-only, never used in logic
     public required string PublishedBy { get; set; }  // "PortfolioCalculation"
 
