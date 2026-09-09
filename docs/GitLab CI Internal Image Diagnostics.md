@@ -124,3 +124,180 @@ Do not merge this diagnostic job into `develop`. Use its output to design the
 final CI-only SQL Server and Azurite configuration, then replace or remove the
 temporary job on the same feature branch.
 
+## Interpret the SQL image diagnostic
+
+The initial organisation-runner diagnostic reported:
+
+- Ubuntu 24.04 with Bash;
+- .NET SDK 10.0.201;
+- `sqlcmd` at `/opt/mssql-tools18/bin/sqlcmd` and already on `PATH`;
+- `sqlpackage` installed as a .NET tool;
+- `curl`, `wget`, `openssl`, and `apt-get` available; and
+- `/ubs/ubs-certs.sh` present.
+
+The final integration-test job should therefore use the approved SQL-enabled
+.NET image directly. It does not need to configure Microsoft's package
+repository or install `mssql-tools18` at runtime.
+
+## Inspect the internal Azurite image
+
+Add this second temporary top-level job. Replace `<internal-azurite-image>`
+with the approved internal image and tag. The entrypoint override stops the
+normal server process so GitLab can execute the diagnostic script instead.
+
+```yaml
+azurite-image-diagnostics:
+  stage: test
+
+  image:
+    name: <internal-azurite-image>
+    entrypoint: [""]
+
+  before_script: []
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\/.+$/'
+      when: on_success
+    - when: never
+
+  allow_failure: true
+
+  script:
+    - |
+      echo "=== Operating system ==="
+      if [ -r /etc/os-release ]; then
+        cat /etc/os-release
+      else
+        echo "/etc/os-release is unavailable"
+      fi
+
+    - |
+      echo "=== Shells ==="
+      echo "Current shell: ${SHELL:-not-set}"
+      command -v sh || true
+      command -v bash || true
+      readlink /proc/$$/exe 2>/dev/null || true
+
+    - |
+      echo "=== Azurite executables ==="
+      for tool in azurite azurite-blob azurite-queue azurite-table
+      do
+        location="$(command -v "$tool" 2>/dev/null || true)"
+
+        if [ -n "$location" ]; then
+          echo "$tool: $location"
+          "$tool" --version 2>/dev/null || true
+        else
+          echo "$tool: unavailable"
+        fi
+      done
+
+    - |
+      echo "=== Node runtime ==="
+      command -v node || true
+      node --version 2>/dev/null || true
+      command -v npm || true
+      npm --version 2>/dev/null || true
+
+    - |
+      echo "=== Available utilities ==="
+      for tool in curl wget nc netcat bash sh apt-get apk dnf yum
+      do
+        location="$(command -v "$tool" 2>/dev/null || true)"
+
+        if [ -n "$location" ]; then
+          echo "$tool: $location"
+        else
+          echo "$tool: unavailable"
+        fi
+      done
+
+    - echo "Azurite image diagnostics completed"
+```
+
+If the job cannot run because the service image does not contain a shell, do
+not modify or install anything in that image. Use the service-level diagnostic
+below and continue treating the image as a black box.
+
+## Test the default Azurite service behaviour
+
+This job starts the unmodified internal Azurite image as a service. All probes
+run from the approved SQL-enabled .NET job image; nothing is installed or run
+inside the Azurite container manually.
+
+```yaml
+azurite-service-diagnostics:
+  stage: test
+
+  image: <internal-dotnet10-sql-image>
+
+  services:
+    - name: <internal-azurite-image>
+      alias: azurite
+
+  before_script:
+    - /bin/sh /ubs/ubs-certs.sh &> /dev/null
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\/.+$/'
+      when: on_success
+    - when: never
+
+  allow_failure: true
+
+  script:
+    - |
+      echo "=== Azurite hostname ==="
+      getent hosts azurite || true
+
+    - |
+      echo "=== Azurite service ports ==="
+
+      for port in 10000 10001 10002
+      do
+        reachable=false
+
+        for attempt in $(seq 1 30)
+        do
+          http_code="$(
+            curl \
+              --silent \
+              --show-error \
+              --connect-timeout 2 \
+              --max-time 3 \
+              --output /dev/null \
+              --write-out "%{http_code}" \
+              "http://azurite:${port}/" 2>/dev/null || true
+          )"
+
+          if [ -n "$http_code" ] && [ "$http_code" != "000" ]; then
+            echo "Port ${port} is reachable; HTTP status=${http_code}"
+            reachable=true
+            break
+          fi
+
+          sleep 2
+        done
+
+        if [ "$reachable" = false ]; then
+          echo "Port ${port} was not reachable"
+        fi
+      done
+
+    - |
+      echo "Expected Azurite ports:"
+      echo "10000 = Blob"
+      echo "10001 = Queue"
+      echo "10002 = Table"
+```
+
+An HTTP response such as 400 or 403 proves that the port is reachable; these
+diagnostic requests intentionally provide no storage credentials. Snapshot
+Writer requires only the Blob endpoint on port 10000.
+
+- If port 10000 is reachable, the image's default service configuration is
+  sufficient for further Snapshot Writer CI work.
+- If all three ports are reachable, the image starts the full Azurite service.
+- If only port 10000 is reachable, a Blob-only configuration is sufficient.
+- If no ports are reachable, inspect the service-container logs for required
+  configuration while leaving the image unchanged.
