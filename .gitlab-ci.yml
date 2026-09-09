@@ -62,4 +62,18 @@ regression_tests:
           exit 1
         fi
       done
-    - dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj --configuration "$BUILD_CONFIGURATION"
+    - |
+      dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj \
+        --configuration "$BUILD_CONFIGURATION" \
+        --collect:"XPlat Code Coverage" \
+        --logger:"junit;LogFilePath=$CI_PROJECT_DIR/TestResults/regression-test-results.xml;MethodFormat=Class;FailureBodyFormat=Verbose" \
+        --results-directory "$CI_PROJECT_DIR/TestResults"
+  artifacts:
+    when: always
+    paths:
+      - TestResults/
+    reports:
+      junit: TestResults/regression-test-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: TestResults/**/coverage.cobertura.xml
