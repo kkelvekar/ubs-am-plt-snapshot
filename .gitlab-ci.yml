@@ -9,6 +9,7 @@ variables:
   DOTNET_NOLOGO: "1"
   NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
   BUILD_CONFIGURATION: "Release"
+  REPORTGENERATOR_VERSION: "5.5.3"
 
 default:
   image:
@@ -22,6 +23,7 @@ cache:
   key: "$CI_COMMIT_REF_SLUG"
   paths:
     - .nuget/packages/
+    - .dotnet-tools/
 
 build:
   stage: build
@@ -63,14 +65,20 @@ regression_tests:
         fi
       done
     - |
-      dotnet tool restore
+      if [ ! -x "$CI_PROJECT_DIR/.dotnet-tools/reportgenerator" ]; then
+        dotnet tool install --tool-path "$CI_PROJECT_DIR/.dotnet-tools" dotnet-reportgenerator-globaltool --version "$REPORTGENERATOR_VERSION"
+      fi
     - |
       set +e
       dotnet test "tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj" --configuration "$BUILD_CONFIGURATION" --collect:"XPlat Code Coverage" --logger:"junit;LogFilePath=$CI_PROJECT_DIR/TestResults/regression-test-results.xml;MethodFormat=Class;FailureBodyFormat=Verbose" --results-directory "$CI_PROJECT_DIR/TestResults"
       test_exit_code=$?
       set -e
-      dotnet tool run reportgenerator -reports:"$CI_PROJECT_DIR/TestResults/**/coverage.cobertura.xml" -targetdir:"$CI_PROJECT_DIR/coverage-report" -reporttypes:"Html;HtmlSummary;Cobertura;TextSummary;Badges" -title:"Snapshot Writer Regression Coverage"
+      "$CI_PROJECT_DIR/.dotnet-tools/reportgenerator" -reports:"$CI_PROJECT_DIR/TestResults/**/coverage.cobertura.xml" -targetdir:"$CI_PROJECT_DIR/coverage-report" -reporttypes:"Html;HtmlSummary;Cobertura;TextSummary;Badges" -title:"Snapshot Writer Regression Coverage"
       cat "$CI_PROJECT_DIR/coverage-report/Summary.txt"
+      if [ ! -f "$CI_PROJECT_DIR/test-reports/test-report-latest.html" ]; then
+        echo "BDD HTML report was not generated. Copy Support/CiTestReportWriter.cs and the updated Support/ReqnrollHooks.cs into the integration-test project." >&2
+        exit 1
+      fi
       exit "$test_exit_code"
   artifacts:
     when: always
