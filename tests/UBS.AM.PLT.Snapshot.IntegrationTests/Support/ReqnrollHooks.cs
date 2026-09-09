@@ -19,10 +19,17 @@ public sealed class ReqnrollHooks
     private static SnapshotFixture? _fixture;
 
     private readonly IObjectContainer _objectContainer;
+    private readonly FeatureContext _featureContext;
+    private readonly ScenarioContext _scenarioContext;
 
-    public ReqnrollHooks(IObjectContainer objectContainer)
+    public ReqnrollHooks(
+        IObjectContainer objectContainer,
+        FeatureContext featureContext,
+        ScenarioContext scenarioContext)
     {
         _objectContainer = objectContainer;
+        _featureContext = featureContext;
+        _scenarioContext = scenarioContext;
     }
 
     private static SnapshotFixture Fixture =>
@@ -38,8 +45,15 @@ public sealed class ReqnrollHooks
     [AfterTestRun]
     public static void AfterTestRun()
     {
-        _fixture?.Dispose();
-        _fixture = null;
+        try
+        {
+            CiTestReportWriter.WriteReports();
+        }
+        finally
+        {
+            _fixture?.Dispose();
+            _fixture = null;
+        }
     }
 
     // Expose the run-scoped fixture to constructor-injected step definitions.
@@ -55,6 +69,8 @@ public sealed class ReqnrollHooks
     [AfterScenario]
     public async Task CleanupScenarioAsync(ScenarioFixtureContext scenarioContext)
     {
+        CiTestReportWriter.Record(_featureContext, _scenarioContext);
+
         if (!Fixture.TestSettings.CleanupAfterTest)
         {
             return;

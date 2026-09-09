@@ -19,6 +19,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="JunitXml.TestLogger" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -45,6 +46,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\db\scripts\*.sql" Link="db\scripts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="appsettings.CI.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

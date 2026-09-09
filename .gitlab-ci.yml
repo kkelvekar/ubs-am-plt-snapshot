@@ -1,19 +1,29 @@
-image: mcr.microsoft.com/dotnet/sdk:10.0
+# Porting note: replace only these four image values with approved registry images.
+variables:
+  CI_BUILD_IMAGE: "mcr.microsoft.com/dotnet/sdk:10.0"
+  CI_REGRESSION_IMAGE: "mcr.microsoft.com/dotnet/sdk:10.0"
+  CI_SQLSERVER_IMAGE: "mcr.microsoft.com/mssql/server:2022-latest"
+  CI_AZURITE_IMAGE: "mcr.microsoft.com/azure-storage/azurite"
+
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  BUILD_CONFIGURATION: "Release"
+  REPORTGENERATOR_VERSION: "5.5.3"
+
+default:
+  image:
+    name: "$CI_BUILD_IMAGE"
 
 stages:
   - build
   - test
 
-variables:
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  DOTNET_NOLOGO: "1"
-  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
-  BUILD_CONFIGURATION: Release
-
 cache:
   key: "$CI_COMMIT_REF_SLUG"
   paths:
     - .nuget/packages/
+    - .dotnet-tools/
 
 build:
   stage: build
@@ -26,38 +36,27 @@ unit_tests:
   script:
     - dotnet test tests/UBS.AM.PLT.Snapshot.UnitTests/UBS.AM.PLT.Snapshot.UnitTests.csproj --configuration "$BUILD_CONFIGURATION"
 
-integration_tests:
+regression_tests:
   stage: test
+  image:
+    name: "$CI_REGRESSION_IMAGE"
   services:
-    - name: mcr.microsoft.com/mssql/server:2022-latest
+    - name: "$CI_SQLSERVER_IMAGE"
       alias: sqlserver
-    - name: mcr.microsoft.com/azure-storage/azurite
+    - name: "$CI_AZURITE_IMAGE"
       alias: azurite
-      command:
-        - azurite-blob
-        - --loose
-        - --blobHost
-        - 0.0.0.0
-        - --blobPort
-        - "10000"
-        - --disableProductStyleUrl
   variables:
+    DOTNET_ENVIRONMENT: "CI"
     ACCEPT_EULA: "Y"
     MSSQL_SA_PASSWORD: "$SQLSERVER_SA_PASSWORD"
     Database__ConnectionString: "Server=sqlserver,1433;Database=UbsAdvantageSnapshots;User Id=sa;Password=$SQLSERVER_SA_PASSWORD;TrustServerCertificate=True;Encrypt=False"
     BlobStorage__ServiceUri: ""
+    BlobStorage__ContainerName: "ubsadvsnapshots"
   before_script:
-    - apt-get update
-    - apt-get install -y curl gnupg
-    - . /etc/os-release && curl -fsSL "https://packages.microsoft.com/config/debian/${VERSION_ID%%.*}/packages-microsoft-prod.deb" -o packages-microsoft-prod.deb || curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o packages-microsoft-prod.deb
-    - dpkg -i packages-microsoft-prod.deb
-    - rm packages-microsoft-prod.deb
-    - apt-get update
-    - ACCEPT_EULA=Y apt-get install -y mssql-tools18
-    - export PATH="$PATH:/opt/mssql-tools18/bin"
+    - if [ -f /ubs/ubs-certs.sh ]; then /bin/sh /ubs/ubs-certs.sh >/dev/null 2>&1; fi
   script:
     - |
-      required_vars="SQLSERVER_SA_PASSWORD BlobStorage__ConnectionString BlobStorage__ContainerName"
+      required_vars="SQLSERVER_SA_PASSWORD BlobStorage__ConnectionString"
       for name in $required_vars; do
         eval "value=\${$name:-}"
         if [ -z "$value" ]; then
@@ -66,30 +65,30 @@ integration_tests:
         fi
       done
     - |
-      for i in $(seq 1 40); do
-        if sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"; then
-          break
-        fi
-        if [ "$i" -eq 40 ]; then
-          echo "SQL Server did not become ready in time."
-          exit 1
-        fi
-        sleep 3
-      done
+      if [ ! -x "$CI_PROJECT_DIR/.dotnet-tools/reportgenerator" ]; then
+        dotnet tool install --tool-path "$CI_PROJECT_DIR/.dotnet-tools" dotnet-reportgenerator-globaltool --version "$REPORTGENERATOR_VERSION"
+      fi
     - |
-      for i in $(seq 1 30); do
-        if (echo > /dev/tcp/azurite/10000) >/dev/null 2>&1; then
-          break
-        fi
-        if [ "$i" -eq 30 ]; then
-          echo "Azurite did not become ready in time."
-          exit 1
-        fi
-        sleep 2
-      done
-    - sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "IF DB_ID(N'UbsAdvantageSnapshots') IS NULL CREATE DATABASE [UbsAdvantageSnapshots];"
-    - |
-      for script in db/scripts/*.sql; do
-        sqlcmd -S sqlserver,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -d UbsAdvantageSnapshots -i "$script"
-      done
-    - dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj --configuration "$BUILD_CONFIGURATION"
+      set +e
+      dotnet test "tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj" --configuration "$BUILD_CONFIGURATION" --collect:"XPlat Code Coverage" --logger:"junit;LogFilePath=$CI_PROJECT_DIR/TestResults/regression-test-results.xml;MethodFormat=Class;FailureBodyFormat=Verbose" --results-directory "$CI_PROJECT_DIR/TestResults"
+      test_exit_code=$?
+      set -e
+      "$CI_PROJECT_DIR/.dotnet-tools/reportgenerator" -reports:"$CI_PROJECT_DIR/TestResults/**/coverage.cobertura.xml" -targetdir:"$CI_PROJECT_DIR/coverage-report" -reporttypes:"Html;HtmlSummary;Cobertura;TextSummary;Badges" -title:"Snapshot Writer Regression Coverage"
+      cat "$CI_PROJECT_DIR/coverage-report/Summary.txt"
+      if [ ! -f "$CI_PROJECT_DIR/test-reports/test-report-latest.html" ]; then
+        echo "BDD HTML report was not generated. Copy Support/CiTestReportWriter.cs and the updated Support/ReqnrollHooks.cs into the integration-test project." >&2
+        exit 1
+      fi
+      exit "$test_exit_code"
+  artifacts:
+    when: always
+    expire_in: never
+    paths:
+      - TestResults/
+      - coverage-report/
+      - test-reports/
+    reports:
+      junit: TestResults/regression-test-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-report/Cobertura.xml

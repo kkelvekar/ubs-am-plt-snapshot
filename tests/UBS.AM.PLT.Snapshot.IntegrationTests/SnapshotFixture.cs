@@ -15,8 +15,9 @@ namespace UBS.AM.PLT.Snapshot.IntegrationTests;
 /// <summary>
 /// Shared class fixture wiring the REAL production object graph — via the same
 /// <c>AddApplication</c>/<c>AddInfrastructure</c> extensions the Worker uses — against
-/// real Azure resources (ADLS Gen2 blob container + Azure SQL, both authenticated via
-/// DefaultAzureCredential / az login). Kafka is bypassed entirely: tests call
+/// real SQL and blob services selected by configuration. Local runs retain the existing
+/// Azure/local-SQL settings; CI supplies isolated SQL Server and Azurite services through
+/// environment variables. Kafka is bypassed entirely: tests call
 /// <see cref="Handler"/> directly, and no hosted service is ever started because
 /// <c>BuildServiceProvider()</c> never constructs <c>IHostedService</c> registrations —
 /// only <c>IHost.StartAsync</c> does, and no host is ever built here.
@@ -32,10 +33,20 @@ public sealed class SnapshotFixture : IDisposable
 
     public SnapshotFixture()
     {
-        Configuration = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json")
+        var environmentName = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+        var configurationBuilder = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json");
+
+        if (!string.IsNullOrWhiteSpace(environmentName))
+        {
+            configurationBuilder.AddJsonFile($"appsettings.{environmentName}.json", optional: true);
+        }
+
+        Configuration = configurationBuilder
             .AddEnvironmentVariables()
             .Build();
+
+        CiDatabaseBootstrapper.InitializeIfNeeded(Configuration, environmentName);
 
         MockTime = new Mock<TimeProvider> { CallBase = true };
         MockTime.Setup(t => t.GetUtcNow()).Returns(() => CurrentTime);
