@@ -70,6 +70,7 @@ regression_tests:
         --results-directory "$CI_PROJECT_DIR/TestResults"
   artifacts:
     when: always
+    expire_in: never
     paths:
       - TestResults/
     reports:
