@@ -66,18 +66,10 @@ regression_tests:
       dotnet tool restore
     - |
       set +e
-      dotnet test tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj \
-        --configuration "$BUILD_CONFIGURATION" \
-        --collect:"XPlat Code Coverage" \
-        --logger:"junit;LogFilePath=$CI_PROJECT_DIR/TestResults/regression-test-results.xml;MethodFormat=Class;FailureBodyFormat=Verbose" \
-        --results-directory "$CI_PROJECT_DIR/TestResults"
+      dotnet test "tests/UBS.AM.PLT.Snapshot.IntegrationTests/UBS.AM.PLT.Snapshot.IntegrationTests.csproj" --configuration "$BUILD_CONFIGURATION" --collect:"XPlat Code Coverage" --logger:"junit;LogFilePath=$CI_PROJECT_DIR/TestResults/regression-test-results.xml;MethodFormat=Class;FailureBodyFormat=Verbose" --results-directory "$CI_PROJECT_DIR/TestResults"
       test_exit_code=$?
       set -e
-      dotnet tool run reportgenerator \
-        -reports:"$CI_PROJECT_DIR/TestResults/**/coverage.cobertura.xml" \
-        -targetdir:"$CI_PROJECT_DIR/coverage-report" \
-        -reporttypes:"Html;HtmlSummary;Cobertura;TextSummary;Badges" \
-        -title:"Snapshot Writer Regression Coverage"
+      dotnet tool run reportgenerator -reports:"$CI_PROJECT_DIR/TestResults/**/coverage.cobertura.xml" -targetdir:"$CI_PROJECT_DIR/coverage-report" -reporttypes:"Html;HtmlSummary;Cobertura;TextSummary;Badges" -title:"Snapshot Writer Regression Coverage"
       cat "$CI_PROJECT_DIR/coverage-report/Summary.txt"
       exit "$test_exit_code"
   artifacts:
