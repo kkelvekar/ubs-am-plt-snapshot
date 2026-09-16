@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using UBS.Advantage.CommunicationModels.Snapshot;
+using UBS.AM.PLT.Snapshot.Domain;
 
 namespace UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
@@ -11,9 +12,8 @@ internal static class SnapshotGenerator
         DateTimeOffset startedAt)
     {
         var messages = new List<GeneratedSnapshotMessage>(template.Payloads.Count);
-        var invocationId = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
         var accountId = template.AccountIds[0];
-        var snapshotId = $"corr{startedAt:yyyyMMddHHmmssfff}-{invocationId}-0001";
+        var snapshotId = LiveTestSnapshot.NewId();
 
         foreach (var payload in template.Payloads)
         {
@@ -25,7 +25,7 @@ internal static class SnapshotGenerator
                 PayloadType = payload.PayloadType,
                 PublishedAt = startedAt.ToString("O", CultureInfo.InvariantCulture),
                 PublishedBy = payload.PublishedBy,
-                Payload = BuildPayload(payload, snapshotIndex: 0, startedAt),
+                Payload = BuildPayload(payload, snapshotId, snapshotIndex: 0, startedAt),
             };
 
             messages.Add(new GeneratedSnapshotMessage(accountId, message));
@@ -34,7 +34,7 @@ internal static class SnapshotGenerator
         return messages;
     }
 
-    private static string BuildPayload(PayloadTemplate template, int snapshotIndex, DateTimeOffset publishedAt)
+    private static string BuildPayload(PayloadTemplate template, string snapshotId, int snapshotIndex, DateTimeOffset publishedAt)
     {
         var node = JsonNode.Parse(template.Payload.GetRawText())
             ?? throw new SnapshotSimulationValidationException(
@@ -42,6 +42,11 @@ internal static class SnapshotGenerator
 
         if (node is JsonObject payload)
         {
+            if (payload.ContainsKey("SnapshotId"))
+            {
+                payload["SnapshotId"] = snapshotId;
+            }
+
             if (template.PayloadType == "header" && payload["Payload"] is JsonObject headerPayload)
             {
                 headerPayload["programId"] = (123456 + snapshotIndex).ToString(CultureInfo.InvariantCulture);

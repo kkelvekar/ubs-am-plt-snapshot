@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Ubs.Advantage.Core.Messaging.Kafka;
 using Ubs.Advantage.Core.Messaging.Kafka.Models;
 using UBS.Advantage.CommunicationModels.Snapshot;
+using UBS.AM.PLT.Snapshot.Application.Features.LiveTestCleanup;
 using UBS.AM.PLT.Snapshot.Worker.LiveTesting;
 
 namespace UBS.AM.PLT.Snapshot.Worker.Controllers;
@@ -12,8 +13,14 @@ public sealed class SnapshotSimulationController(
     IProducer<string, SnapshotRequest> producer,
     SnapshotTemplateLoader templateLoader,
     TimeProvider timeProvider,
+    LiveTestSnapshotCleanup cleanup,
     ILogger<SnapshotSimulationController> logger) : ControllerBase
 {
+    [HttpDelete]
+    [ProducesResponseType<LiveTestCleanupResult>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Delete(CancellationToken cancellationToken)
+        => Ok(await cleanup.DeleteAsync(cancellationToken));
+
     [HttpPost]
     [ProducesResponseType<SnapshotSimulationResult>(StatusCodes.Status200OK)]
     public IActionResult Publish(CancellationToken cancellationToken)
