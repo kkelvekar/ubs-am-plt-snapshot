@@ -45,11 +45,22 @@ through the existing declarative `SnapshotConfigDefinition` map.
 When the Worker runs in the `Development` environment it exposes
 `POST /api/live-tests/snapshots` (default address `http://localhost:5106`). The endpoint
 loads one of the bundled JSON templates, generates the same ordered portfolio payload
-sequence used for live testing, and awaits acknowledged delivery to the configured Kafka
+sequence used for live testing, and queues messages for delivery to the configured Kafka
 request topic. Kafka broker and topic values always come from Worker configuration and
 cannot be supplied by the caller. The controller and its services are not registered or
 mapped outside Development; this is a development verification surface, not part of the
 production business API.
+
+The simulator reserves `live-test-` followed by 32 lowercase hexadecimal characters
+as its snapshot ID namespace. `DELETE /api/live-tests/snapshots` accepts no caller
+parameters and deletes only snapshots in that namespace from ADLS and both SQL
+tables. It is registered only in Development. Every non-empty stored path must
+match the exact test snapshot ID and account ID before deletion begins. Storage is
+deleted first, then the two SQL rows in a transaction; failures can be retried.
+Orphaned test blobs and rejected test rows without a storage path are included.
+Older simulator snapshots using ordinary `corr...` IDs are excluded because their
+origin cannot be established safely. Run cleanup after queued test messages have
+finished processing; messages consumed later can recreate test data.
 
 ![[Snapshot Solution Final.png]]
 

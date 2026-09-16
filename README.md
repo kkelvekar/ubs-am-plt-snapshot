@@ -19,17 +19,29 @@ by default and can publish the bundled data-driven simulation through its config
 Kafka broker and request topic:
 
 ```bash
-curl -X POST http://localhost:5106/api/live-tests/snapshots \
-  -H "Content-Type: application/json" \
-  -d '{"snapshotCount":1,"messageDelay":"00:00:00"}'
+curl -X POST http://localhost:5106/api/live-tests/snapshots
 ```
 
-The optional body fields are `snapshotCount` (default `1`), `messageDelay` (default
-`00:00:30`), `snapshotDelayMin` (default `00:01:00`), `snapshotDelayMax` (default
-`00:02:00`), and `templateFileName` (default `snapshot-simulation-data.json`). The
-response is returned only after Kafka acknowledges every generated message and includes
-the snapshot IDs, message count, and delivery metadata. Invalid input returns `400`;
-Kafka delivery failure returns `503`. This endpoint is absent outside Development.
+The endpoint accepts no parameters and queues every bundled live-test case. Its
+response includes each case's snapshot ID, expected outcome, and total message count.
+Every generated snapshot uses `live-test-` followed by 32 lowercase hexadecimal
+characters, shared by all its payload messages. This namespace is reserved for the
+Development simulator; ordinary producers must not use it.
+
+After the queued messages finish processing, delete the test snapshots with:
+
+```bash
+curl -X DELETE http://localhost:5106/api/live-tests/snapshots
+```
+
+Deletion accepts no parameters. It removes only marked test payload blobs and their
+empty snapshot directories, plus matching `PortfolioSnapshotIndex` and
+`SnapshotTracking` rows, and returns `deletedSnapshots`, `deletedBlobs`, and
+`deletedDatabaseRows`. Stored paths are validated against the exact test ID and
+account ID before deletion. Failed storage deletes retain SQL rows for retry.
+Repeated cleanup is safe, and orphaned test blobs and rejected rows are included.
+Older unmarked `corr...` simulator snapshots remain untouched. Messages processed
+after cleanup can recreate test snapshots. Both endpoints are absent outside Development.
 
 ---
 
