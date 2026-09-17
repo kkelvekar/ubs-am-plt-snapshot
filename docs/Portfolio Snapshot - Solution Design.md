@@ -57,6 +57,10 @@ parameters and deletes only snapshots in that namespace from ADLS and both SQL
 tables. It is registered only in Development. Every non-empty stored path must
 match the exact test snapshot ID and account ID before deletion begins. Storage is
 deleted first, then the two SQL rows in a transaction; failures can be retried.
+After deleting a test snapshot directory, its account directory is removed only
+if it is an actual empty ADLS directory. Non-recursive, conditional deletion
+preserves accounts containing other snapshots or concurrently arriving data.
+Month and year directories are retained.
 Orphaned test blobs and rejected test rows without a storage path are included.
 Older simulator snapshots using ordinary `corr...` IDs are excluded because their
 origin cannot be established safely. Run cleanup after queued test messages have
@@ -241,7 +245,7 @@ ubsadvsnapshots/
 
 ADLS Gen2 is used over simple Blob Storage because it provides a true hierarchical namespace with real folder semantics and ACL-level permissions per folder. JSON is the file format because producers already emit JSON. Files are stored uncompressed in ADLS; gzip compression is applied only at the HTTP response layer by the Read API.
 
-New payload types require one entry in the library-owned `SnapshotConfigDefinition` map and a library rebuild, but no write-pipeline or infrastructure change. ADLS Gen2 folders are removed automatically when all files inside are deleted -- no explicit folder delete is needed during cleanup.
+New payload types require one entry in the library-owned `SnapshotConfigDefinition` map and a library rebuild, but no write-pipeline or infrastructure change. ADLS Gen2 has real directories that require explicit deletion after their contents are removed. The Development live-test cleanup deletes the empty snapshot directory and then its account directory if empty, preserving month/year directories and accounts with other snapshots.
 
 **Blob tier strategy:**
 

@@ -80,8 +80,9 @@ public sealed class AzureBlobLiveTestSnapshotCleanup : ILiveTestSnapshotBlobClea
                 }
             }
 
-            // Delete only the empty ADLS snapshot directory, never shared parents.
+            // Remove the snapshot directory before checking whether its account directory is empty.
             await container.DeleteBlobIfExistsAsync(location.RootPath, cancellationToken: cancellationToken);
+            await DeleteEmptyAccountDirectoryAsync(location.RootPath, cancellationToken);
         }
         catch (RequestFailedException ex) when (ex.ErrorCode == "ContainerNotFound")
         {
@@ -89,5 +90,39 @@ public sealed class AzureBlobLiveTestSnapshotCleanup : ILiveTestSnapshotBlobClea
         }
 
         return deleted;
+    }
+
+    private async Task DeleteEmptyAccountDirectoryAsync(string snapshotRootPath, CancellationToken cancellationToken)
+    {
+        var accountPath = snapshotRootPath[..snapshotRootPath.LastIndexOf('/')];
+
+        await foreach (var _ in container.GetBlobsAsync(prefix: $"{accountPath}/", cancellationToken: cancellationToken))
+        {
+            return;
+        }
+
+        var directory = container.GetBlobClient(accountPath);
+        try
+        {
+            var properties = await directory.GetPropertiesAsync(cancellationToken: cancellationToken);
+            if (!properties.Value.Metadata.Any(pair =>
+                    string.Equals(pair.Key, "hdi_isfolder", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(pair.Value, "true", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            // The server rejects a non-empty ADLS directory even if a child arrives after listing.
+            await directory.DeleteIfExistsAsync(
+                conditions: new BlobRequestConditions { IfMatch = properties.Value.ETag },
+                cancellationToken: cancellationToken);
+        }
+        catch (RequestFailedException ex) when (
+            (ex.Status == 404 && ex.ErrorCode is "BlobNotFound" or "ContainerNotFound")
+            || (ex.Status == 409 && ex.ErrorCode == "DirectoryNotEmpty")
+            || (ex.Status == 412 && ex.ErrorCode == "ConditionNotMet"))
+        {
+            // Already removed, another snapshot arrived, or the directory changed: leave it alone.
+        }
     }
 }

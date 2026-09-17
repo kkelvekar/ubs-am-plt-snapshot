@@ -35,11 +35,12 @@ curl -X DELETE http://localhost:5106/api/live-tests/snapshots
 ```
 
 Deletion accepts no parameters. It removes only marked test payload blobs and their
-empty snapshot directories, plus matching `PortfolioSnapshotIndex` and
-`SnapshotTracking` rows, and returns `deletedSnapshots`, `deletedBlobs`, and
+empty snapshot directories and their empty account directories, plus matching
+`PortfolioSnapshotIndex` and `SnapshotTracking` rows, and returns `deletedSnapshots`, `deletedBlobs`, and
 `deletedDatabaseRows`. Stored paths are validated against the exact test ID and
 account ID before deletion. Failed storage deletes retain SQL rows for retry.
-Repeated cleanup is safe, and orphaned test blobs and rejected rows are included.
+Account directories containing other snapshots are retained; month and year directories
+are retained. Repeated cleanup is safe, and orphaned test blobs and rejected rows are included.
 Older unmarked `corr...` simulator snapshots remain untouched. Messages processed
 after cleanup can recreate test snapshots. Both endpoints are absent outside Development.
 
